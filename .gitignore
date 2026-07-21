@@ -1,0 +1,30 @@
+# Maven
+target/
+*.log
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# IntelliJ IDEA
+.idea/
+*.iml
+
+# Eclipse / Spring Tool Suite
+.classpath
+.project
+.settings/
+.factorypath
+
+# Visual Studio Code
+.vscode/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# AI & AGENTS
+codex-prompts/
+docs/
+AGENTS.md

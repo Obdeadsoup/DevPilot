@@ -1,0 +1,17 @@
+spring:
+  config:
+    import: optional:file:.env[.properties]
+  datasource:
+    url: jdbc:mysql://${DEVPILOT_MYSQL_HOST:127.0.0.1}:${DEVPILOT_MYSQL_PORT:3307}/${DEVPILOT_MYSQL_DATABASE:devpilot}?sslMode=DISABLED&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=UTF-8
+    username: ${DEVPILOT_MYSQL_USERNAME:devpilot}
+    password: ${DEVPILOT_MYSQL_PASSWORD}
+    hikari:
+      connection-timeout: 5000
+      validation-timeout: 3000
+  data:
+    redis:
+      host: ${DEVPILOT_REDIS_HOST:127.0.0.1}
+      port: ${DEVPILOT_REDIS_PORT:6380}
+      password: ${DEVPILOT_REDIS_PASSWORD}
+      connect-timeout: 3s
+      timeout: 3s

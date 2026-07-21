@@ -1,0 +1,47 @@
+name: devpilot
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: devpilot-mysql8
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DEVPILOT_MYSQL_DATABASE:-devpilot}
+      MYSQL_USER: ${DEVPILOT_MYSQL_USERNAME:-devpilot}
+      MYSQL_PASSWORD: ${DEVPILOT_MYSQL_PASSWORD:?Set DEVPILOT_MYSQL_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${DEVPILOT_MYSQL_ROOT_PASSWORD:?Set DEVPILOT_MYSQL_ROOT_PASSWORD in .env}
+    ports:
+      - "${DEVPILOT_MYSQL_PORT:-3307}:3306"
+    volumes:
+      - devpilot-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: devpilot-redis8
+    restart: unless-stopped
+    environment:
+      DEVPILOT_REDIS_PASSWORD: ${DEVPILOT_REDIS_PASSWORD:?Set DEVPILOT_REDIS_PASSWORD in .env}
+    command: >-
+      sh -c 'exec redis-server --appendonly yes --requirepass "$$DEVPILOT_REDIS_PASSWORD"'
+    ports:
+      - "${DEVPILOT_REDIS_PORT:-6380}:6379"
+    volumes:
+      - devpilot-redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$DEVPILOT_REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+volumes:
+  devpilot-mysql-data:
+    name: devpilot-mysql-data
+  devpilot-redis-data:
+    name: devpilot-redis-data
