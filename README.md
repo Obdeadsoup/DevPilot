@@ -139,6 +139,30 @@ mvn -pl devpilot-boot -am spring-boot:run "-Dspring-boot.run.profiles=local"
 Invoke-RestMethod http://localhost:8080/actuator/health
 ```
 
+### GitHub Webhook 垂直切片
+
+当前实现只接收 `ping` 和 `push`：
+
+```text
+POST /api/v1/github/webhooks
+GET  /api/v1/workspaces/{workspaceId}/projects/{projectId}/activities?page=1&size=20
+```
+
+Webhook 请求必须携带 `X-Hub-Signature-256`、`X-GitHub-Delivery` 和
+`X-GitHub-Event`。服务使用原始请求字节进行 HMAC-SHA256 验签；Webhook secret
+由仓库绑定的 `credential_ref` 指向环境变量，不存储明文。首次接收返回 `202`，
+重复 Delivery 返回幂等的 `200`，不会重复生成项目活动。
+
+本轮没有创建公开仓库绑定管理接口。MySQL Testcontainers 集成测试通过测试夹具准备
+workspace、project 和 repository 绑定：
+
+```powershell
+mvn -pl devpilot-boot -am test
+```
+
+活动时间线接口保持认证保护。在登录和权限模块完成前，仅通过带模拟身份的安全集成测试
+验证，不提供固定账号、临时 Header 或匿名读取方式。
+
 停止应用后关闭容器：
 
 ```powershell

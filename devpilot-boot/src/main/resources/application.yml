@@ -16,6 +16,10 @@ devpilot:
     api-base-url: https://api.github.com
     connect-timeout: 3s
     read-timeout: 10s
+    worker-core-threads: 2
+    worker-max-threads: 4
+    worker-queue-capacity: 200
+    webhook-max-payload-bytes: 2097152
 
 management:
   endpoints:

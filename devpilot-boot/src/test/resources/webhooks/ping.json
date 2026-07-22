@@ -1,0 +1,12 @@
+{
+  "zen": "Keep it logically awesome.",
+  "hook_id": 42,
+  "repository": {
+    "id": 123456,
+    "full_name": "octo-org/devpilot"
+  },
+  "sender": {
+    "id": 7,
+    "login": "octocat"
+  }
+}

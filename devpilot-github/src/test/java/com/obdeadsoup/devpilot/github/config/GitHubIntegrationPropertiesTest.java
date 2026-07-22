@@ -15,7 +15,11 @@ class GitHubIntegrationPropertiesTest {
             .withPropertyValues(
                     "devpilot.github.api-base-url=https://api.github.com",
                     "devpilot.github.connect-timeout=3s",
-                    "devpilot.github.read-timeout=10s"
+                    "devpilot.github.read-timeout=10s",
+                    "devpilot.github.worker-core-threads=2",
+                    "devpilot.github.worker-max-threads=4",
+                    "devpilot.github.worker-queue-capacity=200",
+                    "devpilot.github.webhook-max-payload-bytes=2097152"
             );
 
     @Test
@@ -28,6 +32,9 @@ class GitHubIntegrationPropertiesTest {
             assertThat(properties.apiBaseUrl()).isEqualTo(URI.create("https://api.github.com"));
             assertThat(properties.connectTimeout()).isEqualTo(Duration.ofSeconds(3));
             assertThat(properties.readTimeout()).isEqualTo(Duration.ofSeconds(10));
+            assertThat(properties.workerCoreThreads()).isEqualTo(2);
+            assertThat(properties.workerMaxThreads()).isEqualTo(4);
+            assertThat(properties.webhookMaxPayloadBytes()).isEqualTo(2_097_152);
         });
     }
 
@@ -39,6 +46,17 @@ class GitHubIntegrationPropertiesTest {
                     assertThat(context).hasFailed();
                     assertThat(context.getStartupFailure())
                             .hasStackTraceContaining("connect timeout must be positive");
+                });
+    }
+
+    @Test
+    void rejectsWorkerPoolWithMaxBelowCore() {
+        contextRunner
+                .withPropertyValues("devpilot.github.worker-max-threads=1")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .hasStackTraceContaining("worker max threads must be greater than or equal to core threads");
                 });
     }
 }

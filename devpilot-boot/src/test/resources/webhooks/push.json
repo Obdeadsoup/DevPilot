@@ -1,0 +1,23 @@
+{
+  "ref": "refs/heads/main",
+  "before": "1111111111111111111111111111111111111111",
+  "after": "2222222222222222222222222222222222222222",
+  "compare": "https://github.com/octo-org/devpilot/compare/1111111...2222222",
+  "repository": {
+    "id": 123456,
+    "full_name": "octo-org/devpilot"
+  },
+  "sender": {
+    "id": 7,
+    "login": "octocat"
+  },
+  "commits": [
+    {"id": "1111111111111111111111111111111111111112"},
+    {"id": "2222222222222222222222222222222222222222"}
+  ],
+  "head_commit": {
+    "id": "2222222222222222222222222222222222222222",
+    "message": "Implement webhook vertical slice",
+    "timestamp": "2026-07-21T12:30:00+00:00"
+  }
+}
