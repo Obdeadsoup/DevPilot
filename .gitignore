@@ -26,5 +26,8 @@ Thumbs.db
 
 # AI & AGENTS
 codex-prompts/
-docs/
+docs/*
+!docs/learning/
+docs/learning/*
+!docs/learning/02-reliable-webhook-ingress.md
 AGENTS.md

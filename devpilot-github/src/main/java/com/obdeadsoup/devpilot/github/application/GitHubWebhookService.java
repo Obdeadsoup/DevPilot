@@ -97,11 +97,12 @@ public class GitHubWebhookService {
 
         LocalDateTime receivedAt = LocalDateTime.now(clock);
         String payloadJson = new String(rawBody, StandardCharsets.UTF_8);
+        String payloadSha256 = signatureVerifier.sha256Hex(rawBody);
         boolean inserted;
         try {
             deliveryMapper.insertReceived(
                     repository.workspaceId(), repository.projectId(), repository.id(), deliveryId, eventType,
-                    payloadParser.extractAction(rawBody), payloadJson, signatureVerifier.sha256Hex(rawBody), receivedAt
+                    payloadParser.extractAction(rawBody), payloadJson, payloadSha256, receivedAt
             );
             inserted = true;
         } catch (DuplicateKeyException exception) {
@@ -109,7 +110,7 @@ public class GitHubWebhookService {
         }
         GitHubDeliveryEntity delivery = deliveryMapper.findByGitHubDeliveryId(deliveryId)
                 .orElseThrow(() -> new BusinessException(GitHubWebhookErrorCode.DELIVERY_STATE_CONFLICT));
-        requireMatchingDuplicate(delivery, repository, eventType);
+        requireMatchingDuplicate(delivery, repository, eventType, payloadSha256);
         if (inserted) {
             eventPublisher.publishEvent(new GitHubDeliveryReceivedEvent(delivery.id()));
         }
@@ -130,9 +131,12 @@ public class GitHubWebhookService {
     private void requireMatchingDuplicate(
             GitHubDeliveryEntity delivery,
             GitHubRepositoryEntity repository,
-            String eventType
+            String eventType,
+            String payloadSha256
     ) {
-        if (delivery.repositoryId() != repository.id() || !delivery.eventType().equals(eventType)) {
+        if (delivery.repositoryId() != repository.id()
+                || !delivery.eventType().equals(eventType)
+                || !delivery.payloadSha256().equals(payloadSha256)) {
             throw new BusinessException(GitHubWebhookErrorCode.DELIVERY_STATE_CONFLICT);
         }
     }

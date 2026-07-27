@@ -24,6 +24,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.util.HexFormat;
 
@@ -181,6 +182,42 @@ class GitHubWebhookIntegrationTest {
     }
 
     @Test
+    void rejectsDuplicateDeliveryWhenPayloadDiffersWithoutOverwritingOriginal() throws Exception {
+        byte[] originalPing = payload("webhooks/ping.json");
+        byte[] changedPing = new String(originalPing, StandardCharsets.UTF_8)
+                .replace("\"login\": \"octocat\"", "\"login\": \"different-sender\"")
+                .getBytes(StandardCharsets.UTF_8);
+
+        mockMvc.perform(webhook(
+                        originalPing,
+                        "delivery-payload-conflict",
+                        "ping",
+                        signature(originalPing)
+                ))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.data.duplicate").value(false));
+
+        await().untilAsserted(() -> {
+            assertThat(deliveryStatus("delivery-payload-conflict")).isEqualTo("SUCCEEDED");
+            assertThat(activityCount("delivery-payload-conflict")).isEqualTo(1);
+        });
+
+        mockMvc.perform(webhook(
+                        changedPing,
+                        "delivery-payload-conflict",
+                        "ping",
+                        signature(changedPing)
+                ))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("GITHUB_0502"));
+
+        assertThat(deliveryCount("delivery-payload-conflict")).isEqualTo(1);
+        assertThat(deliveryPayloadSha256("delivery-payload-conflict")).isEqualTo(sha256(originalPing));
+        assertThat(deliverySenderLogin("delivery-payload-conflict")).isEqualTo("octocat");
+        assertThat(activityCount("delivery-payload-conflict")).isEqualTo(1);
+    }
+
+    @Test
     void parsesPushAndReturnsScopedPaginatedTimeline() throws Exception {
         byte[] push = payload("webhooks/push.json");
 
@@ -277,6 +314,14 @@ class GitHubWebhookIntegrationTest {
         }
     }
 
+    private String sha256(byte[] payload) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(payload));
+        } catch (Exception exception) {
+            throw new IllegalStateException("Cannot hash test payload", exception);
+        }
+    }
+
     private void insertDelivery(String deliveryId, String eventType, byte[] payload) {
         int inserted = deliveryMapper.insertReceived(
                 WebhookTestFixture.WORKSPACE_ID,
@@ -307,6 +352,35 @@ class GitHubWebhookIntegrationTest {
                 deliveryId
         );
         return count == null ? 0 : count;
+    }
+
+    private int deliveryCount(String deliveryId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM dp_github_delivery WHERE github_delivery_id = ?",
+                Integer.class,
+                deliveryId
+        );
+        return count == null ? 0 : count;
+    }
+
+    private String deliveryPayloadSha256(String deliveryId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT payload_sha256 FROM dp_github_delivery WHERE github_delivery_id = ?",
+                String.class,
+                deliveryId
+        );
+    }
+
+    private String deliverySenderLogin(String deliveryId) {
+        return jdbcTemplate.queryForObject(
+                """
+                        SELECT JSON_UNQUOTE(JSON_EXTRACT(payload_json, '$.sender.login'))
+                        FROM dp_github_delivery
+                        WHERE github_delivery_id = ?
+                        """,
+                String.class,
+                deliveryId
+        );
     }
 
     private String activityType(String deliveryId) {

@@ -24,11 +24,43 @@ class GitHubWebhookSignatureVerifierTest {
     }
 
     @Test
-    void rejectsWrongOrMalformedSignature() {
+    void rejectsSignatureAfterOnePayloadByteChanges() {
+        byte[] payload = "Hello, World!".getBytes(StandardCharsets.UTF_8);
+        byte[] changedPayload = "Hello, World?".getBytes(StandardCharsets.UTF_8);
+
+        assertThat(verifier.verify(
+                changedPayload,
+                "sha256=757107ea0eb2509fc211221cce984b8a37570b6d7586c22c46f4379c8b043e17",
+                "It's a Secret to Everybody"
+        )).isFalse();
+    }
+
+    @Test
+    void rejectsSignatureWithoutSha256Prefix() {
         byte[] payload = "Hello, World!".getBytes(StandardCharsets.UTF_8);
 
-        assertThat(verifier.verify(payload, "sha256=" + "0".repeat(64), "secret")).isFalse();
-        assertThat(verifier.verify(payload, "sha1=abcd", "secret")).isFalse();
-        assertThat(verifier.verify(payload, "sha256=not-hex", "secret")).isFalse();
+        assertThat(verifier.verify(
+                payload,
+                "757107ea0eb2509fc211221cce984b8a37570b6d7586c22c46f4379c8b043e17",
+                "It's a Secret to Everybody"
+        )).isFalse();
+    }
+
+    @Test
+    void rejectsIllegalHexadecimalSignature() {
+        byte[] payload = "Hello, World!".getBytes(StandardCharsets.UTF_8);
+
+        assertThat(verifier.verify(payload, "sha256=" + "g".repeat(64), "secret")).isFalse();
+    }
+
+    @Test
+    void rejectsEmptySecret() {
+        byte[] payload = "Hello, World!".getBytes(StandardCharsets.UTF_8);
+
+        assertThat(verifier.verify(
+                payload,
+                "sha256=757107ea0eb2509fc211221cce984b8a37570b6d7586c22c46f4379c8b043e17",
+                ""
+        )).isFalse();
     }
 }
