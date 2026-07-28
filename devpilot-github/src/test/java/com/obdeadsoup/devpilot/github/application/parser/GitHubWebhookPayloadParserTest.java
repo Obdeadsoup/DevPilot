@@ -57,7 +57,8 @@ class GitHubWebhookPayloadParserTest {
     private GitHubDeliveryEntity delivery(String eventType, String payloadJson) {
         return new GitHubDeliveryEntity(
                 1, 10, 20, 30, "delivery-1", eventType, null, "PROCESSING",
-                payloadJson, "hash", 0, LocalDateTime.of(2026, 7, 21, 9, 0), 1
+                payloadJson, "hash", 0, null, null, null, null,
+                LocalDateTime.of(2026, 7, 21, 9, 0), 1
         );
     }
 }

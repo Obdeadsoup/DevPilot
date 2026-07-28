@@ -13,3 +13,7 @@ management:
   health:
     redis:
       enabled: false
+
+devpilot:
+  github:
+    delivery-recovery-enabled: false

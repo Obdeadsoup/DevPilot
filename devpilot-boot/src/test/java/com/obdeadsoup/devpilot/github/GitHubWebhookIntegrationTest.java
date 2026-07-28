@@ -87,7 +87,7 @@ class GitHubWebhookIntegrationTest {
     }
 
     @Test
-    void flywayCreatesOnlyTheFiveVerticalSliceTables() {
+    void flywayCreatesTheFiveVerticalSliceTablesAndProcessingScanIndex() {
         Integer count = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
                 FROM information_schema.tables
@@ -99,6 +99,15 @@ class GitHubWebhookIntegrationTest {
                 """, Integer.class);
 
         assertThat(count).isEqualTo(5);
+
+        Integer indexColumns = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM information_schema.statistics
+                WHERE table_schema = DATABASE()
+                  AND table_name = 'dp_github_delivery'
+                  AND index_name = 'idx_github_delivery_processing_scan'
+                """, Integer.class);
+        assertThat(indexColumns).isEqualTo(2);
     }
 
     @Test
@@ -265,20 +274,20 @@ class GitHubWebhookIntegrationTest {
     }
 
     @Test
-    void processingFailureMovesDeliveryToFailedWithoutLeakingPayload() {
+    void unsupportedEventMovesDeliveryDirectlyToDeadWithoutLeakingPayload() {
         byte[] ping = payload("webhooks/ping.json");
         insertDelivery("delivery-failed", "issues", ping);
         long id = deliveryMapper.findByGitHubDeliveryId("delivery-failed").orElseThrow().id();
 
         worker.process(id);
 
-        assertThat(deliveryStatus("delivery-failed")).isEqualTo("FAILED");
-        String storedMessage = jdbcTemplate.queryForObject(
-                "SELECT last_error_message FROM dp_github_delivery WHERE id = ?",
-                String.class,
-                id
-        );
-        assertThat(storedMessage).isEqualTo("Delivery processing failed");
+        GitHubDeliveryEntity dead = deliveryMapper.findById(id).orElseThrow();
+        assertThat(dead.processingStatus()).isEqualTo("DEAD");
+        assertThat(dead.retryCount()).isEqualTo(1);
+        assertThat(dead.nextRetryAt()).isNull();
+        assertThat(dead.lastErrorCode()).isEqualTo("GITHUB_0402");
+        assertThat(dead.lastErrorMessage()).isEqualTo("Unsupported GitHub webhook event");
+        assertThat(dead.version()).isEqualTo(2);
         assertThat(activityCount("delivery-failed")).isZero();
     }
 

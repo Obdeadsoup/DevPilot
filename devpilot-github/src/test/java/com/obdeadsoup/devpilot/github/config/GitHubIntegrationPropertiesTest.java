@@ -19,7 +19,14 @@ class GitHubIntegrationPropertiesTest {
                     "devpilot.github.worker-core-threads=2",
                     "devpilot.github.worker-max-threads=4",
                     "devpilot.github.worker-queue-capacity=200",
-                    "devpilot.github.webhook-max-payload-bytes=2097152"
+                    "devpilot.github.webhook-max-payload-bytes=2097152",
+                    "devpilot.github.delivery-max-retries=3",
+                    "devpilot.github.delivery-retry-initial-delay=10s",
+                    "devpilot.github.delivery-retry-max-delay=5m",
+                    "devpilot.github.delivery-recovery-scan-interval=10s",
+                    "devpilot.github.delivery-recovery-batch-size=50",
+                    "devpilot.github.delivery-processing-timeout=2m",
+                    "devpilot.github.delivery-recovery-enabled=false"
             );
 
     @Test
@@ -35,6 +42,13 @@ class GitHubIntegrationPropertiesTest {
             assertThat(properties.workerCoreThreads()).isEqualTo(2);
             assertThat(properties.workerMaxThreads()).isEqualTo(4);
             assertThat(properties.webhookMaxPayloadBytes()).isEqualTo(2_097_152);
+            assertThat(properties.deliveryMaxRetries()).isEqualTo(3);
+            assertThat(properties.deliveryRetryInitialDelay()).isEqualTo(Duration.ofSeconds(10));
+            assertThat(properties.deliveryRetryMaxDelay()).isEqualTo(Duration.ofMinutes(5));
+            assertThat(properties.deliveryRecoveryScanInterval()).isEqualTo(Duration.ofSeconds(10));
+            assertThat(properties.deliveryRecoveryBatchSize()).isEqualTo(50);
+            assertThat(properties.deliveryProcessingTimeout()).isEqualTo(Duration.ofMinutes(2));
+            assertThat(properties.deliveryRecoveryEnabled()).isFalse();
         });
     }
 
@@ -57,6 +71,30 @@ class GitHubIntegrationPropertiesTest {
                     assertThat(context).hasFailed();
                     assertThat(context.getStartupFailure())
                             .hasStackTraceContaining("worker max threads must be greater than or equal to core threads");
+                });
+    }
+
+    @Test
+    void rejectsNonPositiveDeliveryDurations() {
+        contextRunner
+                .withPropertyValues("devpilot.github.delivery-retry-initial-delay=0s")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .hasStackTraceContaining("delivery retry initial delay must be positive");
+                });
+    }
+
+    @Test
+    void rejectsRetryMaxDelayBelowInitialDelay() {
+        contextRunner
+                .withPropertyValues("devpilot.github.delivery-retry-max-delay=5s")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .hasStackTraceContaining(
+                                    "delivery retry max delay must be greater than or equal to initial delay"
+                            );
                 });
     }
 }

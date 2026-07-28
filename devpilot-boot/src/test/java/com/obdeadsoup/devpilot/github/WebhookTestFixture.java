@@ -48,6 +48,13 @@ final class WebhookTestFixture {
         );
     }
 
+    void archiveProject() {
+        jdbcTemplate.update(
+                "UPDATE dp_project SET status = 'ARCHIVED' WHERE id = ?",
+                PROJECT_ID
+        );
+    }
+
     void createSecondWorkspaceAndProject() {
         jdbcTemplate.update("""
                 INSERT INTO dp_workspace (id, name, slug, status)

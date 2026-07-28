@@ -27,7 +27,9 @@ Thumbs.db
 # AI & AGENTS
 codex-prompts/
 docs/*
+!docs/architecture.md
 !docs/learning/
 docs/learning/*
 !docs/learning/02-reliable-webhook-ingress.md
+!docs/learning/03-delivery-retry-and-recovery.md
 AGENTS.md

@@ -20,6 +20,13 @@ devpilot:
     worker-max-threads: 4
     worker-queue-capacity: 200
     webhook-max-payload-bytes: 2097152
+    delivery-max-retries: 3
+    delivery-retry-initial-delay: 10s
+    delivery-retry-max-delay: 5m
+    delivery-recovery-scan-interval: 10s
+    delivery-recovery-batch-size: 50
+    delivery-processing-timeout: 2m
+    delivery-recovery-enabled: true
 
 management:
   endpoints:

@@ -14,13 +14,16 @@ public class GitHubDeliveryWorker {
 
     private final GitHubDeliveryStateService stateService;
     private final GitHubDeliveryProcessingService processingService;
+    private final GitHubDeliveryFailureClassifier failureClassifier;
 
     public GitHubDeliveryWorker(
             GitHubDeliveryStateService stateService,
-            GitHubDeliveryProcessingService processingService
+            GitHubDeliveryProcessingService processingService,
+            GitHubDeliveryFailureClassifier failureClassifier
     ) {
         this.stateService = stateService;
         this.processingService = processingService;
+        this.failureClassifier = failureClassifier;
     }
 
     public void process(long deliveryId) {
@@ -31,12 +34,17 @@ public class GitHubDeliveryWorker {
         try {
             processingService.process(claimed.get());
         } catch (RuntimeException exception) {
+            GitHubDeliveryFailureClassifier.Classification failure = failureClassifier.classify(exception);
+            String resultStatus = stateService.handleFailure(claimed.get(), failure)
+                    .map(Enum::name)
+                    .orElse("UNCHANGED");
             LOGGER.warn(
-                    "GitHub delivery processing failed deliveryId={} exceptionType={}",
+                    "GitHub delivery processing failed deliveryId={} errorCode={} exceptionType={} resultStatus={}",
                     deliveryId,
-                    exception.getClass().getName()
+                    failure.stableErrorCode(),
+                    exception.getClass().getName(),
+                    resultStatus
             );
-            stateService.markFailed(deliveryId);
         }
     }
 }

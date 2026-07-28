@@ -5,13 +5,17 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+
+import com.obdeadsoup.devpilot.github.application.GitHubDeliveryRetryPolicy;
 
 import java.time.Clock;
 
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(GitHubIntegrationProperties.class)
 @EnableAsync
+@EnableScheduling
 public class GitHubIntegrationConfiguration {
 
     @Bean
@@ -29,5 +33,14 @@ public class GitHubIntegrationConfiguration {
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(10);
         return executor;
+    }
+
+    @Bean
+    GitHubDeliveryRetryPolicy githubDeliveryRetryPolicy(GitHubIntegrationProperties properties) {
+        return new GitHubDeliveryRetryPolicy(
+                properties.deliveryMaxRetries(),
+                properties.deliveryRetryInitialDelay(),
+                properties.deliveryRetryMaxDelay()
+        );
     }
 }

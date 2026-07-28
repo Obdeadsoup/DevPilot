@@ -14,6 +14,10 @@ public record GitHubDeliveryEntity(
         String payloadJson,
         String payloadSha256,
         int retryCount,
+        LocalDateTime nextRetryAt,
+        LocalDateTime processingStartedAt,
+        String lastErrorCode,
+        String lastErrorMessage,
         LocalDateTime receivedAt,
         long version
 ) {
