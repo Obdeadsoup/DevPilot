@@ -1,0 +1,179 @@
+package com.obdeadsoup.devpilot.identity.application;
+
+import com.obdeadsoup.devpilot.framework.error.BusinessException;
+import com.obdeadsoup.devpilot.identity.domain.WorkspacePermission;
+import com.obdeadsoup.devpilot.identity.domain.WorkspaceRole;
+import com.obdeadsoup.devpilot.identity.error.IdentityErrorCode;
+import com.obdeadsoup.devpilot.identity.error.WorkspaceErrorCode;
+import com.obdeadsoup.devpilot.identity.persistence.entity.WorkspaceEntity;
+import com.obdeadsoup.devpilot.identity.persistence.entity.WorkspaceMemberEntity;
+import com.obdeadsoup.devpilot.identity.persistence.mapper.UserMapper;
+import com.obdeadsoup.devpilot.identity.persistence.mapper.WorkspaceMapper;
+import com.obdeadsoup.devpilot.identity.persistence.mapper.WorkspaceMemberMapper;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+public class WorkspaceMemberService {
+
+    private final CurrentUserProvider currentUserProvider;
+    private final WorkspaceAuthorizationService authorizationService;
+    private final WorkspaceMapper workspaceMapper;
+    private final WorkspaceMemberMapper memberMapper;
+    private final UserMapper userMapper;
+    private final WorkspaceProjectMembershipRevoker projectMembershipRevoker;
+
+    public WorkspaceMemberService(
+            CurrentUserProvider currentUserProvider,
+            WorkspaceAuthorizationService authorizationService,
+            WorkspaceMapper workspaceMapper,
+            WorkspaceMemberMapper memberMapper,
+            UserMapper userMapper,
+            WorkspaceProjectMembershipRevoker projectMembershipRevoker
+    ) {
+        this.currentUserProvider = currentUserProvider;
+        this.authorizationService = authorizationService;
+        this.workspaceMapper = workspaceMapper;
+        this.memberMapper = memberMapper;
+        this.userMapper = userMapper;
+        this.projectMembershipRevoker = projectMembershipRevoker;
+    }
+
+    @Transactional
+    public void inviteMember(long workspaceId, long userId, WorkspaceRole role) {
+        long actorUserId = currentUserProvider.requireUserId();
+        authorizationService.requirePermission(
+                actorUserId, workspaceId, WorkspacePermission.WORKSPACE_MEMBER_INVITE
+        );
+        requireAssignableMemberRole(role);
+        requireActiveUser(userId);
+        requireAdminAssignmentPolicy(actorUserId, workspaceId, role);
+        if (actorUserId == userId) {
+            throw new BusinessException(WorkspaceErrorCode.MEMBERSHIP_CONFLICT);
+        }
+
+        try {
+            memberMapper.insertInvitation(workspaceId, userId, role.name(), actorUserId);
+        } catch (DuplicateKeyException exception) {
+            throw new BusinessException(WorkspaceErrorCode.MEMBERSHIP_CONFLICT);
+        }
+    }
+
+    @Transactional
+    public void activateMember(long workspaceId, long userId, long expectedVersion) {
+        requireActiveUser(userId);
+        if (memberMapper.activate(workspaceId, userId, expectedVersion) != 1) {
+            throw new BusinessException(WorkspaceErrorCode.MEMBERSHIP_VERSION_CONFLICT);
+        }
+    }
+
+    @Transactional
+    public void changeMemberRole(
+            long workspaceId,
+            long userId,
+            WorkspaceRole role,
+            long expectedVersion
+    ) {
+        long actorUserId = currentUserProvider.requireUserId();
+        authorizationService.requirePermission(
+                actorUserId, workspaceId, WorkspacePermission.WORKSPACE_MEMBER_ROLE_UPDATE
+        );
+        requireAssignableMemberRole(role);
+        requireNotOwner(workspaceId, userId);
+        requireAdminAssignmentPolicy(actorUserId, workspaceId, role);
+
+        WorkspaceMemberEntity member = requireMember(workspaceId, userId);
+        if (actorUserId == userId || !mayManageMember(actorUserId, workspaceId, member)) {
+            throw new BusinessException(IdentityErrorCode.ACCESS_DENIED);
+        }
+        if (memberMapper.changeRole(workspaceId, userId, role.name(), expectedVersion) != 1) {
+            throw new BusinessException(WorkspaceErrorCode.MEMBERSHIP_VERSION_CONFLICT);
+        }
+    }
+
+    @Transactional
+    public void removeMember(long workspaceId, long userId, long expectedVersion) {
+        long actorUserId = currentUserProvider.requireUserId();
+        authorizationService.requirePermission(
+                actorUserId, workspaceId, WorkspacePermission.WORKSPACE_MEMBER_REMOVE
+        );
+        requireNotOwner(workspaceId, userId);
+        WorkspaceMemberEntity member = requireMember(workspaceId, userId);
+        if (!mayManageMember(actorUserId, workspaceId, member)) {
+            throw new BusinessException(IdentityErrorCode.ACCESS_DENIED);
+        }
+        if (memberMapper.remove(workspaceId, userId, expectedVersion) != 1) {
+            throw new BusinessException(WorkspaceErrorCode.MEMBERSHIP_VERSION_CONFLICT);
+        }
+        projectMembershipRevoker.revokeAllForWorkspaceUser(workspaceId, userId);
+    }
+
+    @Transactional
+    public void transferOwnership(long workspaceId, long newOwnerUserId, long expectedWorkspaceVersion) {
+        long currentOwnerUserId = currentUserProvider.requireUserId();
+        authorizationService.requirePermission(
+                currentOwnerUserId,
+                workspaceId,
+                WorkspacePermission.WORKSPACE_TRANSFER_OWNERSHIP
+        );
+        if (currentOwnerUserId == newOwnerUserId) {
+            throw new BusinessException(WorkspaceErrorCode.MEMBERSHIP_CONFLICT);
+        }
+        requireActiveUser(newOwnerUserId);
+
+        if (workspaceMapper.transferOwnership(
+                workspaceId,
+                currentOwnerUserId,
+                newOwnerUserId,
+                expectedWorkspaceVersion
+        ) != 1) {
+            throw new BusinessException(WorkspaceErrorCode.OWNERSHIP_TRANSFER_CONFLICT);
+        }
+        memberMapper.removeForNewOwner(workspaceId, newOwnerUserId);
+        memberMapper.upsertActiveAdmin(workspaceId, currentOwnerUserId, newOwnerUserId);
+    }
+
+    private void requireAssignableMemberRole(WorkspaceRole role) {
+        if (role == null || role == WorkspaceRole.OWNER) {
+            throw new BusinessException(WorkspaceErrorCode.INVALID_WORKSPACE_ROLE);
+        }
+    }
+
+    private void requireActiveUser(long userId) {
+        if (userMapper.countActiveById(userId) != 1) {
+            throw new BusinessException(WorkspaceErrorCode.USER_NOT_ACTIVE);
+        }
+    }
+
+    private void requireNotOwner(long workspaceId, long userId) {
+        WorkspaceEntity workspace = workspaceMapper.findById(workspaceId)
+                .orElseThrow(() -> new BusinessException(WorkspaceErrorCode.WORKSPACE_NOT_FOUND));
+        if (workspace.ownerUserId() != null && workspace.ownerUserId() == userId) {
+            throw new BusinessException(IdentityErrorCode.ACCESS_DENIED);
+        }
+    }
+
+    private WorkspaceMemberEntity requireMember(long workspaceId, long userId) {
+        return memberMapper.findByWorkspaceAndUser(workspaceId, userId)
+                .orElseThrow(() -> new BusinessException(WorkspaceErrorCode.MEMBERSHIP_CONFLICT));
+    }
+
+    private void requireAdminAssignmentPolicy(long actorUserId, long workspaceId, WorkspaceRole role) {
+        WorkspaceRole actorRole = authorizationService.getEffectiveRole(actorUserId, workspaceId)
+                .orElseThrow(() -> new BusinessException(IdentityErrorCode.ACCESS_DENIED));
+        if (actorRole == WorkspaceRole.ADMIN && role == WorkspaceRole.ADMIN) {
+            throw new BusinessException(IdentityErrorCode.ACCESS_DENIED);
+        }
+    }
+
+    private boolean mayManageMember(
+            long actorUserId,
+            long workspaceId,
+            WorkspaceMemberEntity targetMember
+    ) {
+        WorkspaceRole actorRole = authorizationService.getEffectiveRole(actorUserId, workspaceId)
+                .orElseThrow(() -> new BusinessException(IdentityErrorCode.ACCESS_DENIED));
+        return actorRole == WorkspaceRole.OWNER || !WorkspaceRole.ADMIN.name().equals(targetMember.role());
+    }
+}

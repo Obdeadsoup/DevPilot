@@ -5,7 +5,15 @@ import org.springframework.http.HttpStatus;
 
 public enum ProjectErrorCode implements ErrorCode {
 
-    PROJECT_NOT_FOUND("PROJECT_0404", "Project not found in workspace", HttpStatus.NOT_FOUND);
+    PROJECT_NOT_FOUND("PROJECT_0404", "Project not found in workspace", HttpStatus.NOT_FOUND),
+    USER_NOT_WORKSPACE_MEMBER("PROJECT_0405", "User is not an active workspace member", HttpStatus.BAD_REQUEST),
+    INVALID_PROJECT_ROLE("PROJECT_0406", "Invalid project role assignment", HttpStatus.BAD_REQUEST),
+    PROJECT_MEMBERSHIP_CONFLICT("PROJECT_0501", "Project membership conflicts with current state", HttpStatus.CONFLICT),
+    PROJECT_MEMBERSHIP_VERSION_CONFLICT(
+            "PROJECT_0502",
+            "Project membership was changed concurrently",
+            HttpStatus.CONFLICT
+    );
 
     private final String code;
     private final String message;

@@ -6,6 +6,11 @@ import com.obdeadsoup.devpilot.project.domain.ProjectActivityType;
 import java.time.LocalDateTime;
 import java.util.Objects;
 
+/**
+ * Records external activity metadata. {@code externalActorId} and {@code actorLogin} describe the
+ * GitHub sender only; they must never be used to construct a local Authentication or grant a
+ * DevPilot role.
+ */
 public record RecordProjectActivityCommand(
         long workspaceId,
         long projectId,

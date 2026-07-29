@@ -5,6 +5,7 @@ import com.obdeadsoup.devpilot.github.application.GitHubDeliveryStateService;
 import com.obdeadsoup.devpilot.github.application.GitHubDeliveryWorker;
 import com.obdeadsoup.devpilot.github.persistence.entity.GitHubDeliveryEntity;
 import com.obdeadsoup.devpilot.github.persistence.mapper.GitHubDeliveryMapper;
+import com.obdeadsoup.devpilot.identity.domain.DevPilotUserPrincipal;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,11 +28,12 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.util.HexFormat;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -236,7 +238,7 @@ class GitHubWebhookIntegrationTest {
         await().untilAsserted(() -> assertThat(deliveryStatus("delivery-push")).isEqualTo("SUCCEEDED"));
 
         mockMvc.perform(get("/api/v1/workspaces/100/projects/200/activities")
-                        .with(user("timeline-reader"))
+                        .with(authentication(ownerAuthentication()))
                         .param("page", "1")
                         .param("size", "10"))
                 .andExpect(status().isOk())
@@ -251,9 +253,9 @@ class GitHubWebhookIntegrationTest {
 
         fixture.createSecondWorkspaceAndProject();
         mockMvc.perform(get("/api/v1/workspaces/100/projects/201/activities")
-                        .with(user("timeline-reader")))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("PROJECT_0404"));
+                        .with(authentication(ownerAuthentication())))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("IDENTITY_0404"));
     }
 
     @Test
@@ -397,6 +399,20 @@ class GitHubWebhookIntegrationTest {
                 "SELECT activity_type FROM dp_project_activity WHERE source_delivery_id = ?",
                 String.class,
                 deliveryId
+        );
+    }
+
+    private org.springframework.security.core.Authentication ownerAuthentication() {
+        DevPilotUserPrincipal principal = new DevPilotUserPrincipal(
+                WebhookTestFixture.OWNER_USER_ID,
+                "webhook-owner",
+                "webhook-owner@example.com",
+                "Webhook Test Owner"
+        );
+        return new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                principal,
+                null,
+                List.of()
         );
     }
 }

@@ -86,6 +86,7 @@ devpilot-github
 - [系统架构](docs/architecture.md)
 - [数据库设计](docs/database-design.md)
 - [能力覆盖与路线](docs/capability-coverage-and-roadmap.md)
+- [作用域 RBAC 学习笔记](docs/learning/05-scoped-rbac.md)
 - [Codex 分阶段指令](codex-prompts/all-prompts.md)
 
 ## 开发方式
@@ -201,9 +202,18 @@ workspace、project 和 repository 绑定：
 mvn -pl devpilot-boot -am test
 ```
 
-活动时间线接口保持认证保护。调用方需要先通过真实登录接口获得 Bearer Token；当前仅完成
-身份认证，尚未实现 Workspace 成员、角色和项目资源归属授权，因此“已登录”暂时是该接口的
-唯一安全门槛。
+活动时间线接口同时受接口认证和作用域授权保护。调用方需要先通过真实登录接口获得 Bearer
+Token；`ProjectActivityService.queryTimeline` 在应用服务层校验
+`PROJECT_ACTIVITY_READ`，并同时使用 URL 中的 `workspaceId + projectId`。Workspace
+OWNER/ADMIN 可读取本 Workspace 的项目；PRIVATE 项目要求其他用户具有 ACTIVE Project
+Membership；INTERNAL 项目允许 ACTIVE Workspace Member 只读。未认证返回 JSON 401，
+已认证但无作用域权限或跨 Workspace 访问返回 JSON 403。
+
+当前固定角色为 Workspace `OWNER / ADMIN / MEMBER / VIEWER` 和 Project
+`PROJECT_ADMIN / DEVELOPER / VIEWER`。OWNER 由 `dp_workspace.owner_user_id` 推导，
+不会写入成员表；角色只在服务端映射到不可变 Permission Set，Token 不缓存作用域角色。
+成员管理应用服务、乐观锁和数据库约束已经实现，但本阶段没有开放成员管理 HTTP API，也没有
+实现动态角色、权限后台、审计落库或 Redis 权限缓存。
 
 停止应用后关闭容器：
 

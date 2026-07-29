@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.Locale;
 
+// 实现 UserDetailsService接口,只负责查询用户
 @Service
 public class DatabaseUserDetailsService implements UserDetailsService {
 

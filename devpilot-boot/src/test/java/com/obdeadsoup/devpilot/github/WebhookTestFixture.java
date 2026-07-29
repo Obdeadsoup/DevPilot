@@ -7,6 +7,8 @@ final class WebhookTestFixture {
     static final long WORKSPACE_ID = 100L;
     static final long PROJECT_ID = 200L;
     static final long REPOSITORY_ID = 300L;
+    static final long OWNER_USER_ID = 10L;
+    static final long SECOND_OWNER_USER_ID = 11L;
     static final long GITHUB_REPOSITORY_ID = 123_456L;
     static final String SECRET_REFERENCE = "DEVPILOT_GITHUB_WEBHOOK_SECRET_TEST";
 
@@ -20,15 +22,19 @@ final class WebhookTestFixture {
         jdbcTemplate.update("DELETE FROM dp_project_activity");
         jdbcTemplate.update("DELETE FROM dp_github_delivery");
         jdbcTemplate.update("DELETE FROM dp_github_repository");
+        jdbcTemplate.update("DELETE FROM dp_project_member");
+        jdbcTemplate.update("DELETE FROM dp_workspace_member");
         jdbcTemplate.update("DELETE FROM dp_project");
         jdbcTemplate.update("DELETE FROM dp_workspace");
+        jdbcTemplate.update("DELETE FROM dp_user");
     }
 
     void createActiveBinding() {
+        createUser(OWNER_USER_ID, "webhook-owner", "webhook-owner@example.com");
         jdbcTemplate.update("""
-                INSERT INTO dp_workspace (id, name, slug, status)
-                VALUES (?, 'Test Workspace', 'test-workspace', 'ACTIVE')
-                """, WORKSPACE_ID);
+                INSERT INTO dp_workspace (id, name, slug, owner_user_id, status)
+                VALUES (?, 'Test Workspace', 'test-workspace', ?, 'ACTIVE')
+                """, WORKSPACE_ID, OWNER_USER_ID);
         jdbcTemplate.update("""
                 INSERT INTO dp_project (id, workspace_id, name, project_key, status, visibility)
                 VALUES (?, ?, 'DevPilot', 'DEV', 'ACTIVE', 'PRIVATE')
@@ -56,13 +62,22 @@ final class WebhookTestFixture {
     }
 
     void createSecondWorkspaceAndProject() {
+        createUser(SECOND_OWNER_USER_ID, "second-owner", "second-owner@example.com");
         jdbcTemplate.update("""
-                INSERT INTO dp_workspace (id, name, slug, status)
-                VALUES (101, 'Other Workspace', 'other-workspace', 'ACTIVE')
-                """);
+                INSERT INTO dp_workspace (id, name, slug, owner_user_id, status)
+                VALUES (101, 'Other Workspace', 'other-workspace', ?, 'ACTIVE')
+                """, SECOND_OWNER_USER_ID);
         jdbcTemplate.update("""
                 INSERT INTO dp_project (id, workspace_id, name, project_key, status, visibility)
                 VALUES (201, 101, 'Other Project', 'OTHER', 'ACTIVE', 'PRIVATE')
                 """);
+    }
+
+    private void createUser(long id, String username, String email) {
+        jdbcTemplate.update("""
+                INSERT INTO dp_user (
+                    id, username, email, display_name, password_hash, status
+                ) VALUES (?, ?, ?, 'Webhook Test Owner', '{noop}not-used', 'ACTIVE')
+                """, id, username, email);
     }
 }

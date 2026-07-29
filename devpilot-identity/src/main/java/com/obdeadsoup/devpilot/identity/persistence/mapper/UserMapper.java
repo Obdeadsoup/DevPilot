@@ -28,4 +28,13 @@ public interface UserMapper {
             LIMIT 1
             """)
     Optional<UserEntity> findByNormalizedLogin(@Param("normalizedLogin") String normalizedLogin);
+
+    @Select("""
+            SELECT COUNT(*)
+            FROM dp_user
+            WHERE id = #{userId}
+              AND status = 'ACTIVE'
+              AND deleted = 0
+            """)
+    int countActiveById(@Param("userId") long userId);
 }

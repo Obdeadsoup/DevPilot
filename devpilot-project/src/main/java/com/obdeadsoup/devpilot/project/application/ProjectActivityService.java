@@ -7,6 +7,7 @@ import com.obdeadsoup.devpilot.project.application.command.RecordProjectActivity
 import com.obdeadsoup.devpilot.project.error.ProjectErrorCode;
 import com.obdeadsoup.devpilot.project.persistence.mapper.ProjectActivityMapper;
 import com.obdeadsoup.devpilot.project.persistence.mapper.ProjectMapper;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +30,10 @@ public class ProjectActivityService {
         return activityMapper.insertIfAbsent(command) == 1;
     }
 
+    @PreAuthorize(
+            "@projectAuthorization.hasPermission("
+                    + "authentication, #workspaceId, #projectId, 'PROJECT_ACTIVITY_READ')"
+    )
     @Transactional(readOnly = true)
     public ProjectActivityPageResponse queryTimeline(long workspaceId, long projectId, int page, int size) {
         requireActiveProject(workspaceId, projectId);
