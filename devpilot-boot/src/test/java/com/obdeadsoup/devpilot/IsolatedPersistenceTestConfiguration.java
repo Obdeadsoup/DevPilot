@@ -2,11 +2,13 @@ package com.obdeadsoup.devpilot;
 
 import com.obdeadsoup.devpilot.github.persistence.mapper.GitHubDeliveryMapper;
 import com.obdeadsoup.devpilot.github.persistence.mapper.GitHubRepositoryMapper;
+import com.obdeadsoup.devpilot.identity.persistence.mapper.UserMapper;
 import com.obdeadsoup.devpilot.project.persistence.mapper.ProjectActivityMapper;
 import com.obdeadsoup.devpilot.project.persistence.mapper.ProjectMapper;
 import org.mockito.Mockito;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 @TestConfiguration(proxyBeanMethods = false)
 class IsolatedPersistenceTestConfiguration {
@@ -29,5 +31,15 @@ class IsolatedPersistenceTestConfiguration {
     @Bean
     GitHubDeliveryMapper gitHubDeliveryMapper() {
         return Mockito.mock(GitHubDeliveryMapper.class);
+    }
+
+    @Bean
+    UserMapper userMapper() {
+        return Mockito.mock(UserMapper.class);
+    }
+
+    @Bean
+    StringRedisTemplate stringRedisTemplate() {
+        return Mockito.mock(StringRedisTemplate.class);
     }
 }

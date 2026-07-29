@@ -139,6 +139,47 @@ mvn -pl devpilot-boot -am spring-boot:run "-Dspring-boot.run.profiles=local"
 Invoke-RestMethod http://localhost:8080/actuator/health
 ```
 
+### 本地登录与 Bearer Token
+
+当前实现用户名或邮箱加密码登录，但不提供公开注册，也不会在 Flyway 中写入固定账号或密码。
+首次本地运行时，需要由本地管理员在 `dp_user` 中准备一个账号：`username` 和 `email`
+必须使用小写，`password_hash` 必须由
+`PasswordEncoderFactories.createDelegatingPasswordEncoder()` 动态生成，格式类似
+`{bcrypt}$2a$...`。不要把原始密码或生成的 Hash 提交到仓库。
+
+认证接口为：
+
+```text
+POST /api/v1/auth/login
+GET  /api/v1/auth/me
+POST /api/v1/auth/logout
+```
+
+登录请求示例中的值只是环境变量占位，不是项目内置账号：
+
+```powershell
+$loginBody = @{
+    login = $env:DEVPILOT_LOCAL_LOGIN
+    password = $env:DEVPILOT_LOCAL_PASSWORD
+} | ConvertTo-Json
+
+$loginResponse = Invoke-RestMethod `
+    -Method Post `
+    -Uri http://localhost:8080/api/v1/auth/login `
+    -ContentType 'application/json' `
+    -Body $loginBody
+
+$accessToken = $loginResponse.data.accessToken
+Invoke-RestMethod `
+    -Uri http://localhost:8080/api/v1/auth/me `
+    -Headers @{ Authorization = "Bearer $accessToken" }
+```
+
+Access Token 是至少 256 bit 的随机不透明值，默认有效期 2 小时，可通过
+`devpilot.identity.access-token-ttl` 调整，配置上限为 24 小时。Redis Key 只包含原始
+Token 的 SHA-256，原始 Token 只返回客户端，不写入数据库和日志。退出登录会删除当前
+Token 对应的 Redis 会话；当前没有 Refresh Token、JWT 或 Cookie Session。
+
 ### GitHub Webhook 垂直切片
 
 当前实现只接收 `ping` 和 `push`：
@@ -160,8 +201,9 @@ workspace、project 和 repository 绑定：
 mvn -pl devpilot-boot -am test
 ```
 
-活动时间线接口保持认证保护。在登录和权限模块完成前，仅通过带模拟身份的安全集成测试
-验证，不提供固定账号、临时 Header 或匿名读取方式。
+活动时间线接口保持认证保护。调用方需要先通过真实登录接口获得 Bearer Token；当前仅完成
+身份认证，尚未实现 Workspace 成员、角色和项目资源归属授权，因此“已登录”暂时是该接口的
+唯一安全门槛。
 
 停止应用后关闭容器：
 

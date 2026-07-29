@@ -12,6 +12,8 @@ spring:
     validate-migration-naming: true
 
 devpilot:
+  identity:
+    access-token-ttl: 2h
   github:
     api-base-url: https://api.github.com
     connect-timeout: 3s

@@ -32,4 +32,5 @@ docs/*
 docs/learning/*
 !docs/learning/02-reliable-webhook-ingress.md
 !docs/learning/03-delivery-retry-and-recovery.md
+!docs/learning/04-spring-security-authentication.md
 AGENTS.md

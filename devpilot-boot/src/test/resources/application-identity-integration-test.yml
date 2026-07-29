@@ -11,5 +11,7 @@ management:
       enabled: false
 
 devpilot:
+  identity:
+    access-token-ttl: 2h
   github:
     delivery-recovery-enabled: false
