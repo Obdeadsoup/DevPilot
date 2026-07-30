@@ -1,13 +1,12 @@
 package com.obdeadsoup.devpilot.project.application;
 
 import com.obdeadsoup.devpilot.framework.error.BusinessException;
-import com.obdeadsoup.devpilot.identity.application.WorkspaceAuthorizationService;
 import com.obdeadsoup.devpilot.identity.domain.DevPilotUserPrincipal;
-import com.obdeadsoup.devpilot.identity.domain.WorkspaceRole;
 import com.obdeadsoup.devpilot.identity.error.IdentityErrorCode;
 import com.obdeadsoup.devpilot.project.domain.ProjectAccess;
 import com.obdeadsoup.devpilot.project.domain.ProjectPermission;
 import com.obdeadsoup.devpilot.project.domain.ProjectRole;
+import com.obdeadsoup.devpilot.project.domain.WorkspaceRole;
 import com.obdeadsoup.devpilot.project.persistence.entity.ProjectEntity;
 import com.obdeadsoup.devpilot.project.persistence.mapper.ProjectMapper;
 import com.obdeadsoup.devpilot.project.persistence.mapper.ProjectMemberMapper;
@@ -137,7 +136,8 @@ public class ProjectAuthorizationService {
         Set<ProjectPermission> permissions = role.permissions();
         if (ARCHIVED.equals(project.status())) {
             permissions = permissions.stream()
-                    .filter(ProjectPermission::isReadOnly)
+                    .filter(permission -> permission.isReadOnly()
+                            || permission == ProjectPermission.PROJECT_ARCHIVE)
                     .collect(Collectors.toUnmodifiableSet());
         }
         return new ProjectAccess(role, source, permissions);

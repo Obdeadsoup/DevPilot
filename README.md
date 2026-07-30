@@ -87,6 +87,7 @@ devpilot-github
 - [数据库设计](docs/database-design.md)
 - [能力覆盖与路线](docs/capability-coverage-and-roadmap.md)
 - [作用域 RBAC 学习笔记](docs/learning/05-scoped-rbac.md)
+- [Workspace / Project 生命周期学习笔记](docs/learning/06-workspace-project-lifecycle.md)
 - [Codex 分阶段指令](codex-prompts/all-prompts.md)
 
 ## 开发方式
@@ -214,6 +215,39 @@ Membership；INTERNAL 项目允许 ACTIVE Workspace Member 只读。未认证返
 不会写入成员表；角色只在服务端映射到不可变 Permission Set，Token 不缓存作用域角色。
 成员管理应用服务、乐观锁和数据库约束已经实现，但本阶段没有开放成员管理 HTTP API，也没有
 实现动态角色、权限后台、审计落库或 Redis 权限缓存。
+
+### Workspace / Project 生命周期
+
+当前已开放经过认证并在应用服务层授权的生命周期接口：
+
+```text
+POST /api/v1/workspaces
+GET  /api/v1/workspaces
+GET  /api/v1/workspaces/{workspaceId}
+PUT  /api/v1/workspaces/{workspaceId}
+POST /api/v1/workspaces/{workspaceId}/disable
+POST /api/v1/workspaces/{workspaceId}/reactivate
+
+POST /api/v1/workspaces/{workspaceId}/projects
+GET  /api/v1/workspaces/{workspaceId}/projects
+GET  /api/v1/workspaces/{workspaceId}/projects/{projectId}
+PUT  /api/v1/workspaces/{workspaceId}/projects/{projectId}
+POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/activate
+POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/archive
+POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/restore
+```
+
+Workspace 使用 `ACTIVE / DISABLED`，Project 使用
+`PLANNING / ACTIVE / ARCHIVED`。状态变化均使用专用动作接口和 expected version；普通资料
+更新不能改变状态、Owner、Project Key 或逻辑删除标记。Project Key 创建时统一转为大写，
+要求 2～12 位、字母开头且只含字母数字，创建后不提供修改接口。
+
+Project 列表的数据范围直接在 SQL 中完成：Workspace OWNER/ADMIN 可见全部未删除项目，
+ACTIVE Workspace Member 可见 INTERNAL 项目，PRIVATE 项目还要求 ACTIVE Project
+Membership。所有单项目查询都同时携带 `workspaceId + projectId`。
+
+本阶段仍未开放 GitHub Repository 绑定管理接口，也未实现 Audit、Outbox、Task、Notification
+或 Agent 业务能力。
 
 停止应用后关闭容器：
 

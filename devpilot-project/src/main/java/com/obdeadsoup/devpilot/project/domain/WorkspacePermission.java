@@ -1,4 +1,4 @@
-package com.obdeadsoup.devpilot.identity.domain;
+package com.obdeadsoup.devpilot.project.domain;
 
 public enum WorkspacePermission {
 

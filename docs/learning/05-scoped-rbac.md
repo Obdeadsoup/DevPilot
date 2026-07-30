@@ -21,10 +21,10 @@ DEVELOPER。Access Token 只保存 `id / username / displayName` 等身份，不
 
 ## 4. 平台、Workspace、Project 三层
 
-平台层当前只有登录身份，没有实现平台 Break-glass。Workspace 层由 identity 模块负责
-OWNER/ADMIN/MEMBER/VIEWER。Project 层由 project 模块负责
-PROJECT_ADMIN/DEVELOPER/VIEWER、项目可见性和资源归属。当前模块依赖是单向
-`project → identity`。
+平台层当前只有登录身份，没有实现平台 Break-glass。Workspace 与 Project 两级作用域都由
+project 模块负责，包括 OWNER/ADMIN/MEMBER/VIEWER、
+PROJECT_ADMIN/DEVELOPER/VIEWER、项目可见性和资源归属。identity 只负责用户与认证，当前
+模块依赖仍是单向 `project → identity`。
 
 ## 5. Workspace OWNER 如何存储
 
@@ -160,8 +160,8 @@ Controller 不是唯一调用入口；以后还会有内部任务和 Agent 工�
 用户读取权限。
 
 成员服务也在应用层调用授权服务。角色变更使用 `version` 条件 UPDATE，更新数不是 1 就返回
-409；Workspace Member 被移除时，通过 identity 定义、project 实现的最小端口在同一事务把
-其 Project Membership 标记 REMOVED。
+409；Workspace Member 和 Project Member 现在同属 project 模块，因此移除 Workspace
+Member 时可在同一事务直接把其 Project Membership 标记 REMOVED，不再需要跨模块撤销端口。
 
 ## 14. SQL 为什么必须带作用域
 

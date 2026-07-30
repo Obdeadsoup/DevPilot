@@ -1,4 +1,4 @@
-package com.obdeadsoup.devpilot.identity.domain;
+package com.obdeadsoup.devpilot.project.domain;
 
 import java.util.EnumSet;
 import java.util.Set;

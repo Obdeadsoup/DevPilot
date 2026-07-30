@@ -1,11 +1,11 @@
-package com.obdeadsoup.devpilot.identity.application;
+package com.obdeadsoup.devpilot.project.application;
 
-import com.obdeadsoup.devpilot.identity.domain.WorkspacePermission;
-import com.obdeadsoup.devpilot.identity.domain.WorkspaceRole;
-import com.obdeadsoup.devpilot.identity.persistence.entity.WorkspaceEntity;
-import com.obdeadsoup.devpilot.identity.persistence.entity.WorkspaceMemberEntity;
-import com.obdeadsoup.devpilot.identity.persistence.mapper.WorkspaceMapper;
-import com.obdeadsoup.devpilot.identity.persistence.mapper.WorkspaceMemberMapper;
+import com.obdeadsoup.devpilot.project.domain.WorkspacePermission;
+import com.obdeadsoup.devpilot.project.domain.WorkspaceRole;
+import com.obdeadsoup.devpilot.project.persistence.entity.WorkspaceEntity;
+import com.obdeadsoup.devpilot.project.persistence.entity.WorkspaceMemberEntity;
+import com.obdeadsoup.devpilot.project.persistence.mapper.WorkspaceMapper;
+import com.obdeadsoup.devpilot.project.persistence.mapper.WorkspaceMemberMapper;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
@@ -36,7 +36,7 @@ class WorkspacePermissionMatrixTest {
     }
 
     @Test
-    void memberHasNoWorkspaceMemberManagementPermission() {
+    void memberHasProjectCreateButNoWorkspaceMemberManagementPermission() {
         assertThat(WorkspaceRole.MEMBER.hasPermission(WorkspacePermission.WORKSPACE_READ)).isTrue();
         assertThat(WorkspaceRole.MEMBER.hasPermission(WorkspacePermission.PROJECT_CREATE)).isTrue();
         assertThat(WorkspaceRole.MEMBER.hasPermission(
@@ -59,7 +59,7 @@ class WorkspacePermissionMatrixTest {
     }
 
     @Test
-    void invitedSuspendedRemovedAndDisabledWorkspaceHaveNoPermission() {
+    void inactiveMembershipAndDisabledWorkspaceHaveNoPermission() {
         WorkspaceMapper workspaceMapper = mock(WorkspaceMapper.class);
         WorkspaceMemberMapper memberMapper = mock(WorkspaceMemberMapper.class);
         WorkspaceAuthorizationService service =

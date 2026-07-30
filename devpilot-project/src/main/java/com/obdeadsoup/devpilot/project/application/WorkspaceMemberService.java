@@ -1,15 +1,17 @@
-package com.obdeadsoup.devpilot.identity.application;
+package com.obdeadsoup.devpilot.project.application;
 
 import com.obdeadsoup.devpilot.framework.error.BusinessException;
-import com.obdeadsoup.devpilot.identity.domain.WorkspacePermission;
-import com.obdeadsoup.devpilot.identity.domain.WorkspaceRole;
+import com.obdeadsoup.devpilot.identity.application.CurrentUserProvider;
+import com.obdeadsoup.devpilot.identity.application.UserAccountService;
 import com.obdeadsoup.devpilot.identity.error.IdentityErrorCode;
-import com.obdeadsoup.devpilot.identity.error.WorkspaceErrorCode;
-import com.obdeadsoup.devpilot.identity.persistence.entity.WorkspaceEntity;
-import com.obdeadsoup.devpilot.identity.persistence.entity.WorkspaceMemberEntity;
-import com.obdeadsoup.devpilot.identity.persistence.mapper.UserMapper;
-import com.obdeadsoup.devpilot.identity.persistence.mapper.WorkspaceMapper;
-import com.obdeadsoup.devpilot.identity.persistence.mapper.WorkspaceMemberMapper;
+import com.obdeadsoup.devpilot.project.domain.WorkspacePermission;
+import com.obdeadsoup.devpilot.project.domain.WorkspaceRole;
+import com.obdeadsoup.devpilot.project.error.WorkspaceErrorCode;
+import com.obdeadsoup.devpilot.project.persistence.entity.WorkspaceEntity;
+import com.obdeadsoup.devpilot.project.persistence.entity.WorkspaceMemberEntity;
+import com.obdeadsoup.devpilot.project.persistence.mapper.ProjectMemberMapper;
+import com.obdeadsoup.devpilot.project.persistence.mapper.WorkspaceMapper;
+import com.obdeadsoup.devpilot.project.persistence.mapper.WorkspaceMemberMapper;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,23 +23,23 @@ public class WorkspaceMemberService {
     private final WorkspaceAuthorizationService authorizationService;
     private final WorkspaceMapper workspaceMapper;
     private final WorkspaceMemberMapper memberMapper;
-    private final UserMapper userMapper;
-    private final WorkspaceProjectMembershipRevoker projectMembershipRevoker;
+    private final UserAccountService userAccountService;
+    private final ProjectMemberMapper projectMemberMapper;
 
     public WorkspaceMemberService(
             CurrentUserProvider currentUserProvider,
             WorkspaceAuthorizationService authorizationService,
             WorkspaceMapper workspaceMapper,
             WorkspaceMemberMapper memberMapper,
-            UserMapper userMapper,
-            WorkspaceProjectMembershipRevoker projectMembershipRevoker
+            UserAccountService userAccountService,
+            ProjectMemberMapper projectMemberMapper
     ) {
         this.currentUserProvider = currentUserProvider;
         this.authorizationService = authorizationService;
         this.workspaceMapper = workspaceMapper;
         this.memberMapper = memberMapper;
-        this.userMapper = userMapper;
-        this.projectMembershipRevoker = projectMembershipRevoker;
+        this.userAccountService = userAccountService;
+        this.projectMemberMapper = projectMemberMapper;
     }
 
     @Transactional
@@ -106,7 +108,7 @@ public class WorkspaceMemberService {
         if (memberMapper.remove(workspaceId, userId, expectedVersion) != 1) {
             throw new BusinessException(WorkspaceErrorCode.MEMBERSHIP_VERSION_CONFLICT);
         }
-        projectMembershipRevoker.revokeAllForWorkspaceUser(workspaceId, userId);
+        projectMemberMapper.removeAllForWorkspaceUser(workspaceId, userId);
     }
 
     @Transactional
@@ -141,7 +143,7 @@ public class WorkspaceMemberService {
     }
 
     private void requireActiveUser(long userId) {
-        if (userMapper.countActiveById(userId) != 1) {
+        if (!userAccountService.isActive(userId)) {
             throw new BusinessException(WorkspaceErrorCode.USER_NOT_ACTIVE);
         }
     }

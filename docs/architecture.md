@@ -8,9 +8,9 @@
 
 ```text
 devpilot-boot            启动和装配
-devpilot-framework       响应、异常、Trace、分页、安全上下文接口
-devpilot-identity        用户、工作空间成员、角色、权限
-devpilot-project         项目、项目成员、项目可见性和活动
+devpilot-framework       响应、异常和通用基础设施
+devpilot-identity        用户、登录认证、Principal、Access Token 和安全过滤器
+devpilot-project         Workspace/Project、成员、RBAC、生命周期和活动
 devpilot-github          仓库绑定、Webhook、API Client、同步
 devpilot-task            任务、迭代、状态机、截止规则
 devpilot-notification    通知和未读计数
@@ -20,9 +20,30 @@ devpilot-agent           会话、工具、提议、确认和执行
 ```
 
 当前依赖：identity→framework，project→framework+identity，
-github→framework+project，boot→全部初始模块。identity 通过最小
-`WorkspaceProjectMembershipRevoker` 端口请求撤销 Project Membership，project 提供实现，
-所以没有 identity→project 反向依赖。禁止 project 依赖 github。
+github→framework+project，boot→全部初始模块。Workspace、两级成员关系、角色、Permission
+和授权服务全部属于 project；identity 只向 project 提供当前用户和用户有效性能力，绝不反向
+依赖 project。移除 Workspace Member 与撤销其 Project Membership 在 project 模块同一事务
+内完成。禁止 project 依赖 github。
+
+## Workspace / Project 生命周期
+
+```text
+Workspace: ACTIVE ──disable──> DISABLED
+           ACTIVE <─reactivate─ DISABLED
+
+Project:   PLANNING ──activate──> ACTIVE
+           PLANNING ──archive───> ARCHIVED
+           ACTIVE   ──archive───> ARCHIVED
+           ACTIVE   <─restore──── ARCHIVED
+```
+
+每条变更语句都带资源 Scope、允许的当前状态、`deleted = 0` 和 expected version，并原子执行
+`version = version + 1`。应用只暴露语义明确的动作，不提供通用 `updateStatus`。状态表示业务
+生命周期；`deleted` 是独立的逻辑删除维度，本阶段没有 Project 删除接口。
+
+Project 创建时初始为 PLANNING，Key 规范化后不可通过资料接口修改。Workspace Owner/Admin
+凭继承权限管理项目；被允许创建项目的普通 Workspace Member 会成为该项目的
+PROJECT_ADMIN，避免创建后无管理权限。
 
 ## Webhook 链路
 
@@ -91,6 +112,11 @@ RECEIVED → PROCESSING → SUCCEEDED
 Workspace/Project 角色不写入 Access Token，每次从当前数据库状态计算。成员角色变更和所有权
 转移使用 `version` 条件 UPDATE；移除 Workspace Member 与撤销其 Project Membership
 处于同一事务。
+
+Workspace 与 Project 的列表范围也在 SQL 中实施，不先读取全表再在 Java 过滤。Workspace
+列表只返回当前用户拥有或拥有 ACTIVE Membership 的记录；Project 列表要求 ACTIVE
+Workspace 关系，OWNER/ADMIN 可见全部，普通成员可见 INTERNAL，而 PRIVATE 还要求
+ACTIVE Project Membership。状态与可见性筛选使用枚举白名单。
 
 GitHub Webhook 的 sender 和仓库权限属于外部元数据。`actor_login` 不恢复本地
 Authentication，GitHub App permission 也不替代 DevPilot 的本地授权。

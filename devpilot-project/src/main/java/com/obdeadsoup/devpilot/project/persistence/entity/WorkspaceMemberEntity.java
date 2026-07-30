@@ -1,4 +1,4 @@
-package com.obdeadsoup.devpilot.identity.persistence.entity;
+package com.obdeadsoup.devpilot.project.persistence.entity;
 
 import java.time.LocalDateTime;
 

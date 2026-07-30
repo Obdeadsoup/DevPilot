@@ -3,6 +3,7 @@ package com.obdeadsoup.devpilot.framework.error;
 import com.obdeadsoup.devpilot.framework.api.ApiResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -36,5 +37,18 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getBody().message())
                 .isEqualTo(CommonErrorCode.INTERNAL_ERROR.message())
                 .doesNotContain("password");
+    }
+
+    @Test
+    void mapsUnreadableEnumOrJsonInputToSafeBadRequest() {
+        ResponseEntity<ApiResponse<Void>> response = handler.handleUnreadableInput(
+                new HttpMessageNotReadableException("private parser detail")
+        );
+
+        assertThat(response.getStatusCode()).isEqualTo(CommonErrorCode.INVALID_REQUEST.status());
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().message())
+                .isEqualTo(CommonErrorCode.INVALID_REQUEST.message())
+                .doesNotContain("private parser detail");
     }
 }

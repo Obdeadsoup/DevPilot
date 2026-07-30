@@ -2,12 +2,11 @@ package com.obdeadsoup.devpilot.project.application;
 
 import com.obdeadsoup.devpilot.framework.error.BusinessException;
 import com.obdeadsoup.devpilot.identity.application.CurrentUserProvider;
-import com.obdeadsoup.devpilot.identity.application.WorkspaceAuthorizationService;
-import com.obdeadsoup.devpilot.identity.domain.WorkspaceRole;
 import com.obdeadsoup.devpilot.identity.error.IdentityErrorCode;
 import com.obdeadsoup.devpilot.project.domain.ProjectMember;
 import com.obdeadsoup.devpilot.project.domain.ProjectPermission;
 import com.obdeadsoup.devpilot.project.domain.ProjectRole;
+import com.obdeadsoup.devpilot.project.domain.WorkspaceRole;
 import com.obdeadsoup.devpilot.project.error.ProjectErrorCode;
 import com.obdeadsoup.devpilot.project.persistence.entity.ProjectMemberEntity;
 import com.obdeadsoup.devpilot.project.persistence.mapper.ProjectMemberMapper;

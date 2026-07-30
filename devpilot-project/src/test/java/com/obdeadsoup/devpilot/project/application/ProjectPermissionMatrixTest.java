@@ -1,10 +1,9 @@
 package com.obdeadsoup.devpilot.project.application;
 
-import com.obdeadsoup.devpilot.identity.application.WorkspaceAuthorizationService;
-import com.obdeadsoup.devpilot.identity.domain.WorkspaceRole;
 import com.obdeadsoup.devpilot.project.domain.ProjectAccess;
 import com.obdeadsoup.devpilot.project.domain.ProjectPermission;
 import com.obdeadsoup.devpilot.project.domain.ProjectRole;
+import com.obdeadsoup.devpilot.project.domain.WorkspaceRole;
 import com.obdeadsoup.devpilot.project.persistence.entity.ProjectEntity;
 import com.obdeadsoup.devpilot.project.persistence.entity.ProjectMemberEntity;
 import com.obdeadsoup.devpilot.project.persistence.mapper.ProjectMapper;
@@ -129,7 +128,7 @@ class ProjectPermissionMatrixTest {
     }
 
     @Test
-    void archivedProjectKeepsReadsAndRejectsWrites() {
+    void archivedProjectKeepsReadsAndControlledRestorePermissionButRejectsOrdinaryWrites() {
         givenProject("ARCHIVED", "PRIVATE");
         givenWorkspaceRole(WorkspaceRole.OWNER);
 
@@ -142,6 +141,9 @@ class ProjectPermissionMatrixTest {
         assertThat(authorization.hasPermission(
                 USER_ID, WORKSPACE_ID, PROJECT_ID, ProjectPermission.PROJECT_MEMBER_MANAGE
         )).isFalse();
+        assertThat(authorization.hasPermission(
+                USER_ID, WORKSPACE_ID, PROJECT_ID, ProjectPermission.PROJECT_ARCHIVE
+        )).isTrue();
     }
 
     private void givenProject(String status, String visibility) {

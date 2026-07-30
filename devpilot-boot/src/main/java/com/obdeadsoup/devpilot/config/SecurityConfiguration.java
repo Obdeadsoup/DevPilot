@@ -86,7 +86,7 @@ public class SecurityConfiguration {
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/auth/me").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").authenticated()
-                .requestMatchers(HttpMethod.GET, "/api/v1/workspaces/*/projects/*/activities").authenticated()
+                .requestMatchers("/api/v1/workspaces/**").authenticated()
                 .anyRequest().denyAll()
         );
         http.addFilterBefore(bearerTokenAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

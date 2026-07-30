@@ -39,13 +39,28 @@ Workspace、成员用户和邀请人设置外键。Workspace/状态与用户/状
 
 ### dp_project
 
-V1 创建：
+V1 创建基础字段，V5 增加创建人并修复活跃 Key 唯一性：
 
-`id, workspace_id, name, project_key, description, status, visibility, created_at, updated_at, version, deleted`
+`id, workspace_id, name, project_key, description, status, visibility, created_by, created_at, updated_at, version, deleted, active_project_key`
 
-状态 `PLANNING / ACTIVE / ARCHIVED`，可见性 `PRIVATE / INTERNAL`；唯一
-`(workspace_id, project_key, deleted)` 和 `(id, workspace_id)`。后者为所有 Project
-子资源提供复合外键目标。
+状态 `PLANNING / ACTIVE / ARCHIVED`，可见性 `PRIVATE / INTERNAL`。`created_by` 外键指向
+`dp_user.id`；V5 会用 Workspace Owner 安全回填可推断的历史行，无法推断的旧行允许暂时为
+NULL，所有新建 Project 都由应用显式写入创建人。`version >= 0`。
+
+V1 的唯一 `(workspace_id, project_key, deleted)` 有一个隐蔽缺陷：同一 Key 最多只能有一条
+`deleted = 1` 历史记录，第二轮“创建—删除”会冲突。V5 删除该索引，新增生成列：
+
+```sql
+active_project_key = CASE WHEN deleted = 0 THEN project_key ELSE NULL END
+UNIQUE (workspace_id, active_project_key)
+```
+
+MySQL 唯一索引允许多行 NULL，因此每个 Workspace 的活动 Project Key 仍唯一，而任意数量的
+已删除历史不会阻止重新创建。`(id, workspace_id)` 唯一约束继续作为 Project 子资源复合外键
+的目标。
+
+Workspace `slug` 的全局唯一索引没有改为逻辑删除感知：slug 是稳定租户标识，删除后永久
+保留，防止旧链接、审计引用或外部配置意外指向另一个 Workspace。这是有意策略。
 
 ### dp_project_member
 
@@ -79,7 +94,9 @@ V1 create github webhook vertical slice
 V2 add github delivery processing scan index
 V3 create identity user
 V4 add scoped rbac
+V5 add project lifecycle constraints
 ```
 
 V4 不修改 V1–V3，包含 `dp_workspace.owner_user_id/version`、
-`dp_workspace_member` 和 `dp_project_member`。
+`dp_workspace_member` 和 `dp_project_member`。V5 不修改旧迁移，增加
+`dp_project.created_by`、Project version 检查以及活动 Project Key 生成列唯一索引。

@@ -26,7 +26,7 @@ public class ProjectActivityService {
 
     @Transactional
     public boolean recordGitHubActivity(RecordProjectActivityCommand command) {
-        requireActiveProject(command.workspaceId(), command.projectId());
+        requireActivityWritableProject(command.workspaceId(), command.projectId());
         return activityMapper.insertIfAbsent(command) == 1;
     }
 
@@ -36,7 +36,7 @@ public class ProjectActivityService {
     )
     @Transactional(readOnly = true)
     public ProjectActivityPageResponse queryTimeline(long workspaceId, long projectId, int page, int size) {
-        requireActiveProject(workspaceId, projectId);
+        requireProjectInActiveWorkspace(workspaceId, projectId);
         long total = activityMapper.countTimeline(workspaceId, projectId);
         long offset = (long) (page - 1) * size;
         List<ProjectActivityResponse> items = activityMapper.findTimeline(workspaceId, projectId, offset, size)
@@ -47,8 +47,14 @@ public class ProjectActivityService {
         return new ProjectActivityPageResponse(items, page, size, total, totalPages);
     }
 
-    private void requireActiveProject(long workspaceId, long projectId) {
+    private void requireActivityWritableProject(long workspaceId, long projectId) {
         if (projectMapper.countActiveProjectScope(workspaceId, projectId) != 1) {
+            throw new BusinessException(ProjectErrorCode.PROJECT_NOT_FOUND);
+        }
+    }
+
+    private void requireProjectInActiveWorkspace(long workspaceId, long projectId) {
+        if (projectMapper.countProjectScopeInActiveWorkspace(workspaceId, projectId) != 1) {
             throw new BusinessException(ProjectErrorCode.PROJECT_NOT_FOUND);
         }
     }

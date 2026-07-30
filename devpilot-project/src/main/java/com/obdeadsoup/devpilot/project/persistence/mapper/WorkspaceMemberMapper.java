@@ -1,6 +1,6 @@
-package com.obdeadsoup.devpilot.identity.persistence.mapper;
+package com.obdeadsoup.devpilot.project.persistence.mapper;
 
-import com.obdeadsoup.devpilot.identity.persistence.entity.WorkspaceMemberEntity;
+import com.obdeadsoup.devpilot.project.persistence.entity.WorkspaceMemberEntity;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
