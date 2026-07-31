@@ -89,7 +89,7 @@ public class GitHubWebhookService {
         if (!GitHubRepositoryStatus.ACTIVE.name().equals(repository.bindingStatus())) {
             throw new BusinessException(GitHubWebhookErrorCode.REPOSITORY_DISABLED);
         }
-        String secret = secretResolver.resolve(repository.credentialRef())
+        String secret = secretResolver.resolve(repository.webhookSecretRef())
                 .orElseThrow(() -> new BusinessException(GitHubWebhookErrorCode.SECRET_UNAVAILABLE));
         if (!signatureVerifier.verify(rawBody, signatureHeader, secret)) {
             throw new BusinessException(GitHubWebhookErrorCode.SIGNATURE_INVALID);

@@ -3,7 +3,6 @@ package com.obdeadsoup.devpilot.github.config;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
-import java.net.URI;
 import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -13,7 +12,6 @@ class GitHubIntegrationPropertiesTest {
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withUserConfiguration(GitHubIntegrationConfiguration.class)
             .withPropertyValues(
-                    "devpilot.github.api-base-url=https://api.github.com",
                     "devpilot.github.connect-timeout=3s",
                     "devpilot.github.read-timeout=10s",
                     "devpilot.github.worker-core-threads=2",
@@ -36,7 +34,6 @@ class GitHubIntegrationPropertiesTest {
             assertThat(context).hasSingleBean(GitHubIntegrationProperties.class);
 
             GitHubIntegrationProperties properties = context.getBean(GitHubIntegrationProperties.class);
-            assertThat(properties.apiBaseUrl()).isEqualTo(URI.create("https://api.github.com"));
             assertThat(properties.connectTimeout()).isEqualTo(Duration.ofSeconds(3));
             assertThat(properties.readTimeout()).isEqualTo(Duration.ofSeconds(10));
             assertThat(properties.workerCoreThreads()).isEqualTo(2);

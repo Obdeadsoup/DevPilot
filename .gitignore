@@ -29,6 +29,7 @@ codex-prompts/
 docs/*
 !docs/architecture.md
 !docs/database-design.md
+!docs/capability-coverage-and-roadmap.md
 !docs/learning/
 docs/learning/*
 !docs/learning/02-reliable-webhook-ingress.md
@@ -36,4 +37,5 @@ docs/learning/*
 !docs/learning/04-spring-security-authentication.md
 !docs/learning/05-scoped-rbac.md
 !docs/learning/06-workspace-project-lifecycle.md
+!docs/learning/07-github-repository-binding.md
 AGENTS.md

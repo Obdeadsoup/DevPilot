@@ -75,8 +75,10 @@ Workspace，并对成员用户、创建人设置外键。查询和更新始终�
 
 ### GitHub 与 Activity
 
-- `dp_github_repository`：本地 Workspace/Project 绑定与 `credential_ref`，不保存明文
-  Secret。
+- `dp_github_repository`：本地 Workspace/Project Binding。V6 将旧 `credential_ref` 原地重命名为
+  `webhook_secret_ref`，并新增 `api_credential_ref`、`last_verified_at`、`created_by`。两列 Credential
+  只保存环境变量引用，不保存明文 Token/Secret；`last_verified_at` 表示最近一次成功从 GitHub 核实身份和
+  元数据，`last_synced_at` 保留给未来 Issue/PR 等业务同步，不混用。
 - `dp_github_delivery`：原始 Payload、`payload_sha256`、Delivery 状态机、有限重试字段和
   `version`；`github_delivery_id` 全局唯一。
 - `dp_project_activity`：项目时间线；`(source_type, source_delivery_id)` 唯一，
@@ -95,8 +97,26 @@ V2 add github delivery processing scan index
 V3 create identity user
 V4 add scoped rbac
 V5 add project lifecycle constraints
+V6 add github repository binding lifecycle
 ```
 
 V4 不修改 V1–V3，包含 `dp_workspace.owner_user_id/version`、
 `dp_workspace_member` 和 `dp_project_member`。V5 不修改旧迁移，增加
 `dp_project.created_by`、Project version 检查以及活动 Project Key 生成列唯一索引。
+
+V6 不修改 V1–V5。它保留 `(id, workspace_id, project_id)` 和 Delivery 复合外键，删除不感知软删除的
+Repository ID 唯一索引与存在第二轮解绑冲突的 `(workspace_id, full_name, deleted)`，改用：
+
+```sql
+active_github_repository_id =
+    CASE WHEN deleted = 0 THEN github_repository_id ELSE NULL END
+active_repository_full_name =
+    CASE WHEN deleted = 0 THEN full_name ELSE NULL END
+
+UNIQUE(active_github_repository_id)
+UNIQUE(workspace_id, active_repository_full_name)
+```
+
+已解绑历史的两个生成列均为 NULL，因此同一仓库可经历任意多轮绑定/解绑；活动 Binding 仍全局按稳定
+GitHub Repository ID 唯一。V6 还增加 Repository `version >= 0` CHECK，原有
+`ACTIVE / DISABLED` CHECK 保持不变。

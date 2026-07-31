@@ -88,6 +88,7 @@ devpilot-github
 - [能力覆盖与路线](docs/capability-coverage-and-roadmap.md)
 - [作用域 RBAC 学习笔记](docs/learning/05-scoped-rbac.md)
 - [Workspace / Project 生命周期学习笔记](docs/learning/06-workspace-project-lifecycle.md)
+- [GitHub Repository 绑定学习笔记](docs/learning/07-github-repository-binding.md)
 - [Codex 分阶段指令](codex-prompts/all-prompts.md)
 
 ## 开发方式
@@ -193,11 +194,27 @@ GET  /api/v1/workspaces/{workspaceId}/projects/{projectId}/activities?page=1&siz
 
 Webhook 请求必须携带 `X-Hub-Signature-256`、`X-GitHub-Delivery` 和
 `X-GitHub-Event`。服务使用原始请求字节进行 HMAC-SHA256 验签；Webhook secret
-由仓库绑定的 `credential_ref` 指向环境变量，不存储明文。首次接收返回 `202`，
+由仓库绑定的 `webhook_secret_ref` 指向环境变量，不存储明文。首次接收返回 `202`，
 重复 Delivery 返回幂等的 `200`，不会重复生成项目活动。
 
-本轮没有创建公开仓库绑定管理接口。MySQL Testcontainers 集成测试通过测试夹具准备
-workspace、project 和 repository 绑定：
+Repository 绑定管理接口位于 Project 作用域下：
+
+```text
+POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/github-repositories
+GET  /api/v1/workspaces/{workspaceId}/projects/{projectId}/github-repositories
+GET  /api/v1/workspaces/{workspaceId}/projects/{projectId}/github-repositories/{bindingId}
+POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/github-repositories/{bindingId}/disable
+POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/github-repositories/{bindingId}/reactivate
+POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/github-repositories/{bindingId}/refresh
+POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/github-repositories/{bindingId}/unbind
+```
+
+绑定请求只提交 owner、repositoryName 和两类凭据引用。服务端通过固定
+`https://api.github.com` 的 REST Client 获取 repository id、full name、URL、默认分支和可见性，
+客户端不能直接指定这些权威字段。`api_credential_ref` 只引用 GitHub API Token，
+`webhook_secret_ref` 只引用 HMAC Secret；响应不返回任何 Reference 或原始凭据。
+
+本地验证：
 
 ```powershell
 mvn -pl devpilot-boot -am test
@@ -246,8 +263,8 @@ Project 列表的数据范围直接在 SQL 中完成：Workspace OWNER/ADMIN 可
 ACTIVE Workspace Member 可见 INTERNAL 项目，PRIVATE 项目还要求 ACTIVE Project
 Membership。所有单项目查询都同时携带 `workspaceId + projectId`。
 
-本阶段仍未开放 GitHub Repository 绑定管理接口，也未实现 Audit、Outbox、Task、Notification
-或 Agent 业务能力。
+本阶段已开放 GitHub Repository 绑定生命周期，但仍未实现完整 GitHub App JWT / Installation
+Token、Issue/PR 同步、复杂 Rate Limit 重试、Audit、Outbox、Task、Notification 或 Agent 业务能力。
 
 停止应用后关闭容器：
 

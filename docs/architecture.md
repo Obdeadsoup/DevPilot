@@ -80,7 +80,26 @@ RECEIVED → PROCESSING → SUCCEEDED
 
 ## GitHub API Client
 
-统一处理 Authorization、API 版本、连接/读取超时、403/429、Retry-After、X-RateLimit-*、分页、指数退避、结构化错误和指标。业务服务不得自行拼 HTTP 请求。
+当前 Repository Metadata Client 使用固定 `https://api.github.com`、编码后的 owner/repository Path
+Segment、Bearer API Credential、API Version、User-Agent 和连接/读取超时读取单仓库元数据。绑定只信任
+GitHub 返回的稳定 repository id 与展示元数据，不信任客户端提交权威字段。
+
+API Credential 与 Webhook Secret 分别由独立白名单 Reference 解析器提供。前者只供 REST API，后者只供
+原始 Payload HMAC 验签，数据库和响应均不保存/返回原始值。当前只对 401/403/404/429/5xx 和超时做安全
+错误映射，尚未实现 Retry-After、X-RateLimit-*、分页、条件请求和复杂重试。
+
+## Repository Binding 生命周期
+
+```text
+bind → ACTIVE ⇄ DISABLED
+          │          │
+          └─ unbind ─┘ → deleted history
+```
+
+所有用户操作先经过 Project 作用域 `REPOSITORY_*` 权限。状态动作使用
+`id + workspace_id + project_id + deleted + current status + version` 条件更新。GitHub 数字 Repository ID
+作为稳定身份；rename 只更新元数据。V6 的活动生成列唯一索引保证同一真实仓库同时最多一个活动 Binding，
+并允许解绑后多轮重绑。Delivery 与 Activity 历史不随解绑删除。
 
 ## 一致性
 

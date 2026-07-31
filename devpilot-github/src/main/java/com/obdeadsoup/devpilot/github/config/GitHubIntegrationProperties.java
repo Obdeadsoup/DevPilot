@@ -7,13 +7,11 @@ import jakarta.validation.constraints.NotNull;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
-import java.net.URI;
 import java.time.Duration;
 
 @Validated
 @ConfigurationProperties(prefix = "devpilot.github")
 public record GitHubIntegrationProperties(
-        @NotNull URI apiBaseUrl,
         @NotNull Duration connectTimeout,
         @NotNull Duration readTimeout,
         @Min(1) @Max(16) int workerCoreThreads,

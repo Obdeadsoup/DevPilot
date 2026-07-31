@@ -42,7 +42,7 @@ final class WebhookTestFixture {
         jdbcTemplate.update("""
                 INSERT INTO dp_github_repository (
                     id, workspace_id, project_id, github_repository_id, owner_login,
-                    repository_name, full_name, binding_status, credential_ref
+                    repository_name, full_name, binding_status, webhook_secret_ref
                 ) VALUES (?, ?, ?, ?, 'octo-org', 'devpilot', 'octo-org/devpilot', 'ACTIVE', ?)
                 """, REPOSITORY_ID, WORKSPACE_ID, PROJECT_ID, GITHUB_REPOSITORY_ID, SECRET_REFERENCE);
     }

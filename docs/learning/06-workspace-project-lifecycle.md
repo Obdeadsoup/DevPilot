@@ -250,17 +250,17 @@ Project 确实属于 Workspace、未删除且未归档，然后才幂等插入 A
 
 ## 17. 当前尚未实现的内容
 
-本节已经完成 Workspace/Project 生命周期、范围列表、乐观锁、两级 RBAC 和 V5 索引修复，
-但以下能力仍未实现：
+本节完成时已经落地 Workspace/Project 生命周期、范围列表、乐观锁、两级 RBAC 和 V5 索引修复；
+随后第 7 节又实现了 GitHub Repository 绑定生命周期。当前仍未实现：
 
-- GitHub Repository 绑定管理 API 和 GitHub API Client；
 - Issue/PR 同步；
+- 完整 GitHub App JWT / Installation Token、API 分页、条件请求和复杂 Rate Limit 重试；
 - Task、Notification 和 Agent 业务；
 - 审计模块和审计表；
 - Outbox 或消息队列事件投递；
 - 动态角色、权限管理后台和 Redis 权限缓存；
 - Workspace/Project 逻辑删除 API。
 
-现有 GitHub Webhook 接收、数据库恢复扫描、有限重试和 DEAD 状态保持原状。不能因为数据库里
-已经有 `dp_github_repository` 绑定表，就把 Repository 管理接口描述为已经完成；当前绑定仍由
-测试夹具或受控数据库配置准备。
+现有 GitHub Webhook 接收、数据库恢复扫描、有限重试和 DEAD 状态保持原状。Repository Binding
+管理接口现在已经实现，但它使用的是最小 Metadata Client，不能据此声称 Issue/PR 同步或完整
+GitHub App 已经完成。

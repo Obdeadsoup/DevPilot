@@ -113,6 +113,26 @@ class ProjectPermissionMatrixTest {
     }
 
     @Test
+    void repositoryPermissionsFollowProjectRoleBoundaries() {
+        assertThat(ProjectRole.PROJECT_ADMIN.permissions()).contains(
+                ProjectPermission.REPOSITORY_READ,
+                ProjectPermission.REPOSITORY_BIND,
+                ProjectPermission.REPOSITORY_UPDATE,
+                ProjectPermission.REPOSITORY_UNBIND
+        );
+        assertThat(ProjectRole.DEVELOPER.permissions())
+                .contains(ProjectPermission.REPOSITORY_READ, ProjectPermission.REPOSITORY_UPDATE)
+                .doesNotContain(ProjectPermission.REPOSITORY_BIND, ProjectPermission.REPOSITORY_UNBIND);
+        assertThat(ProjectRole.VIEWER.permissions())
+                .contains(ProjectPermission.REPOSITORY_READ)
+                .doesNotContain(
+                        ProjectPermission.REPOSITORY_BIND,
+                        ProjectPermission.REPOSITORY_UPDATE,
+                        ProjectPermission.REPOSITORY_UNBIND
+                );
+    }
+
+    @Test
     void activeProjectMemberUsesAssignedRole() {
         givenProject("ACTIVE", "PRIVATE");
         givenWorkspaceRole(WorkspaceRole.MEMBER);
@@ -140,6 +160,18 @@ class ProjectPermissionMatrixTest {
         )).isFalse();
         assertThat(authorization.hasPermission(
                 USER_ID, WORKSPACE_ID, PROJECT_ID, ProjectPermission.PROJECT_MEMBER_MANAGE
+        )).isFalse();
+        assertThat(authorization.hasPermission(
+                USER_ID, WORKSPACE_ID, PROJECT_ID, ProjectPermission.REPOSITORY_READ
+        )).isTrue();
+        assertThat(authorization.hasPermission(
+                USER_ID, WORKSPACE_ID, PROJECT_ID, ProjectPermission.REPOSITORY_BIND
+        )).isFalse();
+        assertThat(authorization.hasPermission(
+                USER_ID, WORKSPACE_ID, PROJECT_ID, ProjectPermission.REPOSITORY_UPDATE
+        )).isFalse();
+        assertThat(authorization.hasPermission(
+                USER_ID, WORKSPACE_ID, PROJECT_ID, ProjectPermission.REPOSITORY_UNBIND
         )).isFalse();
         assertThat(authorization.hasPermission(
                 USER_ID, WORKSPACE_ID, PROJECT_ID, ProjectPermission.PROJECT_ARCHIVE

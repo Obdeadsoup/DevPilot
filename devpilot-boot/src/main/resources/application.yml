@@ -15,7 +15,6 @@ devpilot:
   identity:
     access-token-ttl: 2h
   github:
-    api-base-url: https://api.github.com
     connect-timeout: 3s
     read-timeout: 10s
     worker-core-threads: 2

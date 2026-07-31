@@ -42,15 +42,17 @@ SHA-256 是不带密钥的摘要算法。当前代码用它计算 `payload_sha25
 HMAC-SHA256 是带 Secret 的消息认证码。只有持有 Secret 的双方才能为指定 Payload 生成正确结果，
 所以它用于来源认证和完整性校验。简单地保存一个 SHA-256 Hash 不能替代 HMAC 验签。
 
-## 5. `credential_ref` 与真实 Secret 分离
+## 5. `webhook_secret_ref` 与真实 Secret 分离
 
-`dp_github_repository` 只保存 `credential_ref`，例如一个受限格式的环境变量名，而不保存明文
+V6 将旧 `credential_ref` 原地重命名为 `webhook_secret_ref`。该列只保存一个受限格式的环境变量名，
+而不保存明文
 Webhook Secret。`EnvironmentWebhookSecretResolver` 只接受匹配
 `DEVPILOT_GITHUB_WEBHOOK_SECRET_[A-Z0-9_]+` 的引用，再从 Spring `Environment` 中解析真实值。
 
 `GitHubWebhookService` 只把解析出的 Secret 传给 Verifier。当前日志不会输出 Secret、Token 或原始
 私有 Payload；Worker 失败日志仅记录内部 Delivery ID 和异常类型。这样数据库泄露不会直接暴露
-Webhook Secret，凭据也可以独立轮换。
+Webhook Secret，凭据也可以独立轮换。新增的 `api_credential_ref` 只供 GitHub REST API 使用，Webhook
+验签不会读取它。
 
 ## 6. Delivery 表是外部事件 Inbox
 

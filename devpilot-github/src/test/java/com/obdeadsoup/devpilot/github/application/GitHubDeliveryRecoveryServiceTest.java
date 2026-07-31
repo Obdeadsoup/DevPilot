@@ -9,7 +9,6 @@ import org.mockito.InOrder;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.core.task.TaskRejectedException;
 
-import java.net.URI;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -102,7 +101,6 @@ class GitHubDeliveryRecoveryServiceTest {
 
     private GitHubIntegrationProperties properties() {
         return new GitHubIntegrationProperties(
-                URI.create("https://api.github.com"),
                 Duration.ofSeconds(3),
                 Duration.ofSeconds(10),
                 2,

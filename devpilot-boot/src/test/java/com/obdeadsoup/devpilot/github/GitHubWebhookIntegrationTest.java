@@ -119,14 +119,14 @@ class GitHubWebhookIntegrationTest {
         assertThatThrownBy(() -> jdbcTemplate.update("""
                 INSERT INTO dp_github_repository (
                     workspace_id, project_id, github_repository_id, owner_login,
-                    repository_name, full_name, binding_status, credential_ref
+                    repository_name, full_name, binding_status, webhook_secret_ref
                 ) VALUES (101, 201, 123456, 'duplicate', 'repo', 'duplicate/repo', 'ACTIVE', ?)
                 """, WebhookTestFixture.SECRET_REFERENCE)).isInstanceOf(RuntimeException.class);
 
         assertThatThrownBy(() -> jdbcTemplate.update("""
                 INSERT INTO dp_github_repository (
                     workspace_id, project_id, github_repository_id, owner_login,
-                    repository_name, full_name, binding_status, credential_ref
+                    repository_name, full_name, binding_status, webhook_secret_ref
                 ) VALUES (101, 200, 999999, 'wrong', 'scope', 'wrong/scope', 'ACTIVE', ?)
                 """, WebhookTestFixture.SECRET_REFERENCE)).isInstanceOf(RuntimeException.class);
     }
