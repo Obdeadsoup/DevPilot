@@ -15,3 +15,7 @@ spring:
       password: ${DEVPILOT_REDIS_PASSWORD}
       connect-timeout: 3s
       timeout: 3s
+
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
