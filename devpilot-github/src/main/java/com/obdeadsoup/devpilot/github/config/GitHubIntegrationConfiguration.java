@@ -12,6 +12,10 @@ import com.obdeadsoup.devpilot.github.application.GitHubDeliveryRetryPolicy;
 
 import java.time.Clock;
 
+/**
+ * GitHub 集成的基础运行时装配，提供 UTC Clock、Delivery 异步线程池和 Delivery Retry Policy。
+ * API Client 的 HTTP 装配由 {@link GitHubRestClientConfiguration} 单独维护。
+ */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(GitHubIntegrationProperties.class)
 @EnableAsync

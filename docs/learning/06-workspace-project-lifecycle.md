@@ -254,7 +254,8 @@ Project 确实属于 Workspace、未删除且未归档，然后才幂等插入 A
 随后第 7 节又实现了 GitHub Repository 绑定生命周期。当前仍未实现：
 
 - Issue/PR 同步；
-- 完整 GitHub App JWT / Installation Token、API 分页、条件请求和复杂 Rate Limit 重试；
+- 完整 GitHub App JWT / Installation Token 和 Issue/PR 分页业务同步（第 8 节已完成底层
+  Link Cursor、条件请求和有限 Rate Limit Retry）；
 - Task、Notification 和 Agent 业务；
 - 审计模块和审计表；
 - Outbox 或消息队列事件投递；

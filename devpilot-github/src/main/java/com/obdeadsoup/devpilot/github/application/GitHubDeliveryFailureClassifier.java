@@ -6,6 +6,10 @@ import org.springframework.stereotype.Component;
 
 import java.util.Set;
 
+/**
+ * 把 Delivery 处理异常归一为可重试性、稳定错误码和安全消息。
+ * 日志及数据库只保存分类结果，不保存原始私有 Payload。
+ */
 @Component
 public class GitHubDeliveryFailureClassifier {
 
@@ -15,6 +19,7 @@ public class GitHubDeliveryFailureClassifier {
             GitHubWebhookErrorCode.DELIVERY_STATE_CONFLICT
     );
 
+    /** 将业务异常分类；Payload、事件类型和状态冲突属于确定性失败，不做 Retry。 */
     public Classification classify(RuntimeException exception) {
         if (exception instanceof BusinessException businessException
                 && businessException.errorCode() instanceof GitHubWebhookErrorCode errorCode

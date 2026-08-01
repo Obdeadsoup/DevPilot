@@ -12,6 +12,9 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
+/**
+ * Delivery 状态机的事务边界，使用 version + 条件 UPDATE 完成抢占、Retry、DEAD 与超时恢复。
+ */
 @Service
 public class GitHubDeliveryStateService {
 
@@ -29,6 +32,7 @@ public class GitHubDeliveryStateService {
         this.clock = clock;
     }
 
+    /** RECEIVED/到期 RETRY_WAIT 抢占为 PROCESSING；并发失败返回空。 */
     @Transactional
     public Optional<GitHubDeliveryEntity> claim(long deliveryId) {
         Optional<GitHubDeliveryEntity> candidate = deliveryMapper.findById(deliveryId);
@@ -44,6 +48,10 @@ public class GitHubDeliveryStateService {
         return deliveryMapper.findById(deliveryId);
     }
 
+    /**
+     * 在独立事务中记录处理失败，按分类与次数进入 RETRY_WAIT 或 DEAD。
+     * 独立事务避免成功处理事务回滚时一并丢失失败状态。
+     */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Optional<GitHubDeliveryStatus> handleFailure(
             GitHubDeliveryEntity delivery,
@@ -76,6 +84,7 @@ public class GitHubDeliveryStateService {
         return updated == 1 ? Optional.of(result) : Optional.empty();
     }
 
+    /** 将超时 PROCESSING 以 version 和 startedAt 截止条件恢复为 RETRY_WAIT 或 DEAD。 */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Optional<GitHubDeliveryStatus> recoverStaleProcessing(
             GitHubDeliveryEntity delivery,

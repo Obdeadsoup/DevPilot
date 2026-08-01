@@ -1,6 +1,7 @@
 package com.obdeadsoup.devpilot.github.application;
 
 import com.obdeadsoup.devpilot.github.config.GitHubIntegrationProperties;
+import com.obdeadsoup.devpilot.github.support.GitHubTestProperties;
 import com.obdeadsoup.devpilot.github.domain.GitHubDeliveryStatus;
 import com.obdeadsoup.devpilot.github.persistence.entity.GitHubDeliveryEntity;
 import com.obdeadsoup.devpilot.github.persistence.mapper.GitHubDeliveryMapper;
@@ -100,21 +101,7 @@ class GitHubDeliveryRecoveryServiceTest {
     }
 
     private GitHubIntegrationProperties properties() {
-        return new GitHubIntegrationProperties(
-                Duration.ofSeconds(3),
-                Duration.ofSeconds(10),
-                2,
-                4,
-                200,
-                2_097_152,
-                3,
-                Duration.ofSeconds(10),
-                Duration.ofMinutes(5),
-                Duration.ofSeconds(10),
-                50,
-                Duration.ofMinutes(2),
-                false
-        );
+        return GitHubTestProperties.defaults();
     }
 
     private GitHubDeliveryEntity delivery(long id, String status, int retryCount, long version) {

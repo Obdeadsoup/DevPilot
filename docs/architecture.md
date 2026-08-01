@@ -80,13 +80,26 @@ RECEIVED → PROCESSING → SUCCEEDED
 
 ## GitHub API Client
 
-当前 Repository Metadata Client 使用固定 `https://api.github.com`、编码后的 owner/repository Path
-Segment、Bearer API Credential、API Version、User-Agent 和连接/读取超时读取单仓库元数据。绑定只信任
-GitHub 返回的稳定 repository id 与展示元数据，不信任客户端提交权威字段。
+```text
+Binding Service
+→ Repository Metadata Client（Endpoint 与响应映射）
+→ GitHubApiHttpExecutor（统一 HTTP 语义）
+→ AccessTokenProvider + Credential Semaphore + RestClient
+→ GitHub API
+```
 
-API Credential 与 Webhook Secret 分别由独立白名单 Reference 解析器提供。前者只供 REST API，后者只供
-原始 Payload HMAC 验签，数据库和响应均不保存/返回原始值。当前只对 401/403/404/429/5xx 和超时做安全
-错误映射，尚未实现 Retry-After、X-RateLimit-*、分页、条件请求和复杂重试。
+生产 Endpoint 固定为 `https://api.github.com`，测试 Profile 只允许配置 loopback Mock Host。Executor
+动态添加 Bearer Token，统一连接/读取 Timeout、同源重定向、错误分类、安全日志和 Micrometer 指标。
+只有 GET/HEAD 的网络错误、临时 5xx 和有证据的 Rate Limit 可有限 Retry；等待超过同步上限时返回带
+`retryAt` 的错误，不阻塞 Web 线程。Link Header 必须经同源校验后才能形成下一页 Cursor。
+
+API Credential 与 Webhook Secret 分别由独立白名单 Reference Provider/Resolver 提供。前者只供 REST
+API，后者只供原始 Payload HMAC 验签，数据库和响应均不保存/返回原始值。每 Credential Semaphore 的
+Key 是 Reference SHA-256，只限制单 JVM，不同 Credential 不共享全局锁。
+
+Repository Metadata 刷新使用 Conditional GET。200 校验稳定 Repository ID 后更新权威字段、ETag、
+Last-Modified、验证时间和 version；304 不进入 Error Decoder，不覆盖元数据，只更新验证时间并 version+1。
+Issue/PR 业务分页、GitHub App Token 和后台 API 同步状态机尚未实现。
 
 ## Repository Binding 生命周期
 

@@ -6,6 +6,10 @@ import org.springframework.stereotype.Component;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
+/**
+ * 通过受限 {@code credential_ref} 从环境变量解析 Webhook Secret。
+ * 数据库只保存引用；解析结果只短暂用于 HMAC 验签，禁止进入日志或响应。
+ */
 @Component
 public class EnvironmentWebhookSecretResolver implements WebhookSecretResolver {
 

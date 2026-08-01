@@ -12,4 +12,5 @@ management:
 
 devpilot:
   github:
+    base-url: http://127.0.0.1:1
     delivery-recovery-enabled: false

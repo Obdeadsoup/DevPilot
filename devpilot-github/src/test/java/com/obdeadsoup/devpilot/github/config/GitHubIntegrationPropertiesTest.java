@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 import java.time.Duration;
+import java.net.URI;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -12,8 +13,17 @@ class GitHubIntegrationPropertiesTest {
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withUserConfiguration(GitHubIntegrationConfiguration.class)
             .withPropertyValues(
-                    "devpilot.github.connect-timeout=3s",
-                    "devpilot.github.read-timeout=10s",
+                    "devpilot.github.base-url=https://api.github.com",
+                    "devpilot.github.api-version=2022-11-28",
+                    "devpilot.github.connect-timeout=2s",
+                    "devpilot.github.read-timeout=5s",
+                    "devpilot.github.max-read-attempts=3",
+                    "devpilot.github.initial-backoff=200ms",
+                    "devpilot.github.max-backoff=2s",
+                    "devpilot.github.max-synchronous-rate-limit-wait=3s",
+                    "devpilot.github.max-concurrent-requests-per-credential=2",
+                    "devpilot.github.concurrency-acquire-timeout=200ms",
+                    "devpilot.github.user-agent=DevPilot",
                     "devpilot.github.worker-core-threads=2",
                     "devpilot.github.worker-max-threads=4",
                     "devpilot.github.worker-queue-capacity=200",
@@ -34,8 +44,16 @@ class GitHubIntegrationPropertiesTest {
             assertThat(context).hasSingleBean(GitHubIntegrationProperties.class);
 
             GitHubIntegrationProperties properties = context.getBean(GitHubIntegrationProperties.class);
-            assertThat(properties.connectTimeout()).isEqualTo(Duration.ofSeconds(3));
-            assertThat(properties.readTimeout()).isEqualTo(Duration.ofSeconds(10));
+            assertThat(properties.baseUrl()).isEqualTo(URI.create("https://api.github.com"));
+            assertThat(properties.apiVersion()).isEqualTo("2022-11-28");
+            assertThat(properties.connectTimeout()).isEqualTo(Duration.ofSeconds(2));
+            assertThat(properties.readTimeout()).isEqualTo(Duration.ofSeconds(5));
+            assertThat(properties.maxReadAttempts()).isEqualTo(3);
+            assertThat(properties.initialBackoff()).isEqualTo(Duration.ofMillis(200));
+            assertThat(properties.maxBackoff()).isEqualTo(Duration.ofSeconds(2));
+            assertThat(properties.maxSynchronousRateLimitWait()).isEqualTo(Duration.ofSeconds(3));
+            assertThat(properties.maxConcurrentRequestsPerCredential()).isEqualTo(2);
+            assertThat(properties.userAgent()).isEqualTo("DevPilot");
             assertThat(properties.workerCoreThreads()).isEqualTo(2);
             assertThat(properties.workerMaxThreads()).isEqualTo(4);
             assertThat(properties.webhookMaxPayloadBytes()).isEqualTo(2_097_152);
@@ -68,6 +86,34 @@ class GitHubIntegrationPropertiesTest {
                     assertThat(context).hasFailed();
                     assertThat(context.getStartupFailure())
                             .hasStackTraceContaining("worker max threads must be greater than or equal to core threads");
+                });
+    }
+
+    @Test
+    void rejectsUnsafeBaseUrlAndInvalidApiRetryBounds() {
+        contextRunner
+                .withPropertyValues("devpilot.github.base-url=https://evil.example")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .hasStackTraceContaining("base URL must be the public GitHub API");
+                });
+        contextRunner
+                .withPropertyValues("devpilot.github.max-read-attempts=6")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .hasStackTraceContaining("maxReadAttempts")
+                            .hasStackTraceContaining("5");
+                });
+        contextRunner
+                .withPropertyValues("devpilot.github.max-backoff=100ms")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .hasStackTraceContaining(
+                                    "max API backoff must be greater than or equal to initial backoff"
+                            );
                 });
     }
 

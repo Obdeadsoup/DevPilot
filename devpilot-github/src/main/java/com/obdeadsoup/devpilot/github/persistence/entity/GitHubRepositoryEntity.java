@@ -18,6 +18,8 @@ public record GitHubRepositoryEntity(
         String apiCredentialRef,
         LocalDateTime lastSyncedAt,
         LocalDateTime lastVerifiedAt,
+        String metadataEtag,
+        LocalDateTime metadataLastModified,
         Long createdBy,
         LocalDateTime createdAt,
         LocalDateTime updatedAt,

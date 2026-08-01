@@ -2,9 +2,12 @@ package com.obdeadsoup.devpilot.github.application;
 
 import com.obdeadsoup.devpilot.framework.error.BusinessException;
 import com.obdeadsoup.devpilot.github.api.dto.GitHubRepositoryResponse;
+import com.obdeadsoup.devpilot.github.application.client.GitHubApiResponse;
+import com.obdeadsoup.devpilot.github.application.client.GitHubConditionalRequest;
+import com.obdeadsoup.devpilot.github.application.client.GitHubPageCursor;
+import com.obdeadsoup.devpilot.github.application.client.GitHubRateLimitSnapshot;
 import com.obdeadsoup.devpilot.github.application.client.GitHubRepositoryMetadataClient;
 import com.obdeadsoup.devpilot.github.application.client.VerifiedGitHubRepository;
-import com.obdeadsoup.devpilot.github.application.credential.GitHubApiCredentialResolver;
 import com.obdeadsoup.devpilot.github.application.secret.WebhookSecretResolver;
 import com.obdeadsoup.devpilot.github.error.GitHubRepositoryErrorCode;
 import com.obdeadsoup.devpilot.github.persistence.entity.GitHubRepositoryEntity;
@@ -16,6 +19,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -41,7 +45,6 @@ class GitHubRepositoryBindingServiceTest {
     private CurrentUserProvider currentUserProvider;
     private ProjectAuthorizationService authorizationService;
     private GitHubRepositoryMapper repositoryMapper;
-    private GitHubApiCredentialResolver apiCredentialResolver;
     private WebhookSecretResolver webhookSecretResolver;
     private GitHubRepositoryMetadataClient metadataClient;
     private GitHubRepositoryBindingService service;
@@ -51,7 +54,6 @@ class GitHubRepositoryBindingServiceTest {
         currentUserProvider = mock(CurrentUserProvider.class);
         authorizationService = mock(ProjectAuthorizationService.class);
         repositoryMapper = mock(GitHubRepositoryMapper.class);
-        apiCredentialResolver = mock(GitHubApiCredentialResolver.class);
         webhookSecretResolver = mock(WebhookSecretResolver.class);
         metadataClient = mock(GitHubRepositoryMetadataClient.class);
         when(currentUserProvider.requireUserId()).thenReturn(USER_ID);
@@ -59,7 +61,6 @@ class GitHubRepositoryBindingServiceTest {
                 currentUserProvider,
                 authorizationService,
                 repositoryMapper,
-                apiCredentialResolver,
                 webhookSecretResolver,
                 metadataClient,
                 Clock.fixed(Instant.parse("2026-07-31T12:00:00Z"), ZoneOffset.UTC)
@@ -72,10 +73,10 @@ class GitHubRepositoryBindingServiceTest {
         GitHubRepositoryEntity stored = binding(
                 "ACTIVE", 0, verified.githubRepositoryId(), verified.ownerLogin(), verified.repositoryName()
         );
-        when(apiCredentialResolver.resolve(API_REFERENCE)).thenReturn(Optional.of("api-token"));
         when(webhookSecretResolver.resolve(WEBHOOK_REFERENCE)).thenReturn(Optional.of("webhook-secret"));
-        when(metadataClient.getRepository("client-owner", "client-repo", "api-token"))
-                .thenReturn(verified);
+        when(metadataClient.getRepository(
+                "client-owner", "client-repo", API_REFERENCE, GitHubConditionalRequest.none()
+        )).thenReturn(response(verified, false, "\"etag-v1\""));
         when(repositoryMapper.findByGitHubRepositoryId(verified.githubRepositoryId()))
                 .thenReturn(Optional.empty())
                 .thenReturn(Optional.of(stored));
@@ -94,6 +95,8 @@ class GitHubRepositoryBindingServiceTest {
                 WEBHOOK_REFERENCE,
                 API_REFERENCE,
                 NOW,
+                "\"etag-v1\"",
+                NOW.minusDays(1),
                 USER_ID
         )).thenReturn(1);
 
@@ -129,9 +132,8 @@ class GitHubRepositoryBindingServiceTest {
                 assertThat(exception.errorCode())
                         .isEqualTo(GitHubRepositoryErrorCode.INVALID_REPOSITORY_REFERENCE));
 
-        verify(apiCredentialResolver, never()).resolve(API_REFERENCE);
         verify(metadataClient, never()).getRepository(
-                "https://evil.example", "demo", "api-token"
+                "https://evil.example", "demo", API_REFERENCE, GitHubConditionalRequest.none()
         );
     }
 
@@ -140,9 +142,11 @@ class GitHubRepositoryBindingServiceTest {
         GitHubRepositoryEntity binding = binding("ACTIVE", 3, 123456L, "octo", "demo");
         when(repositoryMapper.findByScope(WORKSPACE_ID, PROJECT_ID, BINDING_ID))
                 .thenReturn(Optional.of(binding));
-        when(apiCredentialResolver.resolve(API_REFERENCE)).thenReturn(Optional.of("api-token"));
-        when(metadataClient.getRepository("octo", "demo", "api-token"))
-                .thenReturn(verified(999999L, "renamed", "repository"));
+        GitHubConditionalRequest conditional = new GitHubConditionalRequest(
+                "\"etag-v1\"", NOW.minusDays(1).toInstant(ZoneOffset.UTC)
+        );
+        when(metadataClient.getRepository("octo", "demo", API_REFERENCE, conditional))
+                .thenReturn(response(verified(999999L, "renamed", "repository"), false, "\"etag-v2\""));
 
         assertThatThrownBy(() -> service.refreshRepositoryMetadata(
                 WORKSPACE_ID, PROJECT_ID, BINDING_ID, 3
@@ -161,7 +165,9 @@ class GitHubRepositoryBindingServiceTest {
                 "https://github.com/renamed/repository",
                 "main",
                 "private",
-                NOW
+                NOW,
+                "\"etag-v2\"",
+                NOW.minusDays(1)
         );
     }
 
@@ -187,7 +193,6 @@ class GitHubRepositoryBindingServiceTest {
     void reactivateRequiresBothCredentialTypes() {
         when(repositoryMapper.findByScope(WORKSPACE_ID, PROJECT_ID, BINDING_ID))
                 .thenReturn(Optional.of(binding("DISABLED", 2, 123456L, "octo", "demo")));
-        when(apiCredentialResolver.resolve(API_REFERENCE)).thenReturn(Optional.of("api-token"));
         when(webhookSecretResolver.resolve(WEBHOOK_REFERENCE)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.reactivateRepository(
@@ -195,7 +200,44 @@ class GitHubRepositoryBindingServiceTest {
         )).isInstanceOfSatisfying(BusinessException.class, exception ->
                 assertThat(exception.errorCode())
                         .isEqualTo(GitHubRepositoryErrorCode.WEBHOOK_SECRET_UNAVAILABLE));
-        verify(metadataClient, never()).getRepository("octo", "demo", "api-token");
+        verify(metadataClient, never()).getRepository(
+                "octo", "demo", API_REFERENCE, GitHubConditionalRequest.none()
+        );
+    }
+
+    @Test
+    void notModifiedRefreshOnlyAdvancesVerificationAndVersion() {
+        GitHubRepositoryEntity binding = binding("ACTIVE", 3, 123456L, "octo", "demo");
+        GitHubConditionalRequest conditional = new GitHubConditionalRequest(
+                "\"etag-v1\"", NOW.minusDays(1).toInstant(ZoneOffset.UTC)
+        );
+        GitHubRepositoryEntity refreshed = new GitHubRepositoryEntity(
+                binding.id(), binding.workspaceId(), binding.projectId(), binding.githubRepositoryId(),
+                binding.ownerLogin(), binding.repositoryName(), binding.fullName(), binding.htmlUrl(),
+                binding.defaultBranch(), binding.visibility(), binding.bindingStatus(),
+                binding.webhookSecretRef(), binding.apiCredentialRef(), binding.lastSyncedAt(), NOW,
+                binding.metadataEtag(), binding.metadataLastModified(), binding.createdBy(), binding.createdAt(),
+                NOW, 4
+        );
+        when(repositoryMapper.findByScope(WORKSPACE_ID, PROJECT_ID, BINDING_ID))
+                .thenReturn(Optional.of(binding), Optional.of(refreshed));
+        when(metadataClient.getRepository("octo", "demo", API_REFERENCE, conditional))
+                .thenReturn(response(null, true, "\"etag-v1\""));
+        when(repositoryMapper.markMetadataNotModified(
+                WORKSPACE_ID, PROJECT_ID, BINDING_ID, 3, NOW
+        )).thenReturn(1);
+
+        GitHubRepositoryResponse result = service.refreshRepositoryMetadata(
+                WORKSPACE_ID, PROJECT_ID, BINDING_ID, 3
+        );
+
+        assertThat(result.version()).isEqualTo(4);
+        assertThat(result.fullName()).isEqualTo("octo/demo");
+        verify(repositoryMapper, never()).refreshMetadata(
+                WORKSPACE_ID, PROJECT_ID, BINDING_ID, 3,
+                "octo", "demo", "octo/demo", "https://github.com/octo/demo",
+                "main", "private", NOW, "\"etag-v1\"", NOW.minusDays(1)
+        );
     }
 
     private GitHubRepositoryEntity binding(
@@ -221,6 +263,8 @@ class GitHubRepositoryBindingServiceTest {
                 API_REFERENCE,
                 null,
                 NOW,
+                "\"etag-v1\"",
+                NOW.minusDays(1),
                 USER_ID,
                 NOW,
                 NOW,
@@ -237,6 +281,26 @@ class GitHubRepositoryBindingServiceTest {
                 "https://github.com/" + owner + "/" + repositoryName,
                 "main",
                 "private"
+        );
+    }
+
+    private GitHubApiResponse<VerifiedGitHubRepository> response(
+            VerifiedGitHubRepository repository,
+            boolean notModified,
+            String etag
+    ) {
+        Instant lastModified = NOW.minusDays(1).toInstant(ZoneOffset.UTC);
+        return new GitHubApiResponse<>(
+                notModified ? 304 : 200,
+                repository,
+                notModified,
+                etag,
+                lastModified,
+                new GitHubRateLimitSnapshot(
+                        5_000L, 4_999L, 1L, NOW.plusHours(1).toInstant(ZoneOffset.UTC),
+                        "core", Duration.ofSeconds(1), "request-id"
+                ),
+                GitHubPageCursor.empty()
         );
     }
 }

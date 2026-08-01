@@ -16,6 +16,10 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
+/**
+ * Webhook Delivery 的崩溃恢复 Application Service。
+ * 先回收超时 PROCESSING，再提交 RECEIVED 与到期 RETRY_WAIT；条件 UPDATE 负责并发仲裁。
+ */
 @Service
 public class GitHubDeliveryRecoveryService {
 
@@ -44,6 +48,10 @@ public class GitHubDeliveryRecoveryService {
         this.clock = clock;
     }
 
+    /**
+     * 扫描一个受配置限制的恢复批次并异步提交；重复 Scheduler/实例可能读到相同候选，
+     * Worker 的 version 条件抢占保证只有一个处理者成功。
+     */
     public void recover() {
         LocalDateTime now = LocalDateTime.now(clock);
         int batchSize = properties.deliveryRecoveryBatchSize();

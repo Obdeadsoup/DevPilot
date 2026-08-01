@@ -24,6 +24,10 @@ import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.Set;
 
+/**
+ * GitHub Webhook 接收 Application Service。
+ * 在同一事务中基于原始字节验签并持久化 Inbox Delivery，提交后再触发异步处理。
+ */
 @Service
 public class GitHubWebhookService {
 
@@ -58,6 +62,10 @@ public class GitHubWebhookService {
         this.clock = clock;
     }
 
+    /**
+     * 校验 Header、Binding、HMAC 和 Payload 大小后持久化 Delivery。
+     * 相同 Delivery ID 只有 Repository、Event 与 Payload SHA-256 全部一致才作为正常重复返回。
+     */
     @Transactional
     public GitHubWebhookReceiptResponse receive(
             byte[] rawBody,

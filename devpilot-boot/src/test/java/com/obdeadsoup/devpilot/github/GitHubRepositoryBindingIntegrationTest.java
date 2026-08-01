@@ -4,9 +4,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.obdeadsoup.devpilot.framework.error.BusinessException;
 import com.obdeadsoup.devpilot.github.api.dto.GitHubRepositoryResponse;
 import com.obdeadsoup.devpilot.github.application.GitHubRepositoryBindingService;
+import com.obdeadsoup.devpilot.github.application.client.GitHubApiResponse;
+import com.obdeadsoup.devpilot.github.application.client.GitHubConditionalRequest;
+import com.obdeadsoup.devpilot.github.application.client.GitHubPageCursor;
+import com.obdeadsoup.devpilot.github.application.client.GitHubRateLimitSnapshot;
 import com.obdeadsoup.devpilot.github.application.client.GitHubRepositoryMetadataClient;
 import com.obdeadsoup.devpilot.github.application.client.VerifiedGitHubRepository;
-import com.obdeadsoup.devpilot.github.application.credential.GitHubApiCredentialResolver;
 import com.obdeadsoup.devpilot.github.application.secret.WebhookSecretResolver;
 import com.obdeadsoup.devpilot.github.error.GitHubRepositoryErrorCode;
 import com.obdeadsoup.devpilot.identity.domain.DevPilotUserPrincipal;
@@ -35,6 +38,7 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +52,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
@@ -75,7 +80,6 @@ class GitHubRepositoryBindingIntegrationTest {
     private static final long GITHUB_REPOSITORY_ID = 123_456L;
     private static final String API_REFERENCE = "DEVPILOT_GITHUB_API_TOKEN_TEST";
     private static final String WEBHOOK_REFERENCE = "DEVPILOT_GITHUB_WEBHOOK_SECRET_TEST";
-    private static final String API_TOKEN = "integration-api-token";
     private static final String WEBHOOK_SECRET = "integration-webhook-secret";
 
     @Container
@@ -107,16 +111,13 @@ class GitHubRepositoryBindingIntegrationTest {
     private GitHubRepositoryMetadataClient metadataClient;
 
     @MockitoBean
-    private GitHubApiCredentialResolver apiCredentialResolver;
-
-    @MockitoBean
     private WebhookSecretResolver webhookSecretResolver;
 
     @BeforeEach
     void setUp() {
         SecurityContextHolder.clearContext();
         clearData();
-        reset(metadataClient, apiCredentialResolver, webhookSecretResolver);
+        reset(metadataClient, webhookSecretResolver);
         insertUser(OWNER_ID, "owner");
         insertUser(MEMBER_ID, "member");
         insertUser(OTHER_OWNER_ID, "other-owner");
@@ -126,11 +127,13 @@ class GitHubRepositoryBindingIntegrationTest {
         insertProject(PROJECT_ID, WORKSPACE_ID, "MAIN", OWNER_ID);
         insertProject(SECOND_PROJECT_ID, WORKSPACE_ID, "SECOND", OWNER_ID);
         insertProject(OTHER_PROJECT_ID, OTHER_WORKSPACE_ID, "OTHER", OTHER_OWNER_ID);
-        when(apiCredentialResolver.resolve(API_REFERENCE)).thenReturn(Optional.of(API_TOKEN));
         when(webhookSecretResolver.resolve(WEBHOOK_REFERENCE))
                 .thenReturn(Optional.of(WEBHOOK_SECRET));
-        when(metadataClient.getRepository(anyString(), anyString(), eq(API_TOKEN)))
-                .thenReturn(repository(GITHUB_REPOSITORY_ID, "trusted-org", "trusted-repo"));
+        when(metadataClient.getRepository(
+                anyString(), anyString(), eq(API_REFERENCE), any(GitHubConditionalRequest.class)
+        )).thenReturn(apiResponse(repository(
+                GITHUB_REPOSITORY_ID, "trusted-org", "trusted-repo"
+        ), false, "\"etag-v1\""));
     }
 
     @AfterEach
@@ -139,10 +142,10 @@ class GitHubRepositoryBindingIntegrationTest {
     }
 
     @Test
-    void flywayV6SplitsCredentialsAndAddsActiveBindingUniqueIndexes() {
+    void flywayV7AddsConditionalMetadataValidatorsWithoutChangingV6Indexes() {
         Integer applied = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*) FROM flyway_schema_history
-                WHERE version = '6' AND success = 1
+                WHERE version IN ('6', '7') AND success = 1
                 """, Integer.class);
         Integer columns = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*) FROM information_schema.columns
@@ -172,8 +175,16 @@ class GitHubRepositoryBindingIntegrationTest {
                   )
                 """, Integer.class);
 
-        assertThat(applied).isEqualTo(1);
+        Integer validators = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = DATABASE()
+                  AND table_name = 'dp_github_repository'
+                  AND column_name IN ('metadata_etag', 'metadata_last_modified')
+                """, Integer.class);
+
+        assertThat(applied).isEqualTo(2);
         assertThat(columns).isEqualTo(6);
+        assertThat(validators).isEqualTo(2);
         assertThat(activeIndexes).isEqualTo(2);
         assertThat(removedIndexes).isZero();
     }
@@ -200,10 +211,12 @@ class GitHubRepositoryBindingIntegrationTest {
                 .andReturn();
 
         assertThat(result.getResponse().getContentAsString())
-                .doesNotContain(API_REFERENCE, WEBHOOK_REFERENCE, API_TOKEN, WEBHOOK_SECRET);
+                .doesNotContain(API_REFERENCE, WEBHOOK_REFERENCE, WEBHOOK_SECRET, "etag-v1");
         assertThat(repositoryOwner(GITHUB_REPOSITORY_ID)).isEqualTo("trusted-org");
         assertThat(repositoryCreatedBy(GITHUB_REPOSITORY_ID)).isEqualTo(OWNER_ID);
-        verify(metadataClient).getRepository("client-owner", "client-repository", API_TOKEN);
+        verify(metadataClient).getRepository(
+                "client-owner", "client-repository", API_REFERENCE, GitHubConditionalRequest.none()
+        );
 
         long bindingId = objectMapper.readTree(result.getResponse().getContentAsByteArray())
                 .path("data").path("id").asLong();
@@ -287,8 +300,14 @@ class GitHubRepositoryBindingIntegrationTest {
     void refreshSupportsRenameButRejectsRepositoryIdentityChange() {
         authenticate(OWNER_ID, "owner");
         GitHubRepositoryResponse binding = bind(PROJECT_ID);
-        when(metadataClient.getRepository("trusted-org", "trusted-repo", API_TOKEN))
-                .thenReturn(repository(GITHUB_REPOSITORY_ID, "renamed-org", "renamed-repo"));
+        when(metadataClient.getRepository(
+                eq("trusted-org"), eq("trusted-repo"), eq(API_REFERENCE),
+                any(GitHubConditionalRequest.class)
+        )).thenReturn(apiResponse(
+                repository(GITHUB_REPOSITORY_ID, "renamed-org", "renamed-repo"),
+                false,
+                "\"etag-v2\""
+        ));
 
         GitHubRepositoryResponse refreshed = bindingService.refreshRepositoryMetadata(
                 WORKSPACE_ID, PROJECT_ID, binding.id(), binding.version()
@@ -297,11 +316,27 @@ class GitHubRepositoryBindingIntegrationTest {
         assertThat(refreshed.githubRepositoryId()).isEqualTo(GITHUB_REPOSITORY_ID);
         assertThat(refreshed.fullName()).isEqualTo("renamed-org/renamed-repo");
         assertThat(refreshed.version()).isEqualTo(1);
+        assertThat(repositoryEtag(binding.id())).isEqualTo("\"etag-v2\"");
 
-        when(metadataClient.getRepository("renamed-org", "renamed-repo", API_TOKEN))
-                .thenReturn(repository(999_999L, "different", "identity"));
-        assertThatThrownBy(() -> bindingService.refreshRepositoryMetadata(
+        when(metadataClient.getRepository(
+                eq("renamed-org"), eq("renamed-repo"), eq(API_REFERENCE),
+                any(GitHubConditionalRequest.class)
+        )).thenReturn(apiResponse(null, true, "\"etag-v2\""));
+        GitHubRepositoryResponse notModified = bindingService.refreshRepositoryMetadata(
                 WORKSPACE_ID, PROJECT_ID, binding.id(), refreshed.version()
+        );
+        assertThat(notModified.fullName()).isEqualTo("renamed-org/renamed-repo");
+        assertThat(notModified.version()).isEqualTo(2);
+        assertThat(repositoryEtag(binding.id())).isEqualTo("\"etag-v2\"");
+
+        when(metadataClient.getRepository(
+                eq("renamed-org"), eq("renamed-repo"), eq(API_REFERENCE),
+                any(GitHubConditionalRequest.class)
+        )).thenReturn(apiResponse(
+                repository(999_999L, "different", "identity"), false, "\"etag-v3\""
+        ));
+        assertThatThrownBy(() -> bindingService.refreshRepositoryMetadata(
+                WORKSPACE_ID, PROJECT_ID, binding.id(), notModified.version()
         )).isInstanceOfSatisfying(BusinessException.class, exception ->
                 assertThat(exception.errorCode())
                         .isEqualTo(GitHubRepositoryErrorCode.GITHUB_REPOSITORY_ID_MISMATCH));
@@ -415,6 +450,25 @@ class GitHubRepositoryBindingIntegrationTest {
         );
     }
 
+    private GitHubApiResponse<VerifiedGitHubRepository> apiResponse(
+            VerifiedGitHubRepository repository,
+            boolean notModified,
+            String etag
+    ) {
+        return new GitHubApiResponse<>(
+                notModified ? 304 : 200,
+                repository,
+                notModified,
+                etag,
+                Instant.parse("2026-07-31T10:00:00Z"),
+                new GitHubRateLimitSnapshot(
+                        5_000L, 4_999L, 1L, Instant.parse("2026-07-31T11:00:00Z"),
+                        "core", null, "integration-request-id"
+                ),
+                GitHubPageCursor.empty()
+        );
+    }
+
     private void clearData() {
         jdbcTemplate.update("DELETE FROM dp_project_activity");
         jdbcTemplate.update("DELETE FROM dp_github_delivery");
@@ -520,6 +574,14 @@ class GitHubRepositoryBindingIntegrationTest {
     private String repositoryFullName(long bindingId) {
         return jdbcTemplate.queryForObject(
                 "SELECT full_name FROM dp_github_repository WHERE id = ?",
+                String.class,
+                bindingId
+        );
+    }
+
+    private String repositoryEtag(long bindingId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT metadata_etag FROM dp_github_repository WHERE id = ?",
                 String.class,
                 bindingId
         );

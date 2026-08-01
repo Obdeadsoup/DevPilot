@@ -12,6 +12,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.LocalDateTime;
 
+/**
+ * Delivery 成功处理事务：解析已入库 Payload、写 Project Activity，并原子标记 SUCCEEDED。
+ */
 @Service
 public class GitHubDeliveryProcessingService {
 
@@ -32,6 +35,10 @@ public class GitHubDeliveryProcessingService {
         this.clock = clock;
     }
 
+    /**
+     * 处理已被 Worker 抢占的 Delivery；Activity 唯一索引提供第二层业务幂等，
+     * version 条件确保只有当前抢占版本能提交成功状态。
+     */
     @Transactional
     public void process(GitHubDeliveryEntity delivery) {
         activityService.recordGitHubActivity(payloadParser.parse(delivery));

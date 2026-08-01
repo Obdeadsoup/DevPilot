@@ -89,6 +89,8 @@ devpilot-github
 - [作用域 RBAC 学习笔记](docs/learning/05-scoped-rbac.md)
 - [Workspace / Project 生命周期学习笔记](docs/learning/06-workspace-project-lifecycle.md)
 - [GitHub Repository 绑定学习笔记](docs/learning/07-github-repository-binding.md)
+- [GitHub REST API Client 工程化学习笔记](docs/learning/08-github-api-client-engineering.md)
+- [第 8 节变更文件地图](docs/changes/08-github-api-client-file-map.md)
 - [Codex 分阶段指令](codex-prompts/all-prompts.md)
 
 ## 开发方式
@@ -214,6 +216,13 @@ POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/github-repositories/{
 客户端不能直接指定这些权威字段。`api_credential_ref` 只引用 GitHub API Token，
 `webhook_secret_ref` 只引用 HMAC Secret；响应不返回任何 Reference 或原始凭据。
 
+GitHub REST 读取统一经过 `GitHubApiHttpExecutor`：生产 Host 固定，显式配置连接/读取超时，动态添加
+Bearer Token，分类 HTTP/网络错误，只对 GET/HEAD 做有限 Retry，并解析 Rate Limit、Request ID 与
+安全 Link 分页。Metadata 刷新使用 V7 保存的 ETag/Last-Modified：200 更新权威字段，304 只推进
+`last_verified_at` 和乐观锁版本。每个 Credential 在单实例内默认最多两个并发请求；日志与指标不包含
+Token、Secret、Repository fullName 或凭据引用。详见
+`docs/learning/08-github-api-client-engineering.md` 和 `docs/changes/08-github-api-client-file-map.md`。
+
 本地验证：
 
 ```powershell
@@ -263,8 +272,9 @@ Project 列表的数据范围直接在 SQL 中完成：Workspace OWNER/ADMIN 可
 ACTIVE Workspace Member 可见 INTERNAL 项目，PRIVATE 项目还要求 ACTIVE Project
 Membership。所有单项目查询都同时携带 `workspaceId + projectId`。
 
-本阶段已开放 GitHub Repository 绑定生命周期，但仍未实现完整 GitHub App JWT / Installation
-Token、Issue/PR 同步、复杂 Rate Limit 重试、Audit、Outbox、Task、Notification 或 Agent 业务能力。
+本阶段已开放 GitHub Repository 绑定生命周期和工程化读取 Client，但仍未实现 GitHub App JWT /
+Installation Token、Issue/PR 同步、后台 API 同步状态机、跨实例 Credential 并发协调、Audit、Outbox、
+Task、Notification 或 Agent 业务能力。
 
 停止应用后关闭容器：
 

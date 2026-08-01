@@ -32,6 +32,8 @@ class GitHubRepositoryApiContractTest {
                 "DEVPILOT_GITHUB_API_TOKEN_PRIVATE",
                 null,
                 LocalDateTime.of(2026, 7, 31, 10, 0),
+                "\"private-etag\"",
+                LocalDateTime.of(2026, 7, 31, 9, 30),
                 42L,
                 LocalDateTime.of(2026, 7, 31, 9, 0),
                 LocalDateTime.of(2026, 7, 31, 10, 0),
@@ -47,7 +49,8 @@ class GitHubRepositoryApiContractTest {
                 .contains("\"hasApiCredential\":true", "\"hasWebhookSecret\":true")
                 .doesNotContain(
                         "DEVPILOT_GITHUB_API_TOKEN_PRIVATE",
-                        "DEVPILOT_GITHUB_WEBHOOK_SECRET_PRIVATE"
+                        "DEVPILOT_GITHUB_WEBHOOK_SECRET_PRIVATE",
+                        "private-etag"
                 );
     }
 

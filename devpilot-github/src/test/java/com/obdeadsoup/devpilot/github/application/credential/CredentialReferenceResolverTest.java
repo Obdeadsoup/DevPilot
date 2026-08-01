@@ -14,14 +14,19 @@ class CredentialReferenceResolverTest {
                 .withProperty("DEVPILOT_GITHUB_API_TOKEN_TEST", "api-token")
                 .withProperty("DEVPILOT_GITHUB_WEBHOOK_SECRET_TEST", "webhook-secret")
                 .withProperty("arbitrary.property", "private-value");
-        EnvironmentGitHubApiCredentialResolver resolver =
-                new EnvironmentGitHubApiCredentialResolver(environment);
+        EnvironmentGitHubAccessTokenProvider resolver =
+                new EnvironmentGitHubAccessTokenProvider(environment);
 
-        assertThat(resolver.resolve("DEVPILOT_GITHUB_API_TOKEN_TEST")).contains("api-token");
-        assertThat(resolver.resolve("DEVPILOT_GITHUB_WEBHOOK_SECRET_TEST")).isEmpty();
-        assertThat(resolver.resolve("arbitrary.property")).isEmpty();
-        assertThat(resolver.resolve("DEVPILOT_GITHUB_API_TOKEN_lowercase")).isEmpty();
-        assertThat(resolver.resolve(null)).isEmpty();
+        assertThat(resolver.getToken("DEVPILOT_GITHUB_API_TOKEN_TEST"))
+                .get()
+                .extracting(GitHubAccessToken::value)
+                .isEqualTo("api-token");
+        assertThat(resolver.getToken("DEVPILOT_GITHUB_WEBHOOK_SECRET_TEST")).isEmpty();
+        assertThat(resolver.getToken("arbitrary.property")).isEmpty();
+        assertThat(resolver.getToken("DEVPILOT_GITHUB_API_TOKEN_lowercase")).isEmpty();
+        assertThat(resolver.getToken(null)).isEmpty();
+        assertThat(new GitHubAccessToken("private-token", null).toString())
+                .doesNotContain("private-token");
     }
 
     @Test

@@ -30,6 +30,9 @@ docs/*
 !docs/architecture.md
 !docs/database-design.md
 !docs/capability-coverage-and-roadmap.md
+!docs/changes/
+docs/changes/*
+!docs/changes/08-github-api-client-file-map.md
 !docs/learning/
 docs/learning/*
 !docs/learning/02-reliable-webhook-ingress.md
@@ -38,4 +41,4 @@ docs/learning/*
 !docs/learning/05-scoped-rbac.md
 !docs/learning/06-workspace-project-lifecycle.md
 !docs/learning/07-github-repository-binding.md
-AGENTS.md
+!docs/learning/08-github-api-client-engineering.md

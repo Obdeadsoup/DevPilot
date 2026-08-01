@@ -2,127 +2,78 @@ package com.obdeadsoup.devpilot.github.application.client;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.obdeadsoup.devpilot.framework.error.BusinessException;
-import com.obdeadsoup.devpilot.github.config.GitHubIntegrationProperties;
-import com.obdeadsoup.devpilot.github.error.GitHubRepositoryErrorCode;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.HttpServerErrorException;
-import org.springframework.web.client.ResourceAccessException;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientException;
 
-import java.net.URI;
-import java.net.http.HttpClient;
+import java.util.List;
 
+/**
+ * Repository Metadata 的 GitHub 业务 Client。
+ *
+ * <p>本类只描述 endpoint 与校验 Repository 业务字段；Authorization、超时、状态码、Rate Limit、
+ * Retry、重定向、日志和指标全部交给 {@link GitHubApiHttpExecutor}，避免每个业务 Client 重复实现。</p>
+ */
 @Component
 public class RestClientGitHubRepositoryMetadataClient implements GitHubRepositoryMetadataClient {
 
-    static final String API_BASE_URL = "https://api.github.com";
-    private static final String API_VERSION = "2022-11-28";
-    private static final String USER_AGENT = "DevPilot/0.0.1";
+    static final String OPERATION = "repository.metadata.get";
+    static final String ENDPOINT_TEMPLATE = "/repos/{owner}/{repo}";
 
-    private final RestClient restClient;
+    private final GitHubApiHttpExecutor httpExecutor;
 
-    @Autowired
-    public RestClientGitHubRepositoryMetadataClient(
-            RestClient.Builder builder,
-            GitHubIntegrationProperties properties
-    ) {
-        HttpClient httpClient = HttpClient.newBuilder()
-                .connectTimeout(properties.connectTimeout())
-                .build();
-        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
-        requestFactory.setReadTimeout(properties.readTimeout());
-        this.restClient = builder.clone()
-                .baseUrl(API_BASE_URL)
-                .requestFactory(requestFactory)
-                .build();
+    public RestClientGitHubRepositoryMetadataClient(GitHubApiHttpExecutor httpExecutor) {
+        this.httpExecutor = httpExecutor;
     }
 
-    RestClientGitHubRepositoryMetadataClient(RestClient restClient) {
-        this.restClient = restClient;
-    }
-
+    /**
+     * 查询 Repository，并保留 ETag、Last-Modified、Rate Limit 和 304 语义。
+     *
+     * @param owner 已通过 Repository Reference 校验的 Owner
+     * @param repositoryName 已通过 Repository Reference 校验的仓库名
+     * @param apiCredentialReference 受白名单约束的 Credential Reference，不是 Token
+     * @param conditionalRequest 刷新时使用的校验器；首次绑定传空条件
+     * @return 200 时包含可信 Repository，304 时 body 为空且 notModified=true
+     * @throws GitHubApiException HTTP、网络、限流、凭据或关键字段错误
+     */
     @Override
-    public VerifiedGitHubRepository getRepository(
+    public GitHubApiResponse<VerifiedGitHubRepository> getRepository(
             String owner,
             String repositoryName,
-            String apiToken
+            String apiCredentialReference,
+            GitHubConditionalRequest conditionalRequest
     ) {
-        try {
-            return verified(fetchWithOneSafeRedirect(owner, repositoryName, apiToken));
-        } catch (GitHubApiRedirect exception) {
-            throw new BusinessException(GitHubRepositoryErrorCode.GITHUB_REPOSITORY_NOT_ACCESSIBLE);
-        } catch (HttpClientErrorException.Unauthorized exception) {
-            throw new BusinessException(GitHubRepositoryErrorCode.GITHUB_API_AUTHENTICATION_FAILED);
-        } catch (HttpClientErrorException.Forbidden exception) {
-            throw new BusinessException(GitHubRepositoryErrorCode.GITHUB_API_FORBIDDEN);
-        } catch (HttpClientErrorException.NotFound exception) {
-            throw new BusinessException(GitHubRepositoryErrorCode.GITHUB_REPOSITORY_NOT_ACCESSIBLE);
-        } catch (HttpClientErrorException.TooManyRequests exception) {
-            throw new BusinessException(GitHubRepositoryErrorCode.GITHUB_API_RATE_LIMITED);
-        } catch (HttpServerErrorException | ResourceAccessException exception) {
-            throw new BusinessException(GitHubRepositoryErrorCode.GITHUB_API_UNAVAILABLE);
-        } catch (HttpClientErrorException exception) {
-            throw new BusinessException(GitHubRepositoryErrorCode.GITHUB_REPOSITORY_NOT_ACCESSIBLE);
-        } catch (RestClientException exception) {
-            throw new BusinessException(GitHubRepositoryErrorCode.GITHUB_API_RESPONSE_INVALID);
+        GitHubApiResponse<RepositoryResponse> response = httpExecutor.get(
+                OPERATION,
+                ENDPOINT_TEMPLATE,
+                List.of("repos", owner, repositoryName),
+                apiCredentialReference,
+                conditionalRequest,
+                RepositoryResponse.class
+        );
+        if (response.notModified()) {
+            return mapped(response, null);
         }
+        return mapped(response, verified(response.body(), response));
     }
 
-    private RepositoryResponse fetchWithOneSafeRedirect(
-            String owner,
-            String repositoryName,
-            String apiToken
+    private GitHubApiResponse<VerifiedGitHubRepository> mapped(
+            GitHubApiResponse<RepositoryResponse> source,
+            VerifiedGitHubRepository repository
     ) {
-        try {
-            return execute(
-                    restClient.get().uri(uriBuilder ->
-                            uriBuilder.pathSegment("repos", owner, repositoryName).build()
-                    ),
-                    apiToken
-            );
-        } catch (GitHubApiRedirect redirect) {
-            URI location = requireSafeRedirect(redirect.location());
-            return execute(restClient.get().uri(location), apiToken);
-        }
+        return new GitHubApiResponse<>(
+                source.httpStatus(),
+                repository,
+                source.notModified(),
+                source.etag(),
+                source.lastModified(),
+                source.rateLimit(),
+                source.pageCursor()
+        );
     }
 
-    private RepositoryResponse execute(
-            RestClient.RequestHeadersSpec<?> request,
-            String apiToken
+    private VerifiedGitHubRepository verified(
+            RepositoryResponse response,
+            GitHubApiResponse<?> envelope
     ) {
-        return request
-                .header(HttpHeaders.ACCEPT, "application/vnd.github+json")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiToken)
-                .header("X-GitHub-Api-Version", API_VERSION)
-                .header(HttpHeaders.USER_AGENT, USER_AGENT)
-                .retrieve()
-                .onStatus(status -> status.is3xxRedirection(), (httpRequest, response) -> {
-                    throw new GitHubApiRedirect(response.getHeaders().getLocation());
-                })
-                .body(RepositoryResponse.class);
-    }
-
-    private URI requireSafeRedirect(URI location) {
-        if (location == null
-                || !"https".equalsIgnoreCase(location.getScheme())
-                || !"api.github.com".equalsIgnoreCase(location.getHost())
-                || (location.getPort() != -1 && location.getPort() != 443)
-                || location.getUserInfo() != null
-                || location.getFragment() != null
-                || location.getRawPath() == null
-                || location.getRawPath().isBlank()) {
-            throw new BusinessException(GitHubRepositoryErrorCode.GITHUB_REPOSITORY_NOT_ACCESSIBLE);
-        }
-        return location;
-    }
-
-    private VerifiedGitHubRepository verified(RepositoryResponse response) {
         if (response == null
                 || response.id() == null
                 || response.id() <= 0
@@ -132,7 +83,15 @@ public class RestClientGitHubRepositoryMetadataClient implements GitHubRepositor
                 || isBlank(response.fullName())
                 || isBlank(response.htmlUrl())
                 || isBlank(response.visibility())) {
-            throw new BusinessException(GitHubRepositoryErrorCode.GITHUB_API_RESPONSE_INVALID);
+            throw new GitHubApiException(
+                    GitHubApiFailureType.MALFORMED_RESPONSE,
+                    false,
+                    null,
+                    envelope.httpStatus(),
+                    "GitHub API returned repository metadata without required fields",
+                    envelope.rateLimit().requestId(),
+                    envelope.rateLimit()
+            );
         }
         return new VerifiedGitHubRepository(
                 response.id(),
@@ -150,7 +109,7 @@ public class RestClientGitHubRepositoryMetadataClient implements GitHubRepositor
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record RepositoryResponse(
+    static record RepositoryResponse(
             Long id,
             OwnerResponse owner,
             String name,
@@ -162,20 +121,6 @@ public class RestClientGitHubRepositoryMetadataClient implements GitHubRepositor
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record OwnerResponse(String login) {
-    }
-
-    private static final class GitHubApiRedirect extends RuntimeException {
-
-        private final URI location;
-
-        private GitHubApiRedirect(URI location) {
-            super("GitHub API redirect");
-            this.location = location;
-        }
-
-        private URI location() {
-            return location;
-        }
+    static record OwnerResponse(String login) {
     }
 }

@@ -36,12 +36,14 @@ Maven 多模块、Boot、MySQL/Redis、Flyway、Actuator、测试环境、统一
 必须掌握原始请求体、HMAC、唯一约束、状态机、事务边界和重复事件。
 
 当前已完成 Repository Binding 的 Project 作用域生命周期、可信元数据校验、API Credential 与 Webhook
-Secret 分离，以及活动 Binding 生成列唯一约束。最小 Metadata Client 已处理固定 Host、超时和基础 HTTP
-错误，但完整 GitHub App、分页、条件请求、Rate Limit 退避和 Issue/PR 同步仍属于后续阶段。
+Secret 分离，以及活动 Binding 生成列唯一约束。工程化读取 Client 已完成固定 Host、Timeout、统一错误、
+GET/HEAD 有限 Retry、Primary/Secondary Rate Limit、Link Cursor、Conditional GET、单实例 Credential
+并发限制和低基数指标。它提供分页基础，但尚未实现 Issue/PR 的业务分页循环。
 
 ### 阶段 3：可靠同步
 
-Issue/PR/Review、GitHub API Client、分页、Rate Limit、退避、定时对账、FAILED/DEAD、人工重放和指标。
+下一步实现 Issue/PR/Review、GitHub App Token、分页业务同步、API 对账状态机、跨实例并发协调和人工重放。
+Webhook Delivery 的 RETRY_WAIT/DEAD 已完成；GitHub API 同步尚没有自己的 RETRY_WAIT/DEAD。
 
 ### 阶段 4：任务与通知
 

@@ -15,8 +15,17 @@ devpilot:
   identity:
     access-token-ttl: 2h
   github:
-    connect-timeout: 3s
-    read-timeout: 10s
+    base-url: https://api.github.com
+    api-version: 2022-11-28
+    connect-timeout: 2s
+    read-timeout: 5s
+    max-read-attempts: 3
+    initial-backoff: 200ms
+    max-backoff: 2s
+    max-synchronous-rate-limit-wait: 3s
+    max-concurrent-requests-per-credential: 2
+    concurrency-acquire-timeout: 200ms
+    user-agent: DevPilot
     worker-core-threads: 2
     worker-max-threads: 4
     worker-queue-capacity: 200

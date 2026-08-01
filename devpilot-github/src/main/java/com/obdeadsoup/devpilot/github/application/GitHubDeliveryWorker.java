@@ -7,6 +7,9 @@ import org.springframework.stereotype.Component;
 
 import java.util.Optional;
 
+/**
+ * Delivery 异步 Worker：先抢占状态，再运行成功事务；失败分类和失败记录使用独立事务。
+ */
 @Component
 public class GitHubDeliveryWorker {
 
@@ -26,6 +29,9 @@ public class GitHubDeliveryWorker {
         this.failureClassifier = failureClassifier;
     }
 
+    /**
+     * 尝试处理指定 Delivery；抢占失败表示已被其他 Worker 处理，直接返回而非重复执行业务。
+     */
     public void process(long deliveryId) {
         Optional<GitHubDeliveryEntity> claimed = stateService.claim(deliveryId);
         if (claimed.isEmpty()) {

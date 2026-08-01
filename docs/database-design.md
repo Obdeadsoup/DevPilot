@@ -98,6 +98,7 @@ V3 create identity user
 V4 add scoped rbac
 V5 add project lifecycle constraints
 V6 add github repository binding lifecycle
+V7 add github repository metadata validators
 ```
 
 V4 不修改 V1–V3，包含 `dp_workspace.owner_user_id/version`、
@@ -120,3 +121,7 @@ UNIQUE(workspace_id, active_repository_full_name)
 已解绑历史的两个生成列均为 NULL，因此同一仓库可经历任意多轮绑定/解绑；活动 Binding 仍全局按稳定
 GitHub Repository ID 唯一。V6 还增加 Repository `version >= 0` CHECK，原有
 `ACTIVE / DISABLED` CHECK 保持不变。
+
+V7 不修改 V1–V6，仅为 `dp_github_repository` 增加内部字段 `metadata_etag VARCHAR(255)` 和
+`metadata_last_modified DATETIME(6)`。它们支持 Repository Metadata Conditional GET，不进入普通前端
+Response。304 路径保留原校验器与权威元数据，只更新 `last_verified_at` 并按当前并发策略 `version + 1`。

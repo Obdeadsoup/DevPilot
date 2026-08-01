@@ -11,6 +11,12 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Repository Binding 的复杂持久化边界。
+ *
+ * <p>所有用户态更新同时限定 Workspace/Project Scope、deleted、当前状态和 expectedVersion；
+ * Metadata 200 与 304 分别使用独立 UPDATE，避免 304 覆盖权威字段或校验器。</p>
+ */
 @Mapper
 public interface GitHubRepositoryMapper {
 
@@ -30,6 +36,8 @@ public interface GitHubRepositoryMapper {
             api_credential_ref AS apiCredentialRef,
             last_synced_at AS lastSyncedAt,
             last_verified_at AS lastVerifiedAt,
+            metadata_etag AS metadataEtag,
+            metadata_last_modified AS metadataLastModified,
             created_by AS createdBy,
             created_at AS createdAt,
             updated_at AS updatedAt,
@@ -106,12 +114,12 @@ public interface GitHubRepositoryMapper {
                 workspace_id, project_id, github_repository_id, owner_login,
                 repository_name, full_name, html_url, default_branch, visibility,
                 binding_status, webhook_secret_ref, api_credential_ref,
-                last_verified_at, created_by, version
+                last_verified_at, metadata_etag, metadata_last_modified, created_by, version
             ) VALUES (
                 #{workspaceId}, #{projectId}, #{githubRepositoryId}, #{ownerLogin},
                 #{repositoryName}, #{fullName}, #{htmlUrl}, #{defaultBranch}, #{visibility},
                 'ACTIVE', #{webhookSecretRef}, #{apiCredentialRef},
-                #{lastVerifiedAt}, #{createdBy}, 0
+                #{lastVerifiedAt}, #{metadataEtag}, #{metadataLastModified}, #{createdBy}, 0
             )
             """)
     int insert(
@@ -127,6 +135,8 @@ public interface GitHubRepositoryMapper {
             @Param("webhookSecretRef") String webhookSecretRef,
             @Param("apiCredentialRef") String apiCredentialRef,
             @Param("lastVerifiedAt") LocalDateTime lastVerifiedAt,
+            @Param("metadataEtag") String metadataEtag,
+            @Param("metadataLastModified") LocalDateTime metadataLastModified,
             @Param("createdBy") long createdBy
     );
 
@@ -191,6 +201,8 @@ public interface GitHubRepositoryMapper {
                 visibility = #{visibility},
                 binding_status = 'ACTIVE',
                 last_verified_at = #{lastVerifiedAt},
+                metadata_etag = #{metadataEtag},
+                metadata_last_modified = #{metadataLastModified},
                 version = version + 1
             WHERE id = #{bindingId}
               AND workspace_id = #{workspaceId}
@@ -210,7 +222,9 @@ public interface GitHubRepositoryMapper {
             @Param("htmlUrl") String htmlUrl,
             @Param("defaultBranch") String defaultBranch,
             @Param("visibility") String visibility,
-            @Param("lastVerifiedAt") LocalDateTime lastVerifiedAt
+            @Param("lastVerifiedAt") LocalDateTime lastVerifiedAt,
+            @Param("metadataEtag") String metadataEtag,
+            @Param("metadataLastModified") LocalDateTime metadataLastModified
     );
 
     @Update("""
@@ -222,6 +236,8 @@ public interface GitHubRepositoryMapper {
                 default_branch = #{defaultBranch},
                 visibility = #{visibility},
                 last_verified_at = #{lastVerifiedAt},
+                metadata_etag = #{metadataEtag},
+                metadata_last_modified = #{metadataLastModified},
                 version = version + 1
             WHERE id = #{bindingId}
               AND workspace_id = #{workspaceId}
@@ -241,6 +257,27 @@ public interface GitHubRepositoryMapper {
             @Param("htmlUrl") String htmlUrl,
             @Param("defaultBranch") String defaultBranch,
             @Param("visibility") String visibility,
+            @Param("lastVerifiedAt") LocalDateTime lastVerifiedAt,
+            @Param("metadataEtag") String metadataEtag,
+            @Param("metadataLastModified") LocalDateTime metadataLastModified
+    );
+
+    @Update("""
+            UPDATE dp_github_repository
+            SET last_verified_at = #{lastVerifiedAt},
+                version = version + 1
+            WHERE id = #{bindingId}
+              AND workspace_id = #{workspaceId}
+              AND project_id = #{projectId}
+              AND deleted = 0
+              AND binding_status IN ('ACTIVE', 'DISABLED')
+              AND version = #{expectedVersion}
+            """)
+    int markMetadataNotModified(
+            @Param("workspaceId") long workspaceId,
+            @Param("projectId") long projectId,
+            @Param("bindingId") long bindingId,
+            @Param("expectedVersion") long expectedVersion,
             @Param("lastVerifiedAt") LocalDateTime lastVerifiedAt
     );
 

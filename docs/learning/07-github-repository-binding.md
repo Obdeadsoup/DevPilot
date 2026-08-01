@@ -66,8 +66,8 @@ DEVPILOT_GITHUB_API_TOKEN_[A-Z0-9_]+
 DEVPILOT_GITHUB_WEBHOOK_SECRET_[A-Z0-9_]+
 ```
 
-两个 Resolver 各自只接受自己的白名单。任意 Spring Property 名、另一类凭据引用、小写后缀或空值都不会
-被解析。原始 Token/Secret 不进入 Controller 响应、数据库和日志。
+API Token Provider 与 Webhook Secret Resolver 各自只接受自己的白名单。任意 Spring Property 名、
+另一类凭据引用、小写后缀或空值都不会被解析。原始 Token/Secret 不进入 Controller 响应、数据库和日志。
 
 ## 9. Fine-grained PAT 与 GitHub App 的取舍
 
@@ -75,8 +75,8 @@ DEVPILOT_GITHUB_WEBHOOK_SECRET_[A-Z0-9_]+
 建立真实 REST 调用链。但 PAT 的生命周期和人员账号绑定不适合最终团队安装模型。
 
 完整 GitHub App 还需要 App 私钥、JWT、Installation Token、安装范围和 Token 刷新，本节没有实现，不能把
-环境变量 PAT 描述成 GitHub App。后续迁移时，`GitHubApiCredentialResolver` 与 Metadata Client 接口提供了
-替换边界。
+环境变量 PAT 描述成 GitHub App。第 8 节已将替换边界明确为 `GitHubAccessTokenProvider`，其过期时间允许
+为空；未来可以增加 Installation Token Provider，而不让业务 Client 读取 Environment。
 
 ## 10. 绑定完整调用链
 
@@ -86,8 +86,9 @@ Authenticated Request
 → GitHubRepositoryBindingService
 → CurrentUserProvider
 → ProjectAuthorizationService(REPOSITORY_BIND)
-→ GitHubApiCredentialResolver
 → GitHubRepositoryMetadataClient
+→ GitHubApiHttpExecutor
+→ GitHubAccessTokenProvider
 → GET https://api.github.com/repos/{owner}/{repo}
 → WebhookSecretResolver
 → 应用层重复检查
@@ -186,16 +187,12 @@ Webhook 链路没有改用 API Credential：
 因此 disable 立即让 Webhook 返回 `GITHUB_0406`；unbind 后查不到活动 Binding，返回 `GITHUB_0405`；
 reactivate 核对 GitHub ID 并成功更新后恢复接收。仓库 rename 只更新元数据，不改变 Webhook 身份。
 
-## 18. 下一节仍需补齐什么
+## 18. 第 8 节完成后的边界
 
-本节的 REST Client 只实现单仓库元数据读取和基础错误映射，没有实现复杂重试。下一节需要系统补充：
+第 8 节已把本节的最小 Metadata Client 收敛到统一 Executor，并补齐 Primary/Secondary Rate Limit、
+有限 GET/HEAD Retry、Link Cursor、ETag/Last-Modified Conditional GET、每 Credential 单实例并发和安全指标。
+Repository 刷新 304 不覆盖权威元数据，只更新验证时间并 `version + 1`。
 
-- 主限流和次限流的 Header 解析；
-- `Retry-After` 与受限次数退避；
-- 列表 API 分页；
-- ETag / `If-None-Match` 条件请求；
-- Token 失效后的受控处理；
-- GitHub App JWT、Installation Token 和安装范围；
-- API 对账与 Issue/PR 同步。
-
-这些能力目前都不能描述成已完成。本节也没有实现跨 Project 转移、Audit、Outbox 或凭据管理后台。
+仍未实现 GitHub App JWT/Installation Token、Token 自动刷新、Issue/PR/Review 同步、分页业务循环、后台
+API 对账状态机和跨实例并发协调。这些能力不得因底层模型已存在就描述为完成。本阶段也没有实现跨 Project
+转移、Audit、Outbox 或凭据管理后台；完整设计见第 8 节学习文档。
