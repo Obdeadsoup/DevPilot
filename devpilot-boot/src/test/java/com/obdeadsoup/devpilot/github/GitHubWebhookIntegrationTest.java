@@ -141,6 +141,22 @@ class GitHubWebhookIntegrationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("GITHUB_0400"));
 
+        mockMvc.perform(post("/api/v1/github/webhooks")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-Hub-Signature-256", signature(ping))
+                        .header("X-GitHub-Event", "ping")
+                        .content(ping))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("GITHUB_0400"));
+
+        mockMvc.perform(post("/api/v1/github/webhooks")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-Hub-Signature-256", signature(ping))
+                        .header("X-GitHub-Delivery", "delivery-missing-event")
+                        .content(ping))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("GITHUB_0400"));
+
         mockMvc.perform(webhook(ping, "delivery-wrong-signature", "ping", "sha256=" + "0".repeat(64)))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("GITHUB_0404"));

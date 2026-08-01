@@ -17,6 +17,8 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
@@ -32,6 +34,7 @@ import java.util.Set;
 public class GitHubWebhookService {
 
     private static final Set<String> SUPPORTED_EVENTS = Set.of("ping", "push");
+    private static final Logger LOGGER = LoggerFactory.getLogger(GitHubWebhookService.class);
 
     private final GitHubIntegrationProperties properties;
     private final GitHubRepositoryMapper repositoryMapper;
@@ -73,58 +76,82 @@ public class GitHubWebhookService {
             String deliveryIdHeader,
             String eventHeader
     ) {
-        requireHeader(signatureHeader, "X-Hub-Signature-256");
-        requireHeader(deliveryIdHeader, "X-GitHub-Delivery");
-        requireHeader(eventHeader, "X-GitHub-Event");
-        if (rawBody == null || rawBody.length == 0) {
-            throw new BusinessException(GitHubWebhookErrorCode.MALFORMED_PAYLOAD);
-        }
-        if (rawBody.length > properties.webhookMaxPayloadBytes()) {
-            throw new BusinessException(GitHubWebhookErrorCode.PAYLOAD_TOO_LARGE);
-        }
-        String deliveryId = deliveryIdHeader.trim();
-        if (deliveryId.length() > 100) {
-            throw new BusinessException(GitHubWebhookErrorCode.INVALID_DELIVERY_ID);
-        }
-        String eventType = eventHeader.trim().toLowerCase(Locale.ROOT);
-        if (!SUPPORTED_EVENTS.contains(eventType)) {
-            throw new BusinessException(GitHubWebhookErrorCode.UNSUPPORTED_EVENT);
-        }
-
-        long githubRepositoryId = payloadParser.extractRepositoryId(rawBody);
-        GitHubRepositoryEntity repository = repositoryMapper.findByGitHubRepositoryId(githubRepositoryId)
-                .orElseThrow(() -> new BusinessException(GitHubWebhookErrorCode.REPOSITORY_NOT_FOUND));
-        if (!GitHubRepositoryStatus.ACTIVE.name().equals(repository.bindingStatus())) {
-            throw new BusinessException(GitHubWebhookErrorCode.REPOSITORY_DISABLED);
-        }
-        String secret = secretResolver.resolve(repository.webhookSecretRef())
-                .orElseThrow(() -> new BusinessException(GitHubWebhookErrorCode.SECRET_UNAVAILABLE));
-        if (!signatureVerifier.verify(rawBody, signatureHeader, secret)) {
-            throw new BusinessException(GitHubWebhookErrorCode.SIGNATURE_INVALID);
-        }
-
-        LocalDateTime receivedAt = LocalDateTime.now(clock);
-        String payloadJson = new String(rawBody, StandardCharsets.UTF_8);
-        String payloadSha256 = signatureVerifier.sha256Hex(rawBody);
-        boolean inserted;
-        try {
-            deliveryMapper.insertReceived(
-                    repository.workspaceId(), repository.projectId(), repository.id(), deliveryId, eventType,
-                    payloadParser.extractAction(rawBody), payloadJson, payloadSha256, receivedAt
-            );
-            inserted = true;
-        } catch (DuplicateKeyException exception) {
-            inserted = false;
-        }
-        GitHubDeliveryEntity delivery = deliveryMapper.findByGitHubDeliveryId(deliveryId)
-                .orElseThrow(() -> new BusinessException(GitHubWebhookErrorCode.DELIVERY_STATE_CONFLICT));
-        requireMatchingDuplicate(delivery, repository, eventType, payloadSha256);
-        if (inserted) {
-            eventPublisher.publishEvent(new GitHubDeliveryReceivedEvent(delivery.id()));
-        }
-        return new GitHubWebhookReceiptResponse(
-                delivery.githubDeliveryId(), delivery.processingStatus(), !inserted
+        LOGGER.debug(
+                "GitHub webhook received event={} deliveryId={} rawBodyLength={} signaturePresent={}",
+                eventHeader, deliveryIdHeader, rawBody == null ? 0 : rawBody.length,
+                signatureHeader != null && !signatureHeader.isBlank()
         );
+        try {
+            requireHeader(signatureHeader, "X-Hub-Signature-256");
+            requireHeader(deliveryIdHeader, "X-GitHub-Delivery");
+            requireHeader(eventHeader, "X-GitHub-Event");
+            if (rawBody == null || rawBody.length == 0) {
+                throw new BusinessException(GitHubWebhookErrorCode.MALFORMED_PAYLOAD);
+            }
+            if (rawBody.length > properties.webhookMaxPayloadBytes()) {
+                throw new BusinessException(GitHubWebhookErrorCode.PAYLOAD_TOO_LARGE);
+            }
+            String deliveryId = deliveryIdHeader.trim();
+            if (deliveryId.length() > 100) {
+                throw new BusinessException(GitHubWebhookErrorCode.INVALID_DELIVERY_ID);
+            }
+            String eventType = eventHeader.trim().toLowerCase(Locale.ROOT);
+            if (!SUPPORTED_EVENTS.contains(eventType)) {
+                throw new BusinessException(GitHubWebhookErrorCode.UNSUPPORTED_EVENT);
+            }
+
+            long githubRepositoryId = payloadParser.extractRepositoryId(rawBody);
+            var repositoryResult = repositoryMapper.findByGitHubRepositoryId(githubRepositoryId);
+            LOGGER.debug(
+                    "GitHub webhook repository lookup repositoryId={} repositoryFound={}",
+                    githubRepositoryId, repositoryResult.isPresent()
+            );
+            GitHubRepositoryEntity repository = repositoryResult
+                    .orElseThrow(() -> new BusinessException(GitHubWebhookErrorCode.REPOSITORY_NOT_FOUND));
+            boolean activeBinding = GitHubRepositoryStatus.ACTIVE.name().equals(repository.bindingStatus());
+            LOGGER.debug("GitHub webhook binding repositoryId={} active={}", githubRepositoryId, activeBinding);
+            if (!activeBinding) {
+                throw new BusinessException(GitHubWebhookErrorCode.REPOSITORY_DISABLED);
+            }
+            var secretResult = secretResolver.resolve(repository.webhookSecretRef());
+            LOGGER.debug(
+                    "GitHub webhook secret resolution webhookSecretRef={} secretResolved={}",
+                    repository.webhookSecretRef(), secretResult.isPresent()
+            );
+            String secret = secretResult
+                    .orElseThrow(() -> new BusinessException(GitHubWebhookErrorCode.SECRET_UNAVAILABLE));
+            boolean signatureValid = signatureVerifier.verify(rawBody, signatureHeader, secret);
+            LOGGER.debug("GitHub webhook signature validation repositoryId={} valid={}", githubRepositoryId, signatureValid);
+            if (!signatureValid) {
+                throw new BusinessException(GitHubWebhookErrorCode.SIGNATURE_INVALID);
+            }
+
+            LocalDateTime receivedAt = LocalDateTime.now(clock);
+            String payloadJson = new String(rawBody, StandardCharsets.UTF_8);
+            String payloadSha256 = signatureVerifier.sha256Hex(rawBody);
+            boolean inserted;
+            try {
+                deliveryMapper.insertReceived(
+                        repository.workspaceId(), repository.projectId(), repository.id(), deliveryId, eventType,
+                        payloadParser.extractAction(rawBody), payloadJson, payloadSha256, receivedAt
+                );
+                inserted = true;
+            } catch (DuplicateKeyException exception) {
+                inserted = false;
+            }
+            GitHubDeliveryEntity delivery = deliveryMapper.findByGitHubDeliveryId(deliveryId)
+                    .orElseThrow(() -> new BusinessException(GitHubWebhookErrorCode.DELIVERY_STATE_CONFLICT));
+            requireMatchingDuplicate(delivery, repository, eventType, payloadSha256);
+            if (inserted) {
+                eventPublisher.publishEvent(new GitHubDeliveryReceivedEvent(delivery.id()));
+            }
+            return new GitHubWebhookReceiptResponse(
+                    delivery.githubDeliveryId(), delivery.processingStatus(), !inserted
+            );
+        } catch (BusinessException exception) {
+            LOGGER.debug("GitHub webhook rejected errorCode={}", exception.errorCode().code());
+            throw exception;
+        }
     }
 
     private void requireHeader(String value, String headerName) {
