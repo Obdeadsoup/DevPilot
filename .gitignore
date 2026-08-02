@@ -33,6 +33,7 @@ docs/*
 !docs/changes/
 docs/changes/*
 !docs/changes/08-github-api-client-file-map.md
+!docs/changes/09-github-commit-reconciliation-file-map.md
 !docs/learning/
 docs/learning/*
 !docs/learning/02-reliable-webhook-ingress.md
@@ -42,3 +43,4 @@ docs/learning/*
 !docs/learning/06-workspace-project-lifecycle.md
 !docs/learning/07-github-repository-binding.md
 !docs/learning/08-github-api-client-engineering.md
+!docs/learning/09-webhook-api-reconciliation.md

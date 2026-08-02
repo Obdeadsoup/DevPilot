@@ -2,6 +2,7 @@ package com.obdeadsoup.devpilot.github.application.parser;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.obdeadsoup.devpilot.github.persistence.entity.GitHubDeliveryEntity;
+import com.obdeadsoup.devpilot.github.domain.GitHubCommitSource;
 import com.obdeadsoup.devpilot.project.application.command.RecordProjectActivityCommand;
 import com.obdeadsoup.devpilot.project.domain.ProjectActivityType;
 import org.junit.jupiter.api.Test;
@@ -52,6 +53,33 @@ class GitHubWebhookPayloadParserTest {
         assertThat(activity.headCommitMessage()).isEqualTo("ship it");
         assertThat(activity.externalUrl()).endsWith("1...2");
         assertThat(activity.occurredAt()).isEqualTo(LocalDateTime.of(2026, 7, 21, 10, 15, 30));
+    }
+
+    @Test
+    void pushProcessingPlanContainsCommitDetailsForUnifiedUpsert() {
+        String sha = "a".repeat(40);
+        String json = """
+                {
+                  "repository":{"id":123,"full_name":"octo/demo"},
+                  "commits":[{
+                    "id":"%s",
+                    "message":"ship it",
+                    "timestamp":"2026-07-21T10:15:30+00:00",
+                    "url":"https://github.com/octo/demo/commit/%s",
+                    "author":{"name":"Octo Cat","email":"private@example.com","username":"octocat"}
+                  }]
+                }
+                """.formatted(sha, sha);
+
+        GitHubWebhookProcessingPlan plan = parser.parseForProcessing(delivery("push", json));
+
+        assertThat(plan.commits()).singleElement().satisfies(command -> {
+            assertThat(command.commitSha()).isEqualTo(sha);
+            assertThat(command.message()).isEqualTo("ship it");
+            assertThat(command.authorEmail()).isEqualTo("private@example.com");
+            assertThat(command.committedAt()).isEqualTo(LocalDateTime.of(2026, 7, 21, 10, 15, 30));
+            assertThat(command.source()).isEqualTo(GitHubCommitSource.WEBHOOK);
+        });
     }
 
     private GitHubDeliveryEntity delivery(String eventType, String payloadJson) {

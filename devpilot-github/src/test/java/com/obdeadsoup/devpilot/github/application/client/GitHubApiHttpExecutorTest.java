@@ -225,6 +225,62 @@ class GitHubApiHttpExecutorTest {
         harness.server().verify();
     }
 
+    @Test
+    void commitClientUsesSincePerPageAndOpaqueLinkForMultiplePages() {
+        Harness harness = harness(1, Duration.ofSeconds(3));
+        harness.server().expect(request -> {
+                    assertThat(request.getURI().getPath()).isEqualTo("/repos/octo/demo/commits");
+                    assertThat(request.getURI().getQuery())
+                            .contains("since=2026-07-25T00:00:00Z", "per_page=100");
+                })
+                .andRespond(withSuccess("[" + commitJson("a", "2026-08-01T10:00:00Z") + "]",
+                        MediaType.APPLICATION_JSON)
+                        .header(HttpHeaders.LINK,
+                                "<https://api.github.com/repositories/123/commits?after=opaque>; rel=\"next\""));
+        harness.server().expect(requestTo(
+                        "https://api.github.com/repositories/123/commits?after=opaque"
+                ))
+                .andRespond(withSuccess("[" + commitJson("b", "2026-08-01T11:00:00Z") + "]",
+                        MediaType.APPLICATION_JSON));
+        RestClientGitHubCommitClient client = new RestClientGitHubCommitClient(harness.executor());
+
+        GitHubPage<GitHubCommit> first = client.listCommits(
+                "octo", "demo", Instant.parse("2026-07-25T00:00:00Z"),
+                100, CREDENTIAL, GitHubPageCursor.empty()
+        );
+        GitHubPage<GitHubCommit> second = client.listCommits(
+                "octo", "demo", Instant.EPOCH, 1, CREDENTIAL, first.cursor()
+        );
+
+        assertThat(first.items()).extracting(GitHubCommit::sha).containsExactly("a".repeat(40));
+        assertThat(second.items()).extracting(GitHubCommit::sha).containsExactly("b".repeat(40));
+        harness.server().verify();
+    }
+
+    @Test
+    void commitClientHandlesEmptyJsonArrayAndRejectsMissingSha() {
+        Harness emptyHarness = harness(1, Duration.ofSeconds(3));
+        emptyHarness.server().expect(request -> { })
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+        RestClientGitHubCommitClient emptyClient =
+                new RestClientGitHubCommitClient(emptyHarness.executor());
+        assertThat(emptyClient.listCommits(
+                "octo", "demo", NOW, 100, CREDENTIAL, null
+        ).items()).isEmpty();
+        emptyHarness.server().verify();
+
+        Harness malformedHarness = harness(1, Duration.ofSeconds(3));
+        malformedHarness.server().expect(request -> { })
+                .andRespond(withSuccess("[{\"commit\":{}}]", MediaType.APPLICATION_JSON));
+        RestClientGitHubCommitClient malformedClient =
+                new RestClientGitHubCommitClient(malformedHarness.executor());
+        assertThatThrownBy(() -> malformedClient.listCommits(
+                "octo", "demo", NOW, 100, CREDENTIAL, null
+        )).isInstanceOfSatisfying(GitHubApiException.class, exception ->
+                assertThat(exception.failureType()).isEqualTo(GitHubApiFailureType.MALFORMED_RESPONSE));
+        malformedHarness.server().verify();
+    }
+
     private GitHubApiResponse<IdResponse> get(Harness harness) {
         return harness.executor().get(
                 "repository.metadata.get",
@@ -296,6 +352,23 @@ class GitHubApiHttpExecutorTest {
                 Arguments.of(HttpStatus.BAD_GATEWAY, GitHubApiFailureType.TRANSIENT_SERVER_ERROR),
                 Arguments.of(HttpStatus.SERVICE_UNAVAILABLE, GitHubApiFailureType.TRANSIENT_SERVER_ERROR),
                 Arguments.of(HttpStatus.GATEWAY_TIMEOUT, GitHubApiFailureType.TRANSIENT_SERVER_ERROR)
+        );
+    }
+
+    private String commitJson(String shaCharacter, String committedAt) {
+        return """
+                {
+                  "sha":"%s",
+                  "commit":{
+                    "message":"message",
+                    "author":{"name":"Octo","email":"private@example.com","date":"%s"},
+                    "committer":{"name":"Octo","email":"private@example.com","date":"%s"}
+                  },
+                  "author":{"id":7,"login":"octocat"},
+                  "html_url":"https://github.com/octo/demo/commit/%s"
+                }
+                """.formatted(
+                shaCharacter.repeat(40), committedAt, committedAt, shaCharacter.repeat(40)
         );
     }
 

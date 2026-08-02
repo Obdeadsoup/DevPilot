@@ -84,10 +84,18 @@ Workspace，并对成员用户、创建人设置外键。查询和更新始终�
 - `dp_project_activity`：项目时间线；`(source_type, source_delivery_id)` 唯一，
   时间线索引包含 `workspace_id + project_id`。`external_actor_id/actor_login` 只是外部
   GitHub 元数据，不是本地用户外键。
+- `dp_github_commit`：Webhook/API 共享的 Commit 事实表；`(github_repository_id, commit_sha)` 唯一，
+  `(repository_binding_id, workspace_id, project_id)` 复合外键保证 Scope。`author_email` 仅内部保存，当前
+  普通 API 不返回。`first_seen_source` 只记录首次来源。
+- `dp_github_sync_checkpoint`：每个 Binding/资源一行可靠读取边界；唯一
+  `(repository_binding_id, resource_type)`，`last_seen_commit_sha` 是页级安全进度，
+  `last_successful_sync_at` 只在整轮成功后推进。
+- `dp_github_sync_run`：`PENDING/RUNNING/RETRY_WAIT/SUCCEEDED/DEAD` 状态机。开放状态生成列唯一键限制
+  同一 Binding/COMMIT 最多一个开放 Run；状态/重试/超时和 Binding 索引支持扫描，version 支持 claim。
 
 ## 尚未创建的规划表
 
-`dp_sync_job`、Task、Notification、Audit、Outbox 和 Agent 表仍是后续规划，本阶段没有创建。
+Issue/PR/Review 同步表、Task、Notification、Audit、Outbox 和 Agent 表仍是后续规划，本阶段没有创建。
 
 ## 当前 Flyway 顺序
 
@@ -99,6 +107,7 @@ V4 add scoped rbac
 V5 add project lifecycle constraints
 V6 add github repository binding lifecycle
 V7 add github repository metadata validators
+V8 add github commit reconciliation
 ```
 
 V4 不修改 V1–V3，包含 `dp_workspace.owner_user_id/version`、
@@ -125,3 +134,8 @@ GitHub Repository ID 唯一。V6 还增加 Repository `version >= 0` CHECK，原
 V7 不修改 V1–V6，仅为 `dp_github_repository` 增加内部字段 `metadata_etag VARCHAR(255)` 和
 `metadata_last_modified DATETIME(6)`。它们支持 Repository Metadata Conditional GET，不进入普通前端
 Response。304 路径保留原校验器与权威元数据，只更新 `last_verified_at` 并按当前并发策略 `version + 1`。
+
+V8 不修改 V1–V7，新增 `dp_github_commit`、`dp_github_sync_checkpoint` 和 `dp_github_sync_run`。Commit 的
+SHA CHECK 只允许 40 位小写十六进制；Checkpoint/Run 仅允许 `COMMIT`；所有 version 非负。项目时间线
+CHECK 增加 `GITHUB_COMMIT_DISCOVERED`。主要索引覆盖 Project/Repository 时间线、Run 的 PENDING/到期
+RETRY_WAIT 扫描、超时 RUNNING 扫描和 Binding 历史查询。

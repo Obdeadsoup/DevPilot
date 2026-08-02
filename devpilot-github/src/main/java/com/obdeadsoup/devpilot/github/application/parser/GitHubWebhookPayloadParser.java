@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.obdeadsoup.devpilot.framework.error.BusinessException;
 import com.obdeadsoup.devpilot.github.error.GitHubWebhookErrorCode;
+import com.obdeadsoup.devpilot.github.application.command.UpsertGitHubCommitCommand;
+import com.obdeadsoup.devpilot.github.domain.GitHubCommitSource;
 import com.obdeadsoup.devpilot.github.persistence.entity.GitHubDeliveryEntity;
 import com.obdeadsoup.devpilot.project.application.command.RecordProjectActivityCommand;
 import com.obdeadsoup.devpilot.project.domain.ProjectActivitySourceType;
@@ -15,6 +17,7 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.ArrayList;
 
 @Component
 public class GitHubWebhookPayloadParser {
@@ -54,6 +57,22 @@ public class GitHubWebhookPayloadParser {
         };
     }
 
+    /** 解析 Delivery 的聚合 Activity 与 Push Commit 明细，供成功处理事务一次消费。 */
+    public GitHubWebhookProcessingPlan parseForProcessing(GitHubDeliveryEntity delivery) {
+        return switch (delivery.eventType()) {
+            case "ping" -> new GitHubWebhookProcessingPlan(parsePing(delivery), List.of());
+            case "push" -> {
+                PushWebhookPayload payload = read(delivery.payloadJson(), PushWebhookPayload.class);
+                requireRepository(payload.repository());
+                yield new GitHubWebhookProcessingPlan(
+                        pushActivity(delivery, payload),
+                        pushCommits(delivery, payload)
+                );
+            }
+            default -> throw new BusinessException(GitHubWebhookErrorCode.UNSUPPORTED_EVENT);
+        };
+    }
+
     private RecordProjectActivityCommand parsePing(GitHubDeliveryEntity delivery) {
         PingWebhookPayload payload = read(delivery.payloadJson(), PingWebhookPayload.class);
         requireRepository(payload.repository());
@@ -74,6 +93,13 @@ public class GitHubWebhookPayloadParser {
     private RecordProjectActivityCommand parsePush(GitHubDeliveryEntity delivery) {
         PushWebhookPayload payload = read(delivery.payloadJson(), PushWebhookPayload.class);
         requireRepository(payload.repository());
+        return pushActivity(delivery, payload);
+    }
+
+    private RecordProjectActivityCommand pushActivity(
+            GitHubDeliveryEntity delivery,
+            PushWebhookPayload payload
+    ) {
         GitHubSenderPayload sender = payload.sender();
         List<PushWebhookPayload.CommitPayload> commits = payload.commits() == null ? List.of() : payload.commits();
         PushWebhookPayload.HeadCommitPayload headCommit = payload.head_commit();
@@ -93,6 +119,45 @@ public class GitHubWebhookPayloadParser {
         );
     }
 
+    private List<UpsertGitHubCommitCommand> pushCommits(
+            GitHubDeliveryEntity delivery,
+            PushWebhookPayload payload
+    ) {
+        List<PushWebhookPayload.CommitPayload> payloadCommits =
+                payload.commits() == null ? List.of() : payload.commits();
+        List<UpsertGitHubCommitCommand> commands = new ArrayList<>(payloadCommits.size());
+        for (PushWebhookPayload.CommitPayload commit : payloadCommits) {
+            if (commit == null || commit.id() == null || !commit.id().matches("[0-9a-fA-F]{40}")) {
+                throw malformedPayload();
+            }
+            PushWebhookPayload.HeadCommitPayload head = payload.head_commit();
+            boolean isHead = head != null && commit.id().equalsIgnoreCase(head.id());
+            String message = firstNonBlank(commit.message(), isHead ? head.message() : null);
+            String timestamp = firstNonBlank(commit.timestamp(), isHead ? head.timestamp() : null);
+            String url = firstNonBlank(commit.url(), isHead ? head.url() : null);
+            PushWebhookPayload.CommitAuthorPayload author = commit.author() != null
+                    ? commit.author()
+                    : isHead ? head.author() : null;
+            commands.add(new UpsertGitHubCommitCommand(
+                    delivery.workspaceId(),
+                    delivery.projectId(),
+                    delivery.repositoryId(),
+                    payload.repository().id(),
+                    payload.repository().fullName(),
+                    commit.id(),
+                    message,
+                    author == null ? null : author.name(),
+                    author == null ? null : author.email(),
+                    null,
+                    author == null ? null : author.username(),
+                    occurredAt(timestamp, delivery.receivedAt()),
+                    url == null ? commitUrl(payload.repository().fullName(), commit.id()) : url,
+                    GitHubCommitSource.WEBHOOK
+            ));
+        }
+        return commands;
+    }
+
     private LocalDateTime occurredAt(PushWebhookPayload.HeadCommitPayload headCommit, LocalDateTime fallback) {
         if (headCommit == null || headCommit.timestamp() == null) {
             return fallback;
@@ -102,6 +167,25 @@ public class GitHubWebhookPayloadParser {
         } catch (RuntimeException exception) {
             return fallback;
         }
+    }
+
+    private LocalDateTime occurredAt(String timestamp, LocalDateTime fallback) {
+        if (timestamp == null) {
+            return fallback;
+        }
+        try {
+            return OffsetDateTime.parse(timestamp).withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime();
+        } catch (RuntimeException exception) {
+            return fallback;
+        }
+    }
+
+    private String commitUrl(String fullName, String sha) {
+        return fullName == null ? null : "https://github.com/" + fullName + "/commit/" + sha;
+    }
+
+    private String firstNonBlank(String first, String second) {
+        return first != null && !first.isBlank() ? first : second;
     }
 
     private <T> T read(String payloadJson, Class<T> type) {

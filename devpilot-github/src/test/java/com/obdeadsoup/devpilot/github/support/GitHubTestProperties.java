@@ -1,6 +1,7 @@
 package com.obdeadsoup.devpilot.github.support;
 
 import com.obdeadsoup.devpilot.github.config.GitHubIntegrationProperties;
+import com.obdeadsoup.devpilot.github.config.GitHubReconciliationProperties;
 
 import java.net.URI;
 import java.time.Duration;
@@ -74,6 +75,21 @@ public final class GitHubTestProperties {
                 50,
                 Duration.ofMinutes(2),
                 false
+        );
+    }
+
+    public static GitHubReconciliationProperties reconciliation() {
+        return new GitHubReconciliationProperties(
+                false,
+                Duration.ofMinutes(5),
+                25,
+                Duration.ofDays(7),
+                Duration.ofMinutes(5),
+                5,
+                100,
+                Duration.ofMinutes(15),
+                Duration.ofMinutes(1),
+                Duration.ofMinutes(30)
         );
     }
 }

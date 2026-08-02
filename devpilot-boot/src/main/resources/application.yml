@@ -37,6 +37,17 @@ devpilot:
     delivery-recovery-batch-size: 50
     delivery-processing-timeout: 2m
     delivery-recovery-enabled: true
+    reconciliation:
+      enabled: true
+      scan-interval: 5m
+      batch-size: 25
+      initial-lookback: 7d
+      overlap-window: 5m
+      max-run-attempts: 5
+      per-page: 100
+      run-timeout: 15m
+      retry-initial-delay: 1m
+      retry-max-delay: 30m
 
 management:
   endpoints:

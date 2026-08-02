@@ -18,6 +18,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 
 /**
  * GitHub REST API 的唯一底层 HTTP 执行入口。
@@ -93,6 +94,34 @@ public final class GitHubApiHttpExecutor {
                 .build()
                 .encode()
                 .toUri();
+        return executeRead(
+                HttpMethod.GET,
+                operation,
+                endpointTemplate,
+                endpointPolicy.requireAllowed(uri),
+                credentialReference,
+                conditional,
+                responseType
+        );
+    }
+
+    /**
+     * 对固定 Endpoint 执行带受控 Query 参数的 GET；参数名和值由业务 Client 提供，
+     * 最终 URI 仍必须通过固定 GitHub Host 策略校验。
+     */
+    public <T> GitHubApiResponse<T> get(
+            String operation,
+            String endpointTemplate,
+            List<String> pathSegments,
+            Map<String, ?> queryParameters,
+            String credentialReference,
+            GitHubConditionalRequest conditional,
+            Class<T> responseType
+    ) {
+        UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUri(endpointPolicy.baseUrl())
+                .pathSegment(pathSegments.toArray(String[]::new));
+        queryParameters.forEach(uriBuilder::queryParam);
+        URI uri = uriBuilder.build().encode().toUri();
         return executeRead(
                 HttpMethod.GET,
                 operation,

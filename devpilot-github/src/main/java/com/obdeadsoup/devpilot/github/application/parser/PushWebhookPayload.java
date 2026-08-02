@@ -17,10 +17,26 @@ public record PushWebhookPayload(
 ) {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record CommitPayload(String id) {
+    public record CommitPayload(
+            String id,
+            String message,
+            String timestamp,
+            String url,
+            CommitAuthorPayload author
+    ) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record HeadCommitPayload(String id, String message, String timestamp) {
+    public record HeadCommitPayload(
+            String id,
+            String message,
+            String timestamp,
+            String url,
+            CommitAuthorPayload author
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record CommitAuthorPayload(String name, String email, String username) {
     }
 }

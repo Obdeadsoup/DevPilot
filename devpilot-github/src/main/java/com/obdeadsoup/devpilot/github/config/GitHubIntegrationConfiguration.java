@@ -17,7 +17,10 @@ import java.time.Clock;
  * API Client 的 HTTP 装配由 {@link GitHubRestClientConfiguration} 单独维护。
  */
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(GitHubIntegrationProperties.class)
+@EnableConfigurationProperties({
+        GitHubIntegrationProperties.class,
+        GitHubReconciliationProperties.class
+})
 @EnableAsync
 @EnableScheduling
 public class GitHubIntegrationConfiguration {

@@ -91,6 +91,8 @@ devpilot-github
 - [GitHub Repository 绑定学习笔记](docs/learning/07-github-repository-binding.md)
 - [GitHub REST API Client 工程化学习笔记](docs/learning/08-github-api-client-engineering.md)
 - [第 8 节变更文件地图](docs/changes/08-github-api-client-file-map.md)
+- [Webhook/API Commit 对账学习笔记](docs/learning/09-webhook-api-reconciliation.md)
+- [第 9 节变更文件地图](docs/changes/09-github-commit-reconciliation-file-map.md)
 - [Codex 分阶段指令](codex-prompts/all-prompts.md)
 
 ## 开发方式
@@ -133,7 +135,8 @@ Compose 使用 MySQL 8 和 Redis 7。为避开宿主机已占用的端口，MySQ
 
 ```powershell
 mvn clean verify
-mvn -pl devpilot-boot -am spring-boot:run "-Dspring-boot.run.profiles=local"
+mvn -pl devpilot-boot -am install -DskipTests
+java -jar .\devpilot-boot\target\devpilot-boot-0.0.1-SNAPSHOT.jar --spring.profiles.active=local
 ```
 
 `local` Profile 不会被默认激活。启动命令会从未纳入版本控制的 `.env` 读取本地数据库和 Redis 配置。
@@ -222,6 +225,24 @@ Bearer Token，分类 HTTP/网络错误，只对 GET/HEAD 做有限 Retry，并�
 `last_verified_at` 和乐观锁版本。每个 Credential 在单实例内默认最多两个并发请求；日志与指标不包含
 Token、Secret、Repository fullName 或凭据引用。详见
 `docs/learning/08-github-api-client-engineering.md` 和 `docs/changes/08-github-api-client-file-map.md`。
+
+Push Webhook 中的 Commit 明细和 GitHub List Commits API 现已汇合到同一个 Upsert。数据库按稳定
+Repository ID + SHA 去重；Webhook 继续保留每次 Push 一条 `CODE_PUSHED` 聚合 Activity，Commit 首次入库
+另有一条幂等的 `GITHUB_COMMIT_DISCOVERED` Activity。后台 Reconciliation 使用 7 天初始 Lookback、默认
+5 分钟 overlap、Link Cursor、Checkpoint 和可恢复的 Sync Run 状态机。网络分页不位于长数据库事务中。
+
+人工补偿与状态查询：
+
+```text
+POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/github-repositories/{bindingId}/sync/commits
+GET  /api/v1/workspaces/{workspaceId}/projects/{projectId}/github-repositories/{bindingId}/sync-runs/{runId}
+```
+
+POST 需要 `REPOSITORY_UPDATE`，立即返回 `202 + runId`，不接受调用方自定义 since；同一 Binding 已有开放
+Run 时返回已有 Run。自动 Scheduler 由 `devpilot.github.reconciliation.*` 配置，test Profile 默认关闭。
+当前只完成 Commit 对账，Issue/PR/Review 对账仍未实现。详见
+`docs/learning/09-webhook-api-reconciliation.md` 和
+`docs/changes/09-github-commit-reconciliation-file-map.md`。
 
 本地验证：
 

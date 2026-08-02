@@ -3,8 +3,19 @@ package com.obdeadsoup.devpilot.github;
 import com.obdeadsoup.devpilot.github.application.GitHubDeliveryProcessingService;
 import com.obdeadsoup.devpilot.github.application.GitHubDeliveryStateService;
 import com.obdeadsoup.devpilot.github.application.GitHubDeliveryWorker;
+import com.obdeadsoup.devpilot.github.application.GitHubCommitApplicationService;
+import com.obdeadsoup.devpilot.github.application.GitHubCommitReconciliationService;
+import com.obdeadsoup.devpilot.github.application.GitHubSyncCheckpointService;
+import com.obdeadsoup.devpilot.github.application.GitHubSyncRunStateService;
+import com.obdeadsoup.devpilot.github.application.command.UpsertGitHubCommitCommand;
+import com.obdeadsoup.devpilot.github.domain.GitHubCommitSource;
+import com.obdeadsoup.devpilot.github.domain.GitHubSyncTriggerType;
 import com.obdeadsoup.devpilot.github.persistence.entity.GitHubDeliveryEntity;
+import com.obdeadsoup.devpilot.github.persistence.entity.GitHubSyncCheckpointEntity;
+import com.obdeadsoup.devpilot.github.persistence.entity.GitHubSyncRunEntity;
 import com.obdeadsoup.devpilot.github.persistence.mapper.GitHubDeliveryMapper;
+import com.obdeadsoup.devpilot.github.persistence.mapper.GitHubSyncCheckpointMapper;
+import com.obdeadsoup.devpilot.github.persistence.mapper.GitHubSyncRunMapper;
 import com.obdeadsoup.devpilot.identity.domain.DevPilotUserPrincipal;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,6 +40,10 @@ import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -78,6 +93,24 @@ class GitHubWebhookIntegrationTest {
 
     @Autowired
     private GitHubDeliveryWorker worker;
+
+    @Autowired
+    private GitHubCommitApplicationService commitApplicationService;
+
+    @Autowired
+    private GitHubSyncCheckpointService checkpointService;
+
+    @Autowired
+    private GitHubSyncRunStateService syncRunStateService;
+
+    @Autowired
+    private GitHubCommitReconciliationService reconciliationService;
+
+    @Autowired
+    private GitHubSyncCheckpointMapper checkpointMapper;
+
+    @Autowired
+    private GitHubSyncRunMapper syncRunMapper;
 
     private WebhookTestFixture fixture;
 
@@ -258,14 +291,11 @@ class GitHubWebhookIntegrationTest {
                         .param("page", "1")
                         .param("size", "10"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.total").value(1))
-                .andExpect(jsonPath("$.data.items[0].activityType").value("CODE_PUSHED"))
-                .andExpect(jsonPath("$.data.items[0].repositoryFullName").value("octo-org/devpilot"))
-                .andExpect(jsonPath("$.data.items[0].actorLogin").value("octocat"))
-                .andExpect(jsonPath("$.data.items[0].gitRef").value("refs/heads/main"))
-                .andExpect(jsonPath("$.data.items[0].commitCount").value(2))
-                .andExpect(jsonPath("$.data.items[0].headCommitMessage")
-                        .value("Implement webhook vertical slice"));
+                .andExpect(jsonPath("$.data.total").value(3));
+
+        assertThat(githubCommitCount()).isEqualTo(2);
+        assertThat(activityTypeCount("CODE_PUSHED")).isEqualTo(1);
+        assertThat(activityTypeCount("GITHUB_COMMIT_DISCOVERED")).isEqualTo(2);
 
         fixture.createSecondWorkspaceAndProject();
         mockMvc.perform(get("/api/v1/workspaces/100/projects/201/activities")
@@ -307,6 +337,142 @@ class GitHubWebhookIntegrationTest {
         assertThat(dead.lastErrorMessage()).isEqualTo("Unsupported GitHub webhook event");
         assertThat(dead.version()).isEqualTo(2);
         assertThat(activityCount("delivery-failed")).isZero();
+    }
+
+    @Test
+    void apiFindingWebhookCommitDoesNotDuplicateCommitOrActivity() throws Exception {
+        byte[] push = payload("webhooks/push.json");
+        mockMvc.perform(webhook(push, "delivery-webhook-first", "push", signature(push)))
+                .andExpect(status().isAccepted());
+        await().untilAsserted(() -> assertThat(deliveryStatus("delivery-webhook-first"))
+                .isEqualTo("SUCCEEDED"));
+
+        commitApplicationService.upsert(apiCommit("1111111111111111111111111111111111111112"));
+
+        assertThat(githubCommitCount()).isEqualTo(2);
+        assertThat(commitActivityCount("1111111111111111111111111111111111111112")).isEqualTo(1);
+        assertThat(commitFirstSource("1111111111111111111111111111111111111112"))
+                .isEqualTo("WEBHOOK");
+    }
+
+    @Test
+    void webhookFindingApiCommitKeepsFirstSourceAndDoesNotDuplicateActivity() throws Exception {
+        String sha = "2222222222222222222222222222222222222222";
+        commitApplicationService.upsert(apiCommit(sha));
+
+        byte[] push = payload("webhooks/push.json");
+        mockMvc.perform(webhook(push, "delivery-api-first", "push", signature(push)))
+                .andExpect(status().isAccepted());
+        await().untilAsserted(() -> assertThat(deliveryStatus("delivery-api-first"))
+                .isEqualTo("SUCCEEDED"));
+
+        assertThat(githubCommitCount()).isEqualTo(2);
+        assertThat(commitActivityCount(sha)).isEqualTo(1);
+        assertThat(commitFirstSource(sha)).isEqualTo("API");
+        assertThat(activityTypeCount("CODE_PUSHED")).isEqualTo(1);
+    }
+
+    @Test
+    void concurrentUpsertCreatesAtMostOneCommitAndOneActivity() throws Exception {
+        String sha = "c".repeat(40);
+        try (var executor = Executors.newFixedThreadPool(6)) {
+            List<Callable<Void>> calls = new ArrayList<>();
+            for (int index = 0; index < 12; index++) {
+                calls.add(() -> {
+                    commitApplicationService.upsert(apiCommit(sha));
+                    return null;
+                });
+            }
+            List<Future<Void>> futures = executor.invokeAll(calls);
+            for (Future<Void> future : futures) {
+                future.get();
+            }
+        }
+
+        assertThat(commitCount(sha)).isEqualTo(1);
+        assertThat(commitActivityCount(sha)).isEqualTo(1);
+    }
+
+    @Test
+    void checkpointAndSucceededRunAdvanceAtomicallyWithVersionClaim() {
+        GitHubSyncCheckpointEntity checkpoint = checkpointService.getOrCreate(WebhookTestFixture.REPOSITORY_ID);
+        String sha = "d".repeat(40);
+        GitHubSyncCheckpointEntity progressed = checkpointService.recordPage(checkpoint, sha);
+        GitHubSyncRunEntity pending = syncRunStateService.createOrGetOpen(
+                WebhookTestFixture.REPOSITORY_ID, GitHubSyncTriggerType.INITIAL, null
+        ).run();
+        GitHubSyncRunEntity running = syncRunStateService.claim(pending.id()).orElseThrow();
+        LocalDateTime boundary = LocalDateTime.of(2026, 8, 1, 10, 30);
+
+        syncRunStateService.complete(running, progressed, boundary, sha);
+
+        GitHubSyncCheckpointEntity completed = checkpointMapper
+                .findCommitCheckpoint(WebhookTestFixture.REPOSITORY_ID).orElseThrow();
+        GitHubSyncRunEntity succeeded = syncRunMapper.findById(running.id()).orElseThrow();
+        assertThat(completed.lastSuccessfulSyncAt()).isEqualTo(boundary);
+        assertThat(completed.lastSeenCommitSha()).isEqualTo(sha);
+        assertThat(succeeded.status()).isEqualTo("SUCCEEDED");
+        assertThat(checkpointMapper.updatePageProgress(completed.id(), progressed.version(), sha)).isZero();
+    }
+
+    @Test
+    void twoDatabaseWorkersCanClaimOnlyOneSyncRun() throws Exception {
+        GitHubSyncRunEntity pending = syncRunStateService.createOrGetOpen(
+                WebhookTestFixture.REPOSITORY_ID, GitHubSyncTriggerType.SCHEDULED, null
+        ).run();
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            List<Future<Boolean>> claims = executor.invokeAll(List.of(
+                    () -> syncRunStateService.claim(pending.id()).isPresent(),
+                    () -> syncRunStateService.claim(pending.id()).isPresent()
+            ));
+
+            assertThat(claims.stream().filter(future -> {
+                try {
+                    return future.get();
+                } catch (Exception exception) {
+                    throw new IllegalStateException(exception);
+                }
+            }).count()).isEqualTo(1);
+        }
+    }
+
+    @Test
+    void disabledBindingAndArchivedProjectRunsBecomeDeadWithoutApiCall() {
+        fixture.disableBinding();
+        GitHubSyncRunEntity disabledRun = syncRunStateService.createOrGetOpen(
+                WebhookTestFixture.REPOSITORY_ID, GitHubSyncTriggerType.SCHEDULED, null
+        ).run();
+        reconciliationService.reconcile(disabledRun.id());
+        assertThat(syncRunMapper.findById(disabledRun.id()).orElseThrow().status()).isEqualTo("DEAD");
+
+        fixture.reset();
+        fixture.createActiveBinding();
+        fixture.archiveProject();
+        GitHubSyncRunEntity archivedRun = syncRunStateService.createOrGetOpen(
+                WebhookTestFixture.REPOSITORY_ID, GitHubSyncTriggerType.SCHEDULED, null
+        ).run();
+        reconciliationService.reconcile(archivedRun.id());
+        assertThat(syncRunMapper.findById(archivedRun.id()).orElseThrow().status()).isEqualTo("DEAD");
+    }
+
+    @Test
+    void manualSyncReturns202AndRequiresRepositoryUpdatePermission() throws Exception {
+        mockMvc.perform(post(
+                        "/api/v1/workspaces/100/projects/200/github-repositories/300/sync/commits"
+                ).with(authentication(ownerAuthentication())))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.data.runId").isNumber());
+
+        await().untilAsserted(() -> assertThat(openSyncRunCount()).isZero());
+
+        mockMvc.perform(post(
+                        "/api/v1/workspaces/100/projects/200/github-repositories/300/sync/commits"
+                ).with(authentication(userAuthentication(
+                        WebhookTestFixture.SECOND_OWNER_USER_ID,
+                        "outsider",
+                        "outsider@example.com"
+                ))))
+                .andExpect(status().isForbidden());
     }
 
     private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder webhook(
@@ -418,12 +584,86 @@ class GitHubWebhookIntegrationTest {
         );
     }
 
+    private int githubCommitCount() {
+        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM dp_github_commit", Integer.class);
+        return count == null ? 0 : count;
+    }
+
+    private int activityTypeCount(String activityType) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM dp_project_activity WHERE activity_type = ?",
+                Integer.class,
+                activityType
+        );
+        return count == null ? 0 : count;
+    }
+
+    private UpsertGitHubCommitCommand apiCommit(String sha) {
+        return new UpsertGitHubCommitCommand(
+                WebhookTestFixture.WORKSPACE_ID,
+                WebhookTestFixture.PROJECT_ID,
+                WebhookTestFixture.REPOSITORY_ID,
+                WebhookTestFixture.GITHUB_REPOSITORY_ID,
+                "octo-org/devpilot",
+                sha,
+                "API reconciliation commit",
+                "Octo Cat",
+                "private@example.com",
+                7L,
+                "octocat",
+                LocalDateTime.of(2026, 8, 1, 10, 0),
+                "https://github.com/octo-org/devpilot/commit/" + sha,
+                GitHubCommitSource.API
+        );
+    }
+
+    private int commitCount(String sha) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM dp_github_commit WHERE commit_sha = ?", Integer.class, sha
+        );
+        return count == null ? 0 : count;
+    }
+
+    private int commitActivityCount(String sha) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM dp_project_activity WHERE source_delivery_id = ?",
+                Integer.class,
+                "commit:" + WebhookTestFixture.GITHUB_REPOSITORY_ID + ":" + sha
+        );
+        return count == null ? 0 : count;
+    }
+
+    private String commitFirstSource(String sha) {
+        return jdbcTemplate.queryForObject(
+                "SELECT first_seen_source FROM dp_github_commit WHERE commit_sha = ?",
+                String.class,
+                sha
+        );
+    }
+
+    private int openSyncRunCount() {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM dp_github_sync_run WHERE status IN ('PENDING', 'RUNNING', 'RETRY_WAIT')",
+                Integer.class
+        );
+        return count == null ? 0 : count;
+    }
+
     private org.springframework.security.core.Authentication ownerAuthentication() {
-        DevPilotUserPrincipal principal = new DevPilotUserPrincipal(
+        return userAuthentication(
                 WebhookTestFixture.OWNER_USER_ID,
                 "webhook-owner",
-                "webhook-owner@example.com",
-                "Webhook Test Owner"
+                "webhook-owner@example.com"
+        );
+    }
+
+    private org.springframework.security.core.Authentication userAuthentication(
+            long userId,
+            String username,
+            String email
+    ) {
+        DevPilotUserPrincipal principal = new DevPilotUserPrincipal(
+                userId, username, email, "Webhook Test User"
         );
         return new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
                 principal,

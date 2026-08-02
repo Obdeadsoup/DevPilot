@@ -1,6 +1,7 @@
 package com.obdeadsoup.devpilot.github.persistence.mapper;
 
 import com.obdeadsoup.devpilot.github.persistence.entity.GitHubRepositoryEntity;
+import com.obdeadsoup.devpilot.github.persistence.entity.GitHubSyncTarget;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -108,6 +109,55 @@ public interface GitHubRepositoryMapper {
             @Param("projectId") long projectId,
             @Param("bindingId") long bindingId
     );
+
+    @Select("""
+            SELECT repository.id AS bindingId,
+                   repository.workspace_id AS workspaceId,
+                   repository.project_id AS projectId,
+                   repository.github_repository_id AS githubRepositoryId,
+                   repository.owner_login AS ownerLogin,
+                   repository.repository_name AS repositoryName,
+                   repository.full_name AS fullName,
+                   repository.api_credential_ref AS apiCredentialRef,
+                   repository.binding_status AS bindingStatus,
+                   repository.deleted AS bindingDeleted,
+                   project.status AS projectStatus,
+                   project.deleted AS projectDeleted,
+                   workspace.status AS workspaceStatus,
+                   workspace.deleted AS workspaceDeleted
+            FROM dp_github_repository repository
+            JOIN dp_project project
+              ON project.id = repository.project_id
+             AND project.workspace_id = repository.workspace_id
+            JOIN dp_workspace workspace ON workspace.id = repository.workspace_id
+            WHERE repository.id = #{bindingId}
+            """)
+    Optional<GitHubSyncTarget> findSyncTarget(@Param("bindingId") long bindingId);
+
+    @Select("""
+            SELECT repository.id
+            FROM dp_github_repository repository
+            JOIN dp_project project
+              ON project.id = repository.project_id
+             AND project.workspace_id = repository.workspace_id
+            JOIN dp_workspace workspace ON workspace.id = repository.workspace_id
+            WHERE repository.deleted = 0
+              AND repository.binding_status = 'ACTIVE'
+              AND repository.api_credential_ref IS NOT NULL
+              AND project.deleted = 0
+              AND project.status = 'ACTIVE'
+              AND workspace.deleted = 0
+              AND workspace.status = 'ACTIVE'
+              AND NOT EXISTS (
+                  SELECT 1 FROM dp_github_sync_run sync_run
+                  WHERE sync_run.repository_binding_id = repository.id
+                    AND sync_run.resource_type = 'COMMIT'
+                    AND sync_run.status IN ('PENDING', 'RUNNING', 'RETRY_WAIT')
+              )
+            ORDER BY repository.id
+            LIMIT #{limit}
+            """)
+    List<Long> findSyncEligibleBindingIds(@Param("limit") int limit);
 
     @Insert("""
             INSERT INTO dp_github_repository (

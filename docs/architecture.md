@@ -55,7 +55,8 @@ GitHub
 → 快速返回 200/202
 → DeliveryWorker 抢占任务
 → EventParser
-→ ActivityService
+→ CommitApplicationService（Push 明细统一 Upsert）
+→ ActivityService（Commit 明细 + 原 Push 聚合）
 → 状态更新为 SUCCEEDED/RETRY_WAIT/DEAD
 ```
 
@@ -99,7 +100,32 @@ Key 是 Reference SHA-256，只限制单 JVM，不同 Credential 不共享全局
 
 Repository Metadata 刷新使用 Conditional GET。200 校验稳定 Repository ID 后更新权威字段、ETag、
 Last-Modified、验证时间和 version；304 不进入 Error Decoder，不覆盖元数据，只更新验证时间并 version+1。
-Issue/PR 业务分页、GitHub App Token 和后台 API 同步状态机尚未实现。
+Issue/PR 业务分页和 GitHub App Token 尚未实现；Commit 对账复用该 Executor，链路如下。
+
+## Commit 对账链路
+
+```text
+Scheduler / Manual 202
+→ SyncRunService（发现、权限、提交）
+→ ReconciliationService（Worker 时 version claim）
+→ Active Binding + Workspace/Project 状态校验
+→ Checkpoint 计算 initialLookback / overlap since
+→ Metadata Client 复核稳定 Repository ID
+→ Commit Client + Link Cursor
+→ 每个 Commit 统一 Upsert 短事务
+→ 每页成功后更新页级进度
+→ 可靠 Checkpoint + Run SUCCEEDED 同事务
+```
+
+`PENDING → RUNNING → SUCCEEDED/RETRY_WAIT/DEAD` 和 `RETRY_WAIT → RUNNING` 使用数据库状态、到期时间与
+version 条件更新。超时 RUNNING 会被扫描恢复到 RETRY_WAIT 或 DEAD。Scheduler 的扫描/线程池提交不是
+claim；多个实例可重复看到候选，只有 Worker 开始时的条件 UPDATE 决定执行权。线程池拒绝发生在 claim 前，
+不会制造假 RUNNING。
+
+Reconciliation 编排方法没有长事务。Metadata 与分页网络调用在事务外；单 Commit + 首次 Activity、页级
+Checkpoint、最终 Checkpoint + SUCCEEDED 都是短事务，失败状态使用独立事务记录。可靠边界来自本轮最大
+GitHub `committed_at`，不是本机当前时间。默认 5 分钟 overlap 会重复读取，由 Repository ID + SHA 和
+Activity 来源唯一键消化。
 
 ## Repository Binding 生命周期
 
@@ -116,10 +142,12 @@ bind → ACTIVE ⇄ DISABLED
 
 ## 一致性
 
-- `github_delivery_id` 唯一约束防重复。
-- 重要业务变更与 Outbox 同事务。
-- 消费者以 event_id 去重。
-- Webhook 保证实时性，定时 API 对账保证完整性。
+- `github_delivery_id` 唯一约束防重复接收。
+- `(github_repository_id, commit_sha)` 防 Webhook/API 双入口重复 Commit。
+- Activity 来源唯一键防重复业务时间线。
+- 开放 Sync Run 唯一键防重复任务，version 条件 UPDATE 防重复 claim 和旧状态覆盖。
+- Webhook 保证实时性，数据库 Run 驱动的定时 API 对账保证 Commit 完整性。
+- Outbox/MQ 尚未实现。
 
 ## 权限
 

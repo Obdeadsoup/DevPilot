@@ -1,7 +1,10 @@
 package com.obdeadsoup.devpilot;
 
 import com.obdeadsoup.devpilot.github.persistence.mapper.GitHubDeliveryMapper;
+import com.obdeadsoup.devpilot.github.persistence.mapper.GitHubCommitMapper;
 import com.obdeadsoup.devpilot.github.persistence.mapper.GitHubRepositoryMapper;
+import com.obdeadsoup.devpilot.github.persistence.mapper.GitHubSyncCheckpointMapper;
+import com.obdeadsoup.devpilot.github.persistence.mapper.GitHubSyncRunMapper;
 import com.obdeadsoup.devpilot.identity.persistence.mapper.UserMapper;
 import com.obdeadsoup.devpilot.project.persistence.mapper.ProjectActivityMapper;
 import com.obdeadsoup.devpilot.project.persistence.mapper.ProjectMapper;
@@ -39,6 +42,21 @@ class IsolatedPersistenceTestConfiguration {
     @Bean
     GitHubDeliveryMapper gitHubDeliveryMapper() {
         return Mockito.mock(GitHubDeliveryMapper.class);
+    }
+
+    @Bean
+    GitHubCommitMapper gitHubCommitMapper() {
+        return Mockito.mock(GitHubCommitMapper.class);
+    }
+
+    @Bean
+    GitHubSyncCheckpointMapper gitHubSyncCheckpointMapper() {
+        return Mockito.mock(GitHubSyncCheckpointMapper.class);
+    }
+
+    @Bean
+    GitHubSyncRunMapper gitHubSyncRunMapper() {
+        return Mockito.mock(GitHubSyncRunMapper.class);
     }
 
     @Bean
