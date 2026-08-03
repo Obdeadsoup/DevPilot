@@ -122,18 +122,20 @@ class GitHubWebhookIntegrationTest {
     }
 
     @Test
-    void flywayCreatesTheFiveVerticalSliceTablesAndProcessingScanIndex() {
+    void flywayCreatesWebhookAndSnapshotTablesWithCoreIndexes() {
         Integer count = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
                 FROM information_schema.tables
                 WHERE table_schema = DATABASE()
                   AND table_name IN (
                     'dp_workspace', 'dp_project', 'dp_github_repository',
-                    'dp_github_delivery', 'dp_project_activity'
+                    'dp_github_delivery', 'dp_project_activity',
+                    'dp_github_issue', 'dp_github_pull_request',
+                    'dp_github_pull_request_review'
                   )
                 """, Integer.class);
 
-        assertThat(count).isEqualTo(5);
+        assertThat(count).isEqualTo(8);
 
         Integer indexColumns = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
@@ -143,6 +145,19 @@ class GitHubWebhookIntegrationTest {
                   AND index_name = 'idx_github_delivery_processing_scan'
                 """, Integer.class);
         assertThat(indexColumns).isEqualTo(2);
+
+        Integer uniqueSnapshotIndexes = jdbcTemplate.queryForObject("""
+                SELECT COUNT(DISTINCT table_name, index_name)
+                FROM information_schema.statistics
+                WHERE table_schema = DATABASE()
+                  AND non_unique = 0
+                  AND index_name IN (
+                    'uk_github_issue_repository_id', 'uk_github_issue_repository_number',
+                    'uk_github_pr_repository_id', 'uk_github_pr_repository_number',
+                    'uk_github_review_repository_id'
+                  )
+                """, Integer.class);
+        assertThat(uniqueSnapshotIndexes).isEqualTo(5);
     }
 
     @Test
@@ -324,7 +339,7 @@ class GitHubWebhookIntegrationTest {
     @Test
     void unsupportedEventMovesDeliveryDirectlyToDeadWithoutLeakingPayload() {
         byte[] ping = payload("webhooks/ping.json");
-        insertDelivery("delivery-failed", "issues", ping);
+        insertDelivery("delivery-failed", "project", ping);
         long id = deliveryMapper.findByGitHubDeliveryId("delivery-failed").orElseThrow().id();
 
         worker.process(id);
@@ -337,6 +352,107 @@ class GitHubWebhookIntegrationTest {
         assertThat(dead.lastErrorMessage()).isEqualTo("Unsupported GitHub webhook event");
         assertThat(dead.version()).isEqualTo(2);
         assertThat(activityCount("delivery-failed")).isZero();
+    }
+
+    @Test
+    void issueWebhookUsesOneSnapshotRejectsOlderUpdateAndExposesScopedReadApi() throws Exception {
+        byte[] opened = issuePayload("opened", "open", "Initial title", "2026-08-01T01:00:00Z");
+        mockMvc.perform(webhook(opened, "delivery-issue-opened", "issues", signature(opened)))
+                .andExpect(status().isAccepted());
+        await().untilAsserted(() -> assertThat(deliveryStatus("delivery-issue-opened")).isEqualTo("SUCCEEDED"));
+
+        byte[] edited = issuePayload("edited", "open", "Newest title", "2026-08-01T03:00:00Z");
+        mockMvc.perform(webhook(edited, "delivery-issue-edited", "issues", signature(edited)))
+                .andExpect(status().isAccepted());
+        await().untilAsserted(() -> assertThat(deliveryStatus("delivery-issue-edited")).isEqualTo("SUCCEEDED"));
+
+        byte[] closed = issuePayload("closed", "closed", "Newest title", "2026-08-01T04:00:00Z");
+        mockMvc.perform(webhook(closed, "delivery-issue-closed", "issues", signature(closed)))
+                .andExpect(status().isAccepted());
+        await().untilAsserted(() -> assertThat(deliveryStatus("delivery-issue-closed")).isEqualTo("SUCCEEDED"));
+        byte[] reopened = issuePayload("reopened", "open", "Newest title", "2026-08-01T05:00:00Z");
+        mockMvc.perform(webhook(reopened, "delivery-issue-reopened", "issues", signature(reopened)))
+                .andExpect(status().isAccepted());
+        await().untilAsserted(() -> assertThat(deliveryStatus("delivery-issue-reopened")).isEqualTo("SUCCEEDED"));
+        byte[] older = issuePayload("closed", "closed", "Older title", "2026-08-01T02:00:00Z");
+        mockMvc.perform(webhook(older, "delivery-issue-old", "issues", signature(older)))
+                .andExpect(status().isAccepted());
+        await().untilAsserted(() -> assertThat(deliveryStatus("delivery-issue-old")).isEqualTo("SUCCEEDED"));
+
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM dp_github_issue", Integer.class)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject("SELECT title FROM dp_github_issue", String.class)).isEqualTo("Newest title");
+        assertThat(jdbcTemplate.queryForObject("SELECT state FROM dp_github_issue", String.class)).isEqualTo("OPEN");
+        assertThat(activityCount("delivery-issue-old")).isZero();
+
+        mockMvc.perform(get("/api/v1/workspaces/100/projects/200/github/issues")
+                        .with(authentication(ownerAuthentication())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.items[0].body").doesNotExist())
+                .andExpect(jsonPath("$.data.items[0].externalUntrustedContent").value(true));
+
+        mockMvc.perform(get("/api/v1/workspaces/100/projects/200/github/issues"))
+                .andExpect(status().isUnauthorized());
+        fixture.createSecondWorkspaceAndProject();
+        mockMvc.perform(get("/api/v1/workspaces/101/projects/201/github/issues")
+                        .with(authentication(ownerAuthentication())))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void pullRequestAndReviewWebhookUseSeparateStableIdsAndOneActivityPerDelivery() throws Exception {
+        byte[] pull = pullRequestPayload("opened", "open", true, null, "2026-08-01T01:00:00Z");
+        mockMvc.perform(webhook(pull, "delivery-pr-opened", "pull_request", signature(pull)))
+                .andExpect(status().isAccepted());
+        await().untilAsserted(() -> assertThat(deliveryStatus("delivery-pr-opened")).isEqualTo("SUCCEEDED"));
+
+        byte[] ready = pullRequestPayload("ready_for_review", "open", false, null, "2026-08-01T02:00:00Z");
+        mockMvc.perform(webhook(ready, "delivery-pr-ready", "pull_request", signature(ready))).andExpect(status().isAccepted());
+        await().untilAsserted(() -> assertThat(deliveryStatus("delivery-pr-ready")).isEqualTo("SUCCEEDED"));
+        byte[] synchronizedPull = new String(pullRequestPayload("synchronize", "open", false, null,
+                "2026-08-01T03:00:00Z"), StandardCharsets.UTF_8).replace("a".repeat(40), "c".repeat(40))
+                .getBytes(StandardCharsets.UTF_8);
+        mockMvc.perform(webhook(synchronizedPull, "delivery-pr-sync", "pull_request", signature(synchronizedPull)))
+                .andExpect(status().isAccepted());
+        await().untilAsserted(() -> assertThat(deliveryStatus("delivery-pr-sync")).isEqualTo("SUCCEEDED"));
+        byte[] closed = pullRequestPayload("closed", "closed", false, null, "2026-08-01T04:00:00Z");
+        mockMvc.perform(webhook(closed, "delivery-pr-closed", "pull_request", signature(closed))).andExpect(status().isAccepted());
+        await().untilAsserted(() -> assertThat(deliveryStatus("delivery-pr-closed")).isEqualTo("SUCCEEDED"));
+        byte[] merged = pullRequestPayload("closed", "closed", false, "2026-08-01T05:00:00Z", "2026-08-01T05:00:00Z");
+        mockMvc.perform(webhook(merged, "delivery-pr-merged", "pull_request", signature(merged))).andExpect(status().isAccepted());
+        await().untilAsserted(() -> assertThat(deliveryStatus("delivery-pr-merged")).isEqualTo("SUCCEEDED"));
+
+        byte[] review = reviewPayload("submitted", "approved", "2026-08-01T02:00:00Z");
+        mockMvc.perform(webhook(review, "delivery-review-approved", "pull_request_review", signature(review)))
+                .andExpect(status().isAccepted());
+        await().untilAsserted(() -> assertThat(deliveryStatus("delivery-review-approved")).isEqualTo("SUCCEEDED"));
+        byte[] changes = reviewPayload("edited", "changes_requested", "2026-08-01T03:00:00Z");
+        mockMvc.perform(webhook(changes, "delivery-review-changes", "pull_request_review", signature(changes)))
+                .andExpect(status().isAccepted());
+        await().untilAsserted(() -> assertThat(deliveryStatus("delivery-review-changes")).isEqualTo("SUCCEEDED"));
+        byte[] dismissed = reviewPayload("dismissed", "dismissed", "2026-08-01T04:00:00Z");
+        mockMvc.perform(webhook(dismissed, "delivery-review-dismissed", "pull_request_review", signature(dismissed)))
+                .andExpect(status().isAccepted());
+        await().untilAsserted(() -> assertThat(deliveryStatus("delivery-review-dismissed")).isEqualTo("SUCCEEDED"));
+
+        assertThat(jdbcTemplate.queryForObject("SELECT github_pull_request_id FROM dp_github_pull_request", Long.class))
+                .isEqualTo(701L);
+        assertThat(jdbcTemplate.queryForObject("SELECT status FROM dp_github_pull_request", String.class)).isEqualTo("MERGED");
+        assertThat(jdbcTemplate.queryForObject("SELECT github_review_id FROM dp_github_pull_request_review", Long.class))
+                .isEqualTo(901L);
+        assertThat(jdbcTemplate.queryForObject("SELECT state FROM dp_github_pull_request_review", String.class)).isEqualTo("DISMISSED");
+        assertThat(activityCount("delivery-pr-opened")).isEqualTo(1);
+        assertThat(activityCount("delivery-review-approved")).isEqualTo(1);
+    }
+
+    @Test
+    void unsupportedSnapshotActionSucceedsWithoutCreatingSnapshotOrActivity() throws Exception {
+        byte[] payload = issuePayload("milestoned", "open", "Ignored", "2026-08-01T01:00:00Z");
+        mockMvc.perform(webhook(payload, "delivery-issue-unsupported", "issues", signature(payload)))
+                .andExpect(status().isAccepted());
+        await().untilAsserted(() -> assertThat(deliveryStatus("delivery-issue-unsupported")).isEqualTo("SUCCEEDED"));
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM dp_github_issue", Integer.class)).isZero();
+        assertThat(activityCount("delivery-issue-unsupported")).isZero();
     }
 
     @Test
@@ -495,6 +611,38 @@ class GitHubWebhookIntegrationTest {
         } catch (Exception exception) {
             throw new IllegalStateException("Cannot load test payload", exception);
         }
+    }
+
+    private byte[] issuePayload(String action, String state, String title, String updatedAt) {
+        return """
+                {"action":"%s","repository":{"id":123456},"issue":{"id":501,"number":12,
+                "title":"%s","body":"External markdown","state":"%s","user":{"id":7,"login":"octo"},
+                "assignees":[],"labels":[],"html_url":"https://github.com/octo-org/devpilot/issues/12",
+                "created_at":"2026-08-01T00:00:00Z","updated_at":"%s"}}
+                """.formatted(action, title, state, updatedAt).getBytes(StandardCharsets.UTF_8);
+    }
+
+    private byte[] pullRequestPayload(String action, String state, boolean draft, String mergedAt, String updatedAt) {
+        return """
+                {"action":"%s","repository":{"id":123456},"pull_request":{"id":701,"number":22,"title":"PR title",
+                "body":"External PR markdown","state":"%s","draft":%s,"merged":%s,"user":{"id":8,"login":"dev"},
+                "head":{"ref":"feature","sha":"%s"},"base":{"ref":"main","sha":"%s"},
+                "requested_reviewers":[],"assignees":[],"labels":[],"html_url":"https://github.com/octo-org/devpilot/pull/22",
+                "created_at":"2026-08-01T00:00:00Z","updated_at":"%s"%s}}
+                """.formatted(action, state, draft, mergedAt != null, "a".repeat(40), "b".repeat(40), updatedAt,
+                mergedAt == null ? "" : ",\"merged_at\":\"" + mergedAt + "\"").getBytes(StandardCharsets.UTF_8);
+    }
+
+    private byte[] reviewPayload(String action, String state, String submittedAt) {
+        String pull = new String(pullRequestPayload("opened", "open", false, null,
+                "2026-08-01T01:00:00Z"), StandardCharsets.UTF_8);
+        String prObject = pull.substring(pull.indexOf("{\"id\":701"), pull.length() - 2);
+        return ("{\"action\":\"" + action + "\",\"repository\":{\"id\":123456},\"pull_request\":"
+                + prObject + ",\"review\":{\"id\":901,\"state\":\"" + state
+                + "\",\"body\":\"review\",\"commit_id\":\"" + "a".repeat(40)
+                + "\",\"user\":{\"id\":9,\"login\":\"reviewer\"},\"html_url\":"
+                + "\"https://github.com/octo-org/devpilot/pull/22#pullrequestreview-901\",\"submitted_at\":\""
+                + submittedAt + "\"}}").getBytes(StandardCharsets.UTF_8);
     }
 
     private String signature(byte[] payload) {

@@ -91,11 +91,19 @@ Workspace，并对成员用户、创建人设置外键。查询和更新始终�
   `(repository_binding_id, resource_type)`，`last_seen_commit_sha` 是页级安全进度，
   `last_successful_sync_at` 只在整轮成功后推进。
 - `dp_github_sync_run`：`PENDING/RUNNING/RETRY_WAIT/SUCCEEDED/DEAD` 状态机。开放状态生成列唯一键限制
-  同一 Binding/COMMIT 最多一个开放 Run；状态/重试/超时和 Binding 索引支持扫描，version 支持 claim。
+  同一 Binding/资源最多一个开放 Run；状态/重试/超时和 Binding 索引支持扫描，version 支持 claim。
+- `dp_github_issue`：Issue 当前快照；Repository + stable Issue ID、Repository + number 双唯一键。
+- `dp_github_pull_request`：PR 当前快照；Repository + stable PR ID、Repository + number 双唯一键，draft 独立于 status，
+  `reviews_synced_at` 是 PR 级 Review 对账水位。
+- `dp_github_pull_request_review`：Review 当前快照；Repository + stable Review ID 唯一，本地 PR 复合外键同时约束 Binding/Workspace/Project/Repository Scope。
+
+三张快照表的 Body 使用有界 `TEXT` 并以 `CHAR_LENGTH <= 10000` CHECK 限制；数组使用原生 JSON 且限制序列化后
+最多 4000 字符。应用层还会先安全截断并生成稳定 JSON。`content_hash` 不对外返回；它与
+`github_updated_at` 判断外部快照幂等，`version` 仅处理本地并发条件 UPDATE。
 
 ## 尚未创建的规划表
 
-Issue/PR/Review 同步表、Task、Notification、Audit、Outbox 和 Agent 表仍是后续规划，本阶段没有创建。
+Task、Notification、Audit、Outbox 和 Agent 表仍是后续规划，本阶段没有创建。
 
 ## 当前 Flyway 顺序
 
@@ -108,6 +116,7 @@ V5 add project lifecycle constraints
 V6 add github repository binding lifecycle
 V7 add github repository metadata validators
 V8 add github commit reconciliation
+V9 add github issue pr review sync
 ```
 
 V4 不修改 V1–V3，包含 `dp_workspace.owner_user_id/version`、
@@ -139,3 +148,7 @@ V8 不修改 V1–V7，新增 `dp_github_commit`、`dp_github_sync_checkpoint` �
 SHA CHECK 只允许 40 位小写十六进制；Checkpoint/Run 仅允许 `COMMIT`；所有 version 非负。项目时间线
 CHECK 增加 `GITHUB_COMMIT_DISCOVERED`。主要索引覆盖 Project/Repository 时间线、Run 的 PENDING/到期
 RETRY_WAIT 扫描、超时 RUNNING 扫描和 Binding 历史查询。
+
+V9 不修改 V1–V8，新增三张快照表，把 Checkpoint/Run 的 resource_type 扩展到
+`ISSUE / PULL_REQUEST / PULL_REQUEST_REVIEW`，并扩展 Activity 类型 CHECK。所有快照子资源都有 Scope 外键、
+stable ID 唯一键、更新时间查询索引、非负 version 与内容 Hash CHECK。

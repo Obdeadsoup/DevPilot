@@ -55,8 +55,8 @@ GitHub
 → 快速返回 200/202
 → DeliveryWorker 抢占任务
 → EventParser
-→ CommitApplicationService（Push 明细统一 Upsert）
-→ ActivityService（Commit 明细 + 原 Push 聚合）
+→ Commit/Issue/PR/Review ApplicationService（Webhook/API 统一 Upsert）
+→ SnapshotDiff + ActivityService（安全摘要 + 原 Push 聚合）
 → 状态更新为 SUCCEEDED/RETRY_WAIT/DEAD
 ```
 
@@ -100,7 +100,7 @@ Key 是 Reference SHA-256，只限制单 JVM，不同 Credential 不共享全局
 
 Repository Metadata 刷新使用 Conditional GET。200 校验稳定 Repository ID 后更新权威字段、ETag、
 Last-Modified、验证时间和 version；304 不进入 Error Decoder，不覆盖元数据，只更新验证时间并 version+1。
-Issue/PR 业务分页和 GitHub App Token 尚未实现；Commit 对账复用该 Executor，链路如下。
+Issue/PR/Review 业务分页已经复用该 Executor；GitHub App Token 尚未实现。
 
 ## Commit 对账链路
 
@@ -148,6 +148,27 @@ bind → ACTIVE ⇄ DISABLED
 - 开放 Sync Run 唯一键防重复任务，version 条件 UPDATE 防重复 claim 和旧状态覆盖。
 - Webhook 保证实时性，数据库 Run 驱动的定时 API 对账保证 Commit 完整性。
 - Outbox/MQ 尚未实现。
+
+## Issue / PR / Review 快照同步
+
+```text
+Webhook Delivery / API Reconciliation
+→ 强类型 Issue / PR / Review Parser 或 Client DTO
+→ 统一 Snapshot Upsert
+→ github_updated_at 乱序保护 + content_hash 幂等
+→ version 条件 UPDATE
+→ 显式 Snapshot Diff
+→ 每个来源键最多一条 Project Activity
+```
+
+`dp_github_issue`、`dp_github_pull_request`、`dp_github_pull_request_review` 保存的是当前快照，不是完整事件历史。
+PR 的 `OPEN/CLOSED/MERGED` 与 `draft` 分开；Webhook action 也不写入 status。初始 API Backfill 不创建
+“刚刚发生”的 Activity；后续 API 对账只在出现语义差异时使用内容 Hash 派生稳定来源键。Issue API
+必须过滤含 `pull_request` 字段的条目，PR ID 只来自 Pull Requests API。
+
+Review 对账不会每轮扫描全部历史 PR：只选择初始 lookback 内活跃、且 `reviews_synced_at` 为空或早于
+`github_updated_at` 的有限批次。一个 PR 的全部 Review 页成功落库后才推进其水位；整轮完成后再推进
+`PULL_REQUEST_REVIEW` Checkpoint。外部 login 只作为展示元数据，外部正文永不构造本地权限或系统命令。
 
 ## 权限
 

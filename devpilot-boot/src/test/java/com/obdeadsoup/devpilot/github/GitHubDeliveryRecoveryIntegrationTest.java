@@ -166,7 +166,7 @@ class GitHubDeliveryRecoveryIntegrationTest {
     void malformedAndUnsupportedDeliveriesEnterDeadWithoutRetry() {
         byte[] malformed = "{\"repository\":null}".getBytes(StandardCharsets.UTF_8);
         insertDelivery("malformed-dead", "ping", malformed);
-        insertDelivery("unsupported-dead", "issues", pingPayload());
+        insertDelivery("unsupported-dead", "project", pingPayload());
 
         worker.process(delivery("malformed-dead").id());
         worker.process(delivery("unsupported-dead").id());
@@ -292,7 +292,7 @@ class GitHubDeliveryRecoveryIntegrationTest {
     @Test
     void succeededAndDeadDeliveriesCannotBeAutomaticallyClaimedAgain() {
         insertDelivery("terminal-success", "ping", pingPayload());
-        insertDelivery("terminal-dead", "issues", pingPayload());
+        insertDelivery("terminal-dead", "project", pingPayload());
         worker.process(delivery("terminal-success").id());
         worker.process(delivery("terminal-dead").id());
 

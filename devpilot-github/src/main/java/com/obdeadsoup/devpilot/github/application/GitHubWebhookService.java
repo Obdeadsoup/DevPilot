@@ -33,7 +33,9 @@ import java.util.Set;
 @Service
 public class GitHubWebhookService {
 
-    private static final Set<String> SUPPORTED_EVENTS = Set.of("ping", "push");
+    private static final Set<String> SUPPORTED_EVENTS = Set.of(
+            "ping", "push", "issues", "pull_request", "pull_request_review"
+    );
     private static final Logger LOGGER = LoggerFactory.getLogger(GitHubWebhookService.class);
 
     private final GitHubIntegrationProperties properties;
@@ -114,10 +116,8 @@ public class GitHubWebhookService {
                 throw new BusinessException(GitHubWebhookErrorCode.REPOSITORY_DISABLED);
             }
             var secretResult = secretResolver.resolve(repository.webhookSecretRef());
-            LOGGER.debug(
-                    "GitHub webhook secret resolution webhookSecretRef={} secretResolved={}",
-                    repository.webhookSecretRef(), secretResult.isPresent()
-            );
+            LOGGER.debug("GitHub webhook secret resolution repositoryId={} secretResolved={}",
+                    githubRepositoryId, secretResult.isPresent());
             String secret = secretResult
                     .orElseThrow(() -> new BusinessException(GitHubWebhookErrorCode.SECRET_UNAVAILABLE));
             boolean signatureValid = signatureVerifier.verify(rawBody, signatureHeader, secret);

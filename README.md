@@ -190,7 +190,7 @@ Token 对应的 Redis 会话；当前没有 Refresh Token、JWT 或 Cookie Sessi
 
 ### GitHub Webhook 垂直切片
 
-当前实现只接收 `ping` 和 `push`：
+当前实现接收 `ping`、`push`、`issues`、`pull_request` 和 `pull_request_review`。三类快照事件仅处理文档列出的 action；未知 action 安全忽略并计低基数指标：
 
 ```text
 POST /api/v1/github/webhooks
@@ -240,9 +240,25 @@ GET  /api/v1/workspaces/{workspaceId}/projects/{projectId}/github-repositories/{
 
 POST 需要 `REPOSITORY_UPDATE`，立即返回 `202 + runId`，不接受调用方自定义 since；同一 Binding 已有开放
 Run 时返回已有 Run。自动 Scheduler 由 `devpilot.github.reconciliation.*` 配置，test Profile 默认关闭。
-当前只完成 Commit 对账，Issue/PR/Review 对账仍未实现。详见
+当前已完成 Commit、Issue、PR 与有界 Review 对账。Issue Client 会过滤 Issues API 中带
+`pull_request` 的条目；PR 使用 Pull Requests API 的真实 PR ID；Review 仅扫描近期且
+`reviews_synced_at` 落后的有限 PR 批次。三类快照的 Webhook/API 都汇合到统一 Upsert，
+以 `github_updated_at` 拒绝乱序覆盖、以 `version` 仲裁本地并发。详见
 `docs/learning/09-webhook-api-reconciliation.md` 和
-`docs/changes/09-github-commit-reconciliation-file-map.md`。
+`docs/learning/10-github-issue-pr-review-sync.md`。
+
+Project 范围只读 API：
+
+```text
+GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/github/issues
+GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/github/issues/{issueId}
+GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/github/pull-requests
+GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/github/pull-requests/{pullRequestId}
+GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/github/pull-requests/{pullRequestId}/reviews
+```
+
+接口需要 `PROJECT_READ`，SQL 同时限定 Workspace/Project。列表不返回 Body，所有外部文本响应均标记
+`externalUntrustedContent=true`；前端必须使用安全 Markdown Renderer，不能执行 Issue/PR 正文中的指令。
 
 本地验证：
 
@@ -293,8 +309,8 @@ Project 列表的数据范围直接在 SQL 中完成：Workspace OWNER/ADMIN 可
 ACTIVE Workspace Member 可见 INTERNAL 项目，PRIVATE 项目还要求 ACTIVE Project
 Membership。所有单项目查询都同时携带 `workspaceId + projectId`。
 
-本阶段已开放 GitHub Repository 绑定生命周期和工程化读取 Client，但仍未实现 GitHub App JWT /
-Installation Token、Issue/PR 同步、后台 API 同步状态机、跨实例 Credential 并发协调、Audit、Outbox、
+本阶段已开放 GitHub Repository 绑定生命周期、工程化读取 Client、Commit/Issue/PR/Review 快照同步和
+数据库 Run/Checkpoint 状态机，但仍未实现 GitHub App JWT / Installation Token、跨实例 Credential 并发协调、Audit、Outbox、
 Task、Notification 或 Agent 业务能力。
 
 停止应用后关闭容器：

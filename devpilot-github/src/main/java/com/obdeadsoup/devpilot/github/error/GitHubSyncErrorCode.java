@@ -10,7 +10,11 @@ public enum GitHubSyncErrorCode implements ErrorCode {
     SYNC_STATE_CONFLICT("GITHUB_SYNC_0502", "GitHub sync state was changed concurrently", HttpStatus.CONFLICT),
     CHECKPOINT_CONFLICT("GITHUB_SYNC_0503", "GitHub sync checkpoint was changed concurrently", HttpStatus.CONFLICT),
     COMMIT_SCOPE_CONFLICT("GITHUB_SYNC_0504", "GitHub commit scope conflicts with the repository binding", HttpStatus.CONFLICT),
-    COMMIT_RESPONSE_INVALID("GITHUB_SYNC_0505", "GitHub commit data is invalid", HttpStatus.BAD_GATEWAY);
+    COMMIT_RESPONSE_INVALID("GITHUB_SYNC_0505", "GitHub commit data is invalid", HttpStatus.BAD_GATEWAY),
+    SNAPSHOT_SCOPE_CONFLICT("GITHUB_SYNC_0506", "GitHub snapshot scope conflicts with the repository binding", HttpStatus.CONFLICT),
+    SNAPSHOT_RESPONSE_INVALID("GITHUB_SYNC_0507", "GitHub snapshot data is invalid", HttpStatus.BAD_GATEWAY),
+    SNAPSHOT_STATE_CONFLICT("GITHUB_SYNC_0508", "GitHub snapshot was changed concurrently", HttpStatus.CONFLICT),
+    SNAPSHOT_NOT_FOUND("GITHUB_SYNC_0404", "GitHub snapshot was not found", HttpStatus.NOT_FOUND);
 
     private final String code;
     private final String message;

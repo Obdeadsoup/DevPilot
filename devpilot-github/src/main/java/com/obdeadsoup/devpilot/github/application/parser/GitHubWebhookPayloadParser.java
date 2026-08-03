@@ -11,6 +11,9 @@ import com.obdeadsoup.devpilot.project.application.command.RecordProjectActivity
 import com.obdeadsoup.devpilot.project.domain.ProjectActivitySourceType;
 import com.obdeadsoup.devpilot.project.domain.ProjectActivityType;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
+import com.obdeadsoup.devpilot.github.application.GitHubWebhookActionMetrics;
+import com.obdeadsoup.devpilot.github.persistence.entity.GitHubRepositoryEntity;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -23,9 +26,30 @@ import java.util.ArrayList;
 public class GitHubWebhookPayloadParser {
 
     private final ObjectMapper objectMapper;
+    private final GitHubIssueWebhookParser issueParser;
+    private final GitHubPullRequestWebhookParser pullRequestParser;
+    private final GitHubPullRequestReviewWebhookParser reviewParser;
+    private final GitHubWebhookActionMetrics actionMetrics;
 
     public GitHubWebhookPayloadParser(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
+        this.issueParser = null;
+        this.pullRequestParser = null;
+        this.reviewParser = null;
+        this.actionMetrics = null;
+    }
+
+    @Autowired
+    public GitHubWebhookPayloadParser(ObjectMapper objectMapper,
+                                      GitHubIssueWebhookParser issueParser,
+                                      GitHubPullRequestWebhookParser pullRequestParser,
+                                      GitHubPullRequestReviewWebhookParser reviewParser,
+                                      GitHubWebhookActionMetrics actionMetrics) {
+        this.objectMapper=objectMapper;
+        this.issueParser=issueParser;
+        this.pullRequestParser=pullRequestParser;
+        this.reviewParser=reviewParser;
+        this.actionMetrics=actionMetrics;
     }
 
     public long extractRepositoryId(byte[] rawBody) {
@@ -71,6 +95,37 @@ public class GitHubWebhookPayloadParser {
             }
             default -> throw new BusinessException(GitHubWebhookErrorCode.UNSUPPORTED_EVENT);
         };
+    }
+
+    /** 按 Binding 验证 repository.id，并把三类业务 Payload 收敛为强类型 Upsert 命令。 */
+    public GitHubWebhookProcessingPlan parseForProcessing(
+            GitHubDeliveryEntity delivery,
+            GitHubRepositoryEntity binding
+    ) {
+        if ("ping".equals(delivery.eventType()) || "push".equals(delivery.eventType())) {
+            return parseForProcessing(delivery);
+        }
+        if (issueParser == null) {
+            throw new BusinessException(GitHubWebhookErrorCode.UNSUPPORTED_EVENT);
+        }
+        return switch (delivery.eventType()) {
+            case "issues" -> issueParser.parse(delivery, binding)
+                    .map(command -> new GitHubWebhookProcessingPlan(null, List.of(), List.of(command), List.of(), List.of()))
+                    .orElseGet(() -> unsupported(delivery));
+            case "pull_request" -> pullRequestParser.parse(delivery, binding)
+                    .map(command -> new GitHubWebhookProcessingPlan(null, List.of(), List.of(), List.of(command), List.of()))
+                    .orElseGet(() -> unsupported(delivery));
+            case "pull_request_review" -> reviewParser.parse(delivery, binding)
+                    .map(parsed -> new GitHubWebhookProcessingPlan(null, List.of(), List.of(),
+                            List.of(parsed.pullRequest()), List.of(parsed.review())))
+                    .orElseGet(() -> unsupported(delivery));
+            default -> throw new BusinessException(GitHubWebhookErrorCode.UNSUPPORTED_EVENT);
+        };
+    }
+
+    private GitHubWebhookProcessingPlan unsupported(GitHubDeliveryEntity delivery) {
+        actionMetrics.unsupported(delivery.eventType());
+        return new GitHubWebhookProcessingPlan(null, List.of(), List.of(), List.of(), List.of());
     }
 
     private RecordProjectActivityCommand parsePing(GitHubDeliveryEntity delivery) {

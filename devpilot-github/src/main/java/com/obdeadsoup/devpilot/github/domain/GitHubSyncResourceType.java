@@ -1,5 +1,8 @@
 package com.obdeadsoup.devpilot.github.domain;
 
 public enum GitHubSyncResourceType {
-    COMMIT
+    COMMIT,
+    ISSUE,
+    PULL_REQUEST,
+    PULL_REQUEST_REVIEW
 }

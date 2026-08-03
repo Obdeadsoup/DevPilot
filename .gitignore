@@ -34,6 +34,7 @@ docs/*
 docs/changes/*
 !docs/changes/08-github-api-client-file-map.md
 !docs/changes/09-github-commit-reconciliation-file-map.md
+!docs/changes/10-github-issue-pr-review-file-map.md
 !docs/learning/
 docs/learning/*
 !docs/learning/02-reliable-webhook-ingress.md
@@ -44,3 +45,11 @@ docs/learning/*
 !docs/learning/07-github-repository-binding.md
 !docs/learning/08-github-api-client-engineering.md
 !docs/learning/09-webhook-api-reconciliation.md
+!docs/learning/10-github-issue-pr-review-sync.md
+
+# DevPilot web generated resources
+devpilot-web/node_modules/
+devpilot-web/dist/
+devpilot-web/.vite/
+devpilot-web/*.tsbuildinfo
+frontend-handoff/

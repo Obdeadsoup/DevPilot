@@ -2,6 +2,9 @@ package com.obdeadsoup.devpilot;
 
 import com.obdeadsoup.devpilot.github.persistence.mapper.GitHubDeliveryMapper;
 import com.obdeadsoup.devpilot.github.persistence.mapper.GitHubCommitMapper;
+import com.obdeadsoup.devpilot.github.persistence.mapper.GitHubIssueMapper;
+import com.obdeadsoup.devpilot.github.persistence.mapper.GitHubPullRequestMapper;
+import com.obdeadsoup.devpilot.github.persistence.mapper.GitHubPullRequestReviewMapper;
 import com.obdeadsoup.devpilot.github.persistence.mapper.GitHubRepositoryMapper;
 import com.obdeadsoup.devpilot.github.persistence.mapper.GitHubSyncCheckpointMapper;
 import com.obdeadsoup.devpilot.github.persistence.mapper.GitHubSyncRunMapper;
@@ -47,6 +50,21 @@ class IsolatedPersistenceTestConfiguration {
     @Bean
     GitHubCommitMapper gitHubCommitMapper() {
         return Mockito.mock(GitHubCommitMapper.class);
+    }
+
+    @Bean
+    GitHubIssueMapper gitHubIssueMapper() {
+        return Mockito.mock(GitHubIssueMapper.class);
+    }
+
+    @Bean
+    GitHubPullRequestMapper gitHubPullRequestMapper() {
+        return Mockito.mock(GitHubPullRequestMapper.class);
+    }
+
+    @Bean
+    GitHubPullRequestReviewMapper gitHubPullRequestReviewMapper() {
+        return Mockito.mock(GitHubPullRequestReviewMapper.class);
     }
 
     @Bean

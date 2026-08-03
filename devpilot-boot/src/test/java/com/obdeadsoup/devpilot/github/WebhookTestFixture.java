@@ -22,6 +22,9 @@ final class WebhookTestFixture {
         jdbcTemplate.update("DELETE FROM dp_github_sync_run");
         jdbcTemplate.update("DELETE FROM dp_github_sync_checkpoint");
         jdbcTemplate.update("DELETE FROM dp_project_activity");
+        jdbcTemplate.update("DELETE FROM dp_github_pull_request_review");
+        jdbcTemplate.update("DELETE FROM dp_github_issue");
+        jdbcTemplate.update("DELETE FROM dp_github_pull_request");
         jdbcTemplate.update("DELETE FROM dp_github_commit");
         jdbcTemplate.update("DELETE FROM dp_github_delivery");
         jdbcTemplate.update("DELETE FROM dp_github_repository");

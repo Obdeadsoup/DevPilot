@@ -4,6 +4,7 @@ import com.obdeadsoup.devpilot.framework.error.BusinessException;
 import com.obdeadsoup.devpilot.github.application.GitHubSyncFailureClassifier.Classification;
 import com.obdeadsoup.devpilot.github.domain.GitHubSyncRunStatus;
 import com.obdeadsoup.devpilot.github.domain.GitHubSyncTriggerType;
+import com.obdeadsoup.devpilot.github.domain.GitHubSyncResourceType;
 import com.obdeadsoup.devpilot.github.error.GitHubSyncErrorCode;
 import com.obdeadsoup.devpilot.github.persistence.entity.GitHubSyncCheckpointEntity;
 import com.obdeadsoup.devpilot.github.persistence.entity.GitHubSyncRunEntity;
@@ -56,6 +57,16 @@ public class GitHubSyncRunStateService {
             return new CreationResult(requiredOpen(bindingId), true);
         }
         return new CreationResult(requiredOpen(bindingId), false);
+    }
+
+    @Transactional
+    public CreationResult createOrGetOpen(long bindingId,GitHubSyncResourceType resourceType,
+                                          GitHubSyncTriggerType triggerType,Long requestedBy){
+        Optional<GitHubSyncRunEntity> existing=runMapper.findOpenRun(bindingId,resourceType.name());
+        if(existing.isPresent())return new CreationResult(existing.get(),true);
+        try{runMapper.insertPendingResource(bindingId,resourceType.name(),triggerType.name(),requestedBy);}
+        catch(DuplicateKeyException exception){return new CreationResult(requiredOpen(bindingId,resourceType),true);}
+        return new CreationResult(requiredOpen(bindingId,resourceType),false);
     }
 
     /** PENDING/到期 RETRY_WAIT 才能 claim；扫描重复只会让一个 Worker 的条件 UPDATE 成功。 */
@@ -143,6 +154,11 @@ public class GitHubSyncRunStateService {
 
     private GitHubSyncRunEntity requiredOpen(long bindingId) {
         return runMapper.findOpenCommitRun(bindingId)
+                .orElseThrow(() -> new BusinessException(GitHubSyncErrorCode.SYNC_STATE_CONFLICT));
+    }
+
+    private GitHubSyncRunEntity requiredOpen(long bindingId,GitHubSyncResourceType resourceType){
+        return runMapper.findOpenRun(bindingId,resourceType.name())
                 .orElseThrow(() -> new BusinessException(GitHubSyncErrorCode.SYNC_STATE_CONFLICT));
     }
 

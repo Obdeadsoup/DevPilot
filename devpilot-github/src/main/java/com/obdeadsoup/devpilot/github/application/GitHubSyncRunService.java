@@ -23,6 +23,9 @@ import org.springframework.stereotype.Service;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.function.LongConsumer;
+import com.obdeadsoup.devpilot.github.domain.GitHubSyncResourceType;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * Sync Run 的用户入口与扫描提交服务。Scheduler 扫描允许多实例看到相同候选，
@@ -40,11 +43,12 @@ public class GitHubSyncRunService {
     private final GitHubSyncCheckpointMapper checkpointMapper;
     private final GitHubSyncRunMapper runMapper;
     private final GitHubSyncRunStateService stateService;
-    private final GitHubCommitReconciliationService reconciliationService;
+    private final LongConsumer reconciliationSubmitter;
     private final TaskExecutor taskExecutor;
     private final GitHubReconciliationProperties properties;
     private final Clock clock;
 
+    @Autowired
     public GitHubSyncRunService(
             CurrentUserProvider currentUserProvider,
             ProjectAuthorizationService authorizationService,
@@ -52,7 +56,7 @@ public class GitHubSyncRunService {
             GitHubSyncCheckpointMapper checkpointMapper,
             GitHubSyncRunMapper runMapper,
             GitHubSyncRunStateService stateService,
-            GitHubCommitReconciliationService reconciliationService,
+            GitHubReconciliationDispatcher reconciliationDispatcher,
             @Qualifier("githubDeliveryTaskExecutor") TaskExecutor taskExecutor,
             GitHubReconciliationProperties properties,
             Clock clock
@@ -63,10 +67,26 @@ public class GitHubSyncRunService {
         this.checkpointMapper = checkpointMapper;
         this.runMapper = runMapper;
         this.stateService = stateService;
-        this.reconciliationService = reconciliationService;
+        this.reconciliationSubmitter = reconciliationDispatcher::dispatch;
         this.taskExecutor = taskExecutor;
         this.properties = properties;
         this.clock = clock;
+    }
+
+    public GitHubSyncRunService(CurrentUserProvider currentUserProvider,
+                                ProjectAuthorizationService authorizationService,
+                                GitHubRepositoryMapper repositoryMapper,
+                                GitHubSyncCheckpointMapper checkpointMapper,
+                                GitHubSyncRunMapper runMapper,
+                                GitHubSyncRunStateService stateService,
+                                GitHubCommitReconciliationService reconciliationService,
+                                TaskExecutor taskExecutor,
+                                GitHubReconciliationProperties properties,
+                                Clock clock){
+        this.currentUserProvider=currentUserProvider;this.authorizationService=authorizationService;
+        this.repositoryMapper=repositoryMapper;this.checkpointMapper=checkpointMapper;this.runMapper=runMapper;
+        this.stateService=stateService;this.reconciliationSubmitter=reconciliationService::reconcile;
+        this.taskExecutor=taskExecutor;this.properties=properties;this.clock=clock;
     }
 
     /** 创建 MANUAL Run 后立即异步提交；不接受用户 since，补偿边界始终由配置与 Checkpoint 决定。 */
@@ -123,6 +143,16 @@ public class GitHubSyncRunService {
                     .map(ignored -> GitHubSyncTriggerType.SCHEDULED)
                     .orElse(GitHubSyncTriggerType.INITIAL);
             stateService.createOrGetOpen(bindingId, trigger, null);
+            for (GitHubSyncResourceType resource : java.util.List.of(
+                    GitHubSyncResourceType.ISSUE,
+                    GitHubSyncResourceType.PULL_REQUEST,
+                    GitHubSyncResourceType.PULL_REQUEST_REVIEW)) {
+                GitHubSyncTriggerType resourceTrigger = checkpointMapper.findCheckpoint(bindingId, resource.name())
+                        .filter(checkpoint -> checkpoint.lastSuccessfulSyncAt() != null)
+                        .map(ignored -> GitHubSyncTriggerType.SCHEDULED)
+                        .orElse(GitHubSyncTriggerType.INITIAL);
+                stateService.createOrGetOpen(bindingId, resource, resourceTrigger, null);
+            }
         }
         for (long runId : runMapper.findRunnableCandidateIds(now, batchSize)) {
             submit(runId);
@@ -131,10 +161,10 @@ public class GitHubSyncRunService {
 
     private void submit(long runId) {
         try {
-            taskExecutor.execute(() -> reconciliationService.reconcile(runId));
+            taskExecutor.execute(() -> reconciliationSubmitter.accept(runId));
         } catch (TaskRejectedException exception) {
             LOGGER.warn(
-                    "GitHub commit sync submission rejected runId={} exceptionType={}",
+                    "GitHub sync submission rejected runId={} exceptionType={}",
                     runId, exception.getClass().getName()
             );
         }

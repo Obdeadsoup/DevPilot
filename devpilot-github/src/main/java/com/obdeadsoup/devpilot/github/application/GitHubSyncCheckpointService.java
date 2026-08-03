@@ -12,10 +12,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import com.obdeadsoup.devpilot.github.domain.GitHubSyncResourceType;
 
 /**
- * Commit Checkpoint 的短事务服务。初次使用受限 Lookback，后续从可靠边界减去 overlapWindow；
- * 重叠会重复读取，但统一 Upsert 保证不会重复 Commit 或 Activity。
+ * 各同步资源的 Checkpoint 短事务服务。初次使用受限 Lookback，后续从可靠边界减去 overlapWindow；
+ * 重叠会重复读取，但各资源的统一 Upsert 保证不会重复快照或 Activity。
  */
 @Service
 public class GitHubSyncCheckpointService {
@@ -35,6 +36,12 @@ public class GitHubSyncCheckpointService {
     public GitHubSyncCheckpointEntity getOrCreate(long bindingId) {
         checkpointMapper.insertIfAbsent(bindingId, properties.overlapWindow().toSeconds());
         return findRequired(bindingId);
+    }
+
+    @Transactional
+    public GitHubSyncCheckpointEntity getOrCreate(long bindingId,GitHubSyncResourceType resourceType){
+        checkpointMapper.insertResourceIfAbsent(bindingId,resourceType.name(),properties.overlapWindow().toSeconds());
+        return findRequired(bindingId,resourceType);
     }
 
     public Instant calculateSince(GitHubSyncCheckpointEntity checkpoint, Instant now) {
@@ -83,6 +90,11 @@ public class GitHubSyncCheckpointService {
 
     private GitHubSyncCheckpointEntity findRequired(long bindingId) {
         return checkpointMapper.findCommitCheckpoint(bindingId)
+                .orElseThrow(() -> new BusinessException(GitHubSyncErrorCode.CHECKPOINT_CONFLICT));
+    }
+
+    private GitHubSyncCheckpointEntity findRequired(long bindingId,GitHubSyncResourceType resourceType){
+        return checkpointMapper.findCheckpoint(bindingId,resourceType.name())
                 .orElseThrow(() -> new BusinessException(GitHubSyncErrorCode.CHECKPOINT_CONFLICT));
     }
 }

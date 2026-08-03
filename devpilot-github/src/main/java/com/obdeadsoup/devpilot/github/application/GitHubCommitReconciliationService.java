@@ -33,7 +33,7 @@ import java.util.Optional;
  * 最终 Checkpoint + SUCCEEDED 分别由短事务服务提交，避免慢网络长期占用连接或数据库锁。
  */
 @Service
-public class GitHubCommitReconciliationService {
+public class GitHubCommitReconciliationService implements GitHubReconciliationWorker {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GitHubCommitReconciliationService.class);
 
@@ -70,6 +70,7 @@ public class GitHubCommitReconciliationService {
     }
 
     /** 执行一个候选 Run；claim 失败说明其他实例已处理，安全返回。 */
+    @Override
     public void reconcile(long runId) {
         Optional<GitHubSyncRunEntity> claimed = runStateService.claim(runId);
         if (claimed.isEmpty()) {
@@ -90,6 +91,11 @@ public class GitHubCommitReconciliationService {
                     exception.getClass().getName(), result
             );
         }
+    }
+
+    @Override
+    public com.obdeadsoup.devpilot.github.domain.GitHubSyncResourceType resourceType(){
+        return com.obdeadsoup.devpilot.github.domain.GitHubSyncResourceType.COMMIT;
     }
 
     private void reconcileClaimed(GitHubSyncRunEntity run) {

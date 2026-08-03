@@ -11,8 +11,8 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 /**
- * Commit Checkpoint 持久化边界。页级进度与整轮可靠边界都用 version 条件更新，
- * 其中 lastSuccessfulSyncAt 只允许在本地数据已保存且整轮成功时推进。
+ * 多资源 Checkpoint 持久化边界。整轮可靠边界使用 version 条件更新；Commit 另有页级 SHA 进度。
+ * lastSuccessfulSyncAt 只允许在本地数据已保存且整轮成功时推进。
  */
 @Mapper
 public interface GitHubSyncCheckpointMapper {
@@ -20,13 +20,18 @@ public interface GitHubSyncCheckpointMapper {
     @Insert("""
             INSERT INTO dp_github_sync_checkpoint (
                 repository_binding_id, resource_type, overlap_seconds
-            ) VALUES (#{bindingId}, 'COMMIT', #{overlapSeconds})
+            ) VALUES (#{bindingId}, #{resourceType}, #{overlapSeconds})
             ON DUPLICATE KEY UPDATE id = id
             """)
-    int insertIfAbsent(
+    int insertResourceIfAbsent(
             @Param("bindingId") long bindingId,
+            @Param("resourceType") String resourceType,
             @Param("overlapSeconds") long overlapSeconds
     );
+
+    default int insertIfAbsent(long bindingId,long overlapSeconds){
+        return insertResourceIfAbsent(bindingId,"COMMIT",overlapSeconds);
+    }
 
     @Select("""
             SELECT id, repository_binding_id AS repositoryBindingId,
@@ -39,6 +44,17 @@ public interface GitHubSyncCheckpointMapper {
             WHERE repository_binding_id = #{bindingId} AND resource_type = 'COMMIT'
             """)
     Optional<GitHubSyncCheckpointEntity> findCommitCheckpoint(@Param("bindingId") long bindingId);
+
+    @Select("""
+            SELECT id, repository_binding_id AS repositoryBindingId, resource_type AS resourceType,
+                   last_successful_sync_at AS lastSuccessfulSyncAt,
+                   last_seen_commit_sha AS lastSeenCommitSha, overlap_seconds AS overlapSeconds,
+                   created_at AS createdAt, updated_at AS updatedAt, version
+            FROM dp_github_sync_checkpoint
+            WHERE repository_binding_id=#{bindingId} AND resource_type=#{resourceType}
+            """)
+    Optional<GitHubSyncCheckpointEntity> findCheckpoint(@Param("bindingId") long bindingId,
+                                                        @Param("resourceType") String resourceType);
 
     @Update("""
             UPDATE dp_github_sync_checkpoint

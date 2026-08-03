@@ -29,13 +29,18 @@ public interface GitHubSyncRunMapper {
     @Insert("""
             INSERT INTO dp_github_sync_run (
                 repository_binding_id, resource_type, trigger_type, status, requested_by
-            ) VALUES (#{bindingId}, 'COMMIT', #{triggerType}, 'PENDING', #{requestedBy})
+            ) VALUES (#{bindingId}, #{resourceType}, #{triggerType}, 'PENDING', #{requestedBy})
             """)
-    int insertPending(
+    int insertPendingResource(
             @Param("bindingId") long bindingId,
+            @Param("resourceType") String resourceType,
             @Param("triggerType") String triggerType,
             @Param("requestedBy") Long requestedBy
     );
+
+    default int insertPending(long bindingId,String triggerType,Long requestedBy){
+        return insertPendingResource(bindingId,"COMMIT",triggerType,requestedBy);
+    }
 
     @Select("""
             SELECT
@@ -47,6 +52,10 @@ public interface GitHubSyncRunMapper {
             ORDER BY id DESC LIMIT 1
             """)
     Optional<GitHubSyncRunEntity> findOpenCommitRun(@Param("bindingId") long bindingId);
+
+    @Select("SELECT " + COLUMNS + " FROM dp_github_sync_run WHERE repository_binding_id=#{bindingId} AND resource_type=#{resourceType} AND status IN ('PENDING','RUNNING','RETRY_WAIT') ORDER BY id DESC LIMIT 1")
+    Optional<GitHubSyncRunEntity> findOpenRun(@Param("bindingId") long bindingId,
+                                              @Param("resourceType") String resourceType);
 
     @Select("""
             SELECT

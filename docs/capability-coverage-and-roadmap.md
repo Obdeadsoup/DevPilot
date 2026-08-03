@@ -39,12 +39,13 @@ Maven 多模块、Boot、MySQL/Redis、Flyway、Actuator、测试环境、统一
 Secret 分离，以及活动 Binding 生成列唯一约束。工程化读取 Client 已完成固定 Host、Timeout、统一错误、
 GET/HEAD 有限 Retry、Primary/Secondary Rate Limit、Link Cursor、Conditional GET、单实例 Credential
 并发限制和低基数指标。Commit Webhook/API 双入口、Repository ID + SHA 幂等、List Commits Link 分页、
-Checkpoint overlap 和 Sync Run 有限重试/DEAD/超时恢复已经完成；Issue/PR 的业务分页循环尚未实现。
+Checkpoint overlap 和 Sync Run 有限重试/DEAD/超时恢复已经完成。Issue/PR/Review Webhook 强类型解析、
+当前快照、显式 Diff、统一 Upsert、Project 范围只读 API 和有界 API 对账也已完成。
 
 ### 阶段 3：可靠同步
 
 Commit 对账已具备 API `RETRY_WAIT/DEAD`、数据库 version claim、定时恢复和受 RBAC 保护的人工 202 触发。
-下一步实现 Issue/PR/Review 对账、GitHub App Token、DEAD 管理/审计和更完整的人工重放。当前数据库 claim
+下一步实现 GitHub App Token、DEAD 管理/审计和更完整的人工重放。当前数据库 claim
 已提供跨实例单 Run 互斥；Credential Semaphore 仍只限制单 JVM 的 HTTP 并发。
 
 ### 阶段 4：任务与通知
