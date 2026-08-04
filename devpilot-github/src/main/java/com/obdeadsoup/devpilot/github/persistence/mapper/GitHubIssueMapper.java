@@ -82,4 +82,7 @@ public interface GitHubIssueMapper {
     Optional<GitHubIssueEntity> findByProjectAndId(@Param("workspaceId") long workspaceId,
                                                    @Param("projectId") long projectId,
                                                    @Param("id") long id);
+
+    @Select("SELECT " + COLUMNS + " FROM dp_github_issue WHERE id=#{id}")
+    Optional<GitHubIssueEntity> findById(@Param("id") long id);
 }

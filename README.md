@@ -93,6 +93,8 @@ devpilot-github
 - [第 8 节变更文件地图](docs/changes/08-github-api-client-file-map.md)
 - [Webhook/API Commit 对账学习笔记](docs/learning/09-webhook-api-reconciliation.md)
 - [第 9 节变更文件地图](docs/changes/09-github-commit-reconciliation-file-map.md)
+- [Task 状态机与 GitHub 关联学习笔记](docs/learning/11-task-workflow-and-github-links.md)
+- [第 11 节变更文件地图](docs/changes/11-task-workflow-file-map.md)
 - [Codex 分阶段指令](codex-prompts/all-prompts.md)
 
 ## 开发方式
@@ -131,7 +133,9 @@ docker compose ps
 
 Compose 使用 MySQL 8 和 Redis 7。为避开宿主机已占用的端口，MySQL 默认映射为 `3307:3306`，Redis 默认映射为 `6380:6379`；Redis 容器名为 `devpilot-redis8`。端口可以在 `.env` 中调整。
 
-### 构建与启动后端
+### 构建与启动
+
+#### 后端
 
 ```powershell
 mvn clean verify
@@ -146,6 +150,16 @@ java -jar .\devpilot-boot\target\devpilot-boot-0.0.1-SNAPSHOT.jar --spring.profi
 ```powershell
 Invoke-RestMethod http://localhost:8080/actuator/health
 ```
+#### 前端
+
+```powershell
+Set-Location .\devpilot-web
+npm install
+npm run typecheck
+npm run build
+npm run dev
+```
+前端在本机5173端口
 
 ### 本地登录与 Bearer Token
 
@@ -311,7 +325,9 @@ Membership。所有单项目查询都同时携带 `workspaceId + projectId`。
 
 本阶段已开放 GitHub Repository 绑定生命周期、工程化读取 Client、Commit/Issue/PR/Review 快照同步和
 数据库 Run/Checkpoint 状态机，但仍未实现 GitHub App JWT / Installation Token、跨实例 Credential 并发协调、Audit、Outbox、
-Task、Notification 或 Agent 业务能力。
+Notification 或 Agent 业务能力。Task 已提供本地 BACKLOG/TODO/IN_PROGRESS/IN_REVIEW/DONE/CANCELED
+状态机、版本条件更新、History、Project Activity 与显式 GitHub Issue/PR Snapshot 关联；PR MERGED 和
+Issue CLOSED 不会自动完成 Task，截止提醒与通知尚未实现。
 
 停止应用后关闭容器：
 

@@ -14,6 +14,9 @@ import com.obdeadsoup.devpilot.project.persistence.mapper.ProjectMapper;
 import com.obdeadsoup.devpilot.project.persistence.mapper.ProjectMemberMapper;
 import com.obdeadsoup.devpilot.project.persistence.mapper.WorkspaceMapper;
 import com.obdeadsoup.devpilot.project.persistence.mapper.WorkspaceMemberMapper;
+import com.obdeadsoup.devpilot.task.persistence.mapper.TaskGitHubLinkMapper;
+import com.obdeadsoup.devpilot.task.persistence.mapper.TaskMapper;
+import com.obdeadsoup.devpilot.task.persistence.mapper.TaskStatusHistoryMapper;
 import org.mockito.Mockito;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -51,6 +54,15 @@ class IsolatedPersistenceTestConfiguration {
     GitHubCommitMapper gitHubCommitMapper() {
         return Mockito.mock(GitHubCommitMapper.class);
     }
+
+    @Bean
+    TaskMapper taskMapper() { return Mockito.mock(TaskMapper.class); }
+
+    @Bean
+    TaskStatusHistoryMapper taskStatusHistoryMapper() { return Mockito.mock(TaskStatusHistoryMapper.class); }
+
+    @Bean
+    TaskGitHubLinkMapper taskGitHubLinkMapper() { return Mockito.mock(TaskGitHubLinkMapper.class); }
 
     @Bean
     GitHubIssueMapper gitHubIssueMapper() {

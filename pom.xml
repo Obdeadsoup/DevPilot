@@ -20,6 +20,7 @@
     <description>GitHub project collaboration and AI engineering assistant</description>
 
     <modules>
+        <module>devpilot-task</module>
         <module>devpilot-framework</module>
         <module>devpilot-identity</module>
         <module>devpilot-project</module>
@@ -49,6 +50,11 @@
             <dependency>
                 <groupId>com.obdeadsoup</groupId>
                 <artifactId>devpilot-project</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.obdeadsoup</groupId>
+                <artifactId>devpilot-task</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

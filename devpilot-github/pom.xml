@@ -23,6 +23,10 @@
             <artifactId>devpilot-project</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.obdeadsoup</groupId>
+            <artifactId>devpilot-task</artifactId>
+        </dependency>
+        <dependency>
             <groupId>com.baomidou</groupId>
             <artifactId>mybatis-plus-core</artifactId>
         </dependency>

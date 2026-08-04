@@ -19,8 +19,8 @@ devpilot-knowledge       文档、会议纪要、检索
 devpilot-agent           会话、工具、提议、确认和执行
 ```
 
-当前依赖：identity→framework，project→framework+identity，
-github→framework+project，boot→全部初始模块。Workspace、两级成员关系、角色、Permission
+当前依赖：identity→framework，project→framework+identity，task→framework+identity+project，
+github→framework+project+task，boot→全部初始模块。Workspace、两级成员关系、角色、Permission
 和授权服务全部属于 project；identity 只向 project 提供当前用户和用户有效性能力，绝不反向
 依赖 project。移除 Workspace Member 与撤销其 Project Membership 在 project 模块同一事务
 内完成。禁止 project 依赖 github。
@@ -204,7 +204,10 @@ Authentication，GitHub App permission 也不替代 DevPilot 的本地授权。
 
 ## 任务状态机
 
-提供 `moveToTodo`、`startTask`、`submitForReview`、`requestChanges`、`completeTask`、`cancelTask`。每个动作负责状态、权限、负责人、乐观锁、状态历史、事件和通知。
+提供 `plan`、`returnToBacklog`、`startTask`、`submitForReview`、`requestChanges`、`completeTask`、
+`cancelTask`、`reopenTask`。每个动作负责状态、权限、负责人、乐观锁、状态历史和 Project Activity；
+Issue/PR/Review Snapshot 不会自动推进 Task。Task 通过 Port 读取 GitHub Snapshot，避免 task→github
+循环依赖；通知尚未实现。
 
 ## Agent 架构
 

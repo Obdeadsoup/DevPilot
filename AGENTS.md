@@ -25,13 +25,15 @@ Only create:
 - devpilot-identity
 - devpilot-project
 - devpilot-github
+- devpilot-task
 
 Dependency direction:
 
 - boot may depend on all initial modules
 - identity -> framework
 - project -> framework
-- github -> framework and project
+- task -> framework, identity and project
+- github -> framework, project and task
 - framework must not depend on business modules
 - project must not depend on github
 - avoid circular dependencies

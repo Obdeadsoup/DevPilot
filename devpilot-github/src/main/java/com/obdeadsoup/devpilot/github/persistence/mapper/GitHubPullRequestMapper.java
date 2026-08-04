@@ -90,6 +90,9 @@ public interface GitHubPullRequestMapper {
                                                          @Param("projectId") long projectId,
                                                          @Param("id") long id);
 
+    @Select("SELECT " + COLUMNS + " FROM dp_github_pull_request WHERE id=#{id}")
+    Optional<GitHubPullRequestEntity> findById(@Param("id") long id);
+
     @Select("""
             SELECT
             """ + COLUMNS + """

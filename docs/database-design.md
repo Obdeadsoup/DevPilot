@@ -103,7 +103,9 @@ Workspace，并对成员用户、创建人设置外键。查询和更新始终�
 
 ## 尚未创建的规划表
 
-Task、Notification、Audit、Outbox 和 Agent 表仍是后续规划，本阶段没有创建。
+Notification、Audit、Outbox 和 Agent 表仍是后续规划，本阶段没有创建。V10 已创建 `dp_task`、不可变
+`dp_task_status_history` 和软移除的 `dp_task_github_link`；ACTIVE Link 的生成列唯一键保证同一 GitHub
+stable object 同时最多关联一个 Task。
 
 ## 当前 Flyway 顺序
 
@@ -117,6 +119,7 @@ V6 add github repository binding lifecycle
 V7 add github repository metadata validators
 V8 add github commit reconciliation
 V9 add github issue pr review sync
+V10 add task workflow and github links
 ```
 
 V4 不修改 V1–V3，包含 `dp_workspace.owner_user_id/version`、

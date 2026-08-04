@@ -4,6 +4,8 @@ import com.obdeadsoup.devpilot.framework.error.BusinessException;
 import com.obdeadsoup.devpilot.project.api.dto.ProjectActivityPageResponse;
 import com.obdeadsoup.devpilot.project.api.dto.ProjectActivityResponse;
 import com.obdeadsoup.devpilot.project.application.command.RecordProjectActivityCommand;
+import com.obdeadsoup.devpilot.project.application.command.RecordTaskProjectActivityCommand;
+import com.obdeadsoup.devpilot.project.domain.ProjectActivitySourceType;
 import com.obdeadsoup.devpilot.project.error.ProjectErrorCode;
 import com.obdeadsoup.devpilot.project.persistence.mapper.ProjectActivityMapper;
 import com.obdeadsoup.devpilot.project.persistence.mapper.ProjectMapper;
@@ -28,6 +30,22 @@ public class ProjectActivityService {
     public boolean recordGitHubActivity(RecordProjectActivityCommand command) {
         requireActivityWritableProject(command.workspaceId(), command.projectId());
         return activityMapper.insertIfAbsent(command) == 1;
+    }
+
+    /**
+     * 在调用方的 Task 写事务中写入本地 Activity。来源键由 taskId 与递增 version 确定，
+     * 唯一索引是并发重放时最终防线，不依赖伪造 GitHub Delivery。
+     */
+    @Transactional
+    public boolean recordTaskActivity(RecordTaskProjectActivityCommand command) {
+        requireActivityWritableProject(command.workspaceId(), command.projectId());
+        return activityMapper.insertIfAbsent(new RecordProjectActivityCommand(
+                command.workspaceId(), command.projectId(), null, null,
+                ProjectActivitySourceType.TASK, command.activityType(),
+                "task:" + command.taskId() + ":v" + command.taskVersion(),
+                null, null, null, null, null, null, null, command.title(), command.summary(), null,
+                command.occurredAt()
+        )) == 1;
     }
 
     @PreAuthorize(
