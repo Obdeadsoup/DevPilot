@@ -17,6 +17,7 @@ import com.obdeadsoup.devpilot.project.persistence.mapper.WorkspaceMemberMapper;
 import com.obdeadsoup.devpilot.task.persistence.mapper.TaskGitHubLinkMapper;
 import com.obdeadsoup.devpilot.task.persistence.mapper.TaskMapper;
 import com.obdeadsoup.devpilot.task.persistence.mapper.TaskStatusHistoryMapper;
+import com.obdeadsoup.devpilot.notification.persistence.mapper.NotificationMapper;
 import org.mockito.Mockito;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -24,6 +25,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 
 @TestConfiguration(proxyBeanMethods = false)
 class IsolatedPersistenceTestConfiguration {
+    @Bean NotificationMapper notificationMapper() { return Mockito.mock(NotificationMapper.class); }
 
     @Bean
     ProjectMapper projectMapper() {

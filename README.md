@@ -95,6 +95,8 @@ devpilot-github
 - [第 9 节变更文件地图](docs/changes/09-github-commit-reconciliation-file-map.md)
 - [Task 状态机与 GitHub 关联学习笔记](docs/learning/11-task-workflow-and-github-links.md)
 - [第 11 节变更文件地图](docs/changes/11-task-workflow-file-map.md)
+- [Notification 提醒学习笔记](docs/learning/12-notification-reminders.md)
+- [第 12 节变更文件地图](docs/changes/12-notification-reminders-file-map.md)
 - [Codex 分阶段指令](codex-prompts/all-prompts.md)
 
 ## 开发方式
@@ -327,7 +329,18 @@ Membership。所有单项目查询都同时携带 `workspaceId + projectId`。
 数据库 Run/Checkpoint 状态机，但仍未实现 GitHub App JWT / Installation Token、跨实例 Credential 并发协调、Audit、Outbox、
 Notification 或 Agent 业务能力。Task 已提供本地 BACKLOG/TODO/IN_PROGRESS/IN_REVIEW/DONE/CANCELED
 状态机、版本条件更新、History、Project Activity 与显式 GitHub Issue/PR Snapshot 关联；PR MERGED 和
-Issue CLOSED 不会自动完成 Task，截止提醒与通知尚未实现。
+Issue CLOSED 不会自动完成 Task。当前已实现数据库站内 Notification、Task 到期/逾期/Review 与
+PR current-head Review 超时的 fixedDelay 有界扫描。数据库是可靠来源，前端第一版可轮询
+`GET /api/v1/notifications/unread-count`；SSE、邮件和第三方 Channel 尚未实现。
+
+Notification API（接收人只来自当前 Principal，不接受客户端 userId）：
+
+```text
+GET  /api/v1/notifications
+GET  /api/v1/notifications/unread-count
+POST /api/v1/notifications/{notificationId}/read
+POST /api/v1/notifications/read-all
+```
 
 停止应用后关闭容器：
 

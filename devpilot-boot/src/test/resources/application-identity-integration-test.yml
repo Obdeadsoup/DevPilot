@@ -11,6 +11,9 @@ management:
       enabled: false
 
 devpilot:
+  notification:
+    reminder:
+      enabled: false
   identity:
     access-token-ttl: 2h
   github:

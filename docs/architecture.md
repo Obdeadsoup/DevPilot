@@ -1,5 +1,12 @@
 # DevPilot 系统架构
 
+## Notification 末端聚合
+
+`notification -> identity/project/task/github`，上游模块不反向依赖 notification。Task 候选、Project
+Manager 与 PR Review 状态均通过中立只读 Port 提供；Scheduler 只触发 fixedDelay 扫描。每条通知在独立
+短事务 INSERT，重复扫描与多实例并发由 `(recipient_user_id, dedupe_key)` 唯一索引收敛。数据库 Notification
+是可靠来源；当前没有 SSE、邮件、Outbox 或分布式锁。
+
 ## 原则
 
 采用模块化单体；外部事件先可靠落库再异步处理；Agent 只能调用应用服务；高风险写操作人工确认；优先使用数据库约束和乐观锁；外部调用显式处理超时、分页、限流、重试和幂等。

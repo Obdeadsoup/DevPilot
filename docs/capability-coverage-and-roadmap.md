@@ -50,8 +50,9 @@ Commit 对账已具备 API `RETRY_WAIT/DEAD`、数据库 version claim、定时�
 
 ### 阶段 4：任务与通知
 
-本地 Task 状态机、Issue/PR 显式关联、乐观锁、状态 History 与 Project Activity 已完成。截止提醒、Review
-超时、站内通知和 SSE 尚未实现；GitHub 状态不会自动修改 Task。
+本地 Task 状态机、Issue/PR 显式关联、乐观锁、状态 History 与 Project Activity 已完成。Task 截止、
+逾期升级、Task/PR Review 超时与可靠站内通知已完成；前端可轮询未读数。SSE/邮件尚未实现，GitHub 状态
+不会自动修改 Task。
 
 ### 阶段 5：工程化
 

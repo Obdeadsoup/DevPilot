@@ -26,6 +26,7 @@ Only create:
 - devpilot-project
 - devpilot-github
 - devpilot-task
+- devpilot-notification
 
 Dependency direction:
 
@@ -34,6 +35,8 @@ Dependency direction:
 - project -> framework
 - task -> framework, identity and project
 - github -> framework, project and task
+- notification -> framework, identity, project, task and github
+- boot may depend on notification; business modules must not depend on notification
 - framework must not depend on business modules
 - project must not depend on github
 - avoid circular dependencies

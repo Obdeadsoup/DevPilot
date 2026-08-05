@@ -12,6 +12,15 @@ spring:
     validate-migration-naming: true
 
 devpilot:
+  notification:
+    reminder:
+      enabled: true
+      scan-interval: 1m
+      batch-size: 100
+      task-due-soon-window: 24h
+      task-overdue-escalation-delay: 24h
+      task-review-timeout: 24h
+      pull-request-review-timeout: 24h
   identity:
     access-token-ttl: 2h
   github:

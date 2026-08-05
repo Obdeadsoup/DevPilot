@@ -16,6 +16,10 @@
     <dependencies>
         <dependency>
             <groupId>com.obdeadsoup</groupId>
+            <artifactId>devpilot-notification</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.obdeadsoup</groupId>
             <artifactId>devpilot-task</artifactId>
         </dependency>
         <dependency>

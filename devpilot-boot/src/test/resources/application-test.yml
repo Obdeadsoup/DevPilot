@@ -16,6 +16,9 @@ management:
         include: health
 
 devpilot:
+  notification:
+    reminder:
+      enabled: false
   github:
     base-url: http://127.0.0.1:1
     delivery-recovery-enabled: false

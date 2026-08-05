@@ -11,10 +11,27 @@ import org.apache.ibatis.annotations.Update;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import com.obdeadsoup.devpilot.github.application.port.PullRequestReviewState;
 
 /** PR 当前快照与有界 Review 候选 Mapper；不会在每轮扫描全部历史 PR。 */
 @Mapper
 public interface GitHubPullRequestMapper {
+    /** 只读 ACTIVE IMPLEMENTED_BY Link；current-head approval 必须同时匹配 APPROVED 与当前 head_sha。 */
+    @Select("""
+            SELECT pr.id AS pullRequestId,pr.github_pull_request_id AS githubPullRequestId,
+                   pr.pull_request_number AS number,pr.status,pr.draft,pr.head_sha AS headSha,pr.html_url AS htmlUrl,
+                   EXISTS(SELECT 1 FROM dp_github_pull_request_review r WHERE r.pull_request_id=pr.id AND r.state='APPROVED' AND r.commit_sha=pr.head_sha) AS hasCurrentHeadApproval,
+                   (SELECT r.state FROM dp_github_pull_request_review r WHERE r.pull_request_id=pr.id ORDER BY r.submitted_at DESC,r.id DESC LIMIT 1) AS latestReviewState,
+                   pr.workspace_id AS workspaceId,pr.project_id AS projectId
+            FROM dp_task_github_link l JOIN dp_github_pull_request pr
+              ON pr.id=l.pull_request_snapshot_id AND pr.workspace_id=l.workspace_id AND pr.project_id=l.project_id
+            WHERE l.workspace_id=#{workspaceId} AND l.project_id=#{projectId} AND l.task_id=#{taskId}
+              AND l.link_status='ACTIVE' AND l.resource_type='PULL_REQUEST' AND l.relation_type='IMPLEMENTED_BY'
+            ORDER BY l.id DESC LIMIT 1
+            """)
+    Optional<PullRequestReviewState> findReviewStateForTask(@Param("workspaceId") long workspaceId,
+                                                             @Param("projectId") long projectId,
+                                                             @Param("taskId") long taskId);
 
     String COLUMNS = """
             id, workspace_id AS workspaceId, project_id AS projectId,

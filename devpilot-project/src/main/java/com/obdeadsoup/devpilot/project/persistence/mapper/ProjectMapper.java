@@ -12,6 +12,28 @@ import java.util.Optional;
 
 @Mapper
 public interface ProjectMapper {
+    /** Scope 同时限定 Workspace/Project；只返回 ACTIVE 本地成员，INVITED/SUSPENDED/REMOVED 不参与。 */
+    @Select("""
+            SELECT user_id FROM (
+              SELECT w.owner_user_id AS user_id FROM dp_workspace w JOIN dp_project p ON p.workspace_id=w.id
+               WHERE w.id=#{workspaceId} AND p.id=#{projectId} AND w.status='ACTIVE' AND w.deleted=0 AND p.deleted=0
+              UNION
+              SELECT wm.user_id FROM dp_workspace_member wm JOIN dp_project p ON p.workspace_id=wm.workspace_id
+               WHERE wm.workspace_id=#{workspaceId} AND p.id=#{projectId} AND wm.status='ACTIVE' AND wm.role='ADMIN' AND p.deleted=0
+              UNION
+              SELECT pm.user_id FROM dp_project_member pm JOIN dp_project p ON p.id=pm.project_id AND p.workspace_id=pm.workspace_id
+               WHERE pm.workspace_id=#{workspaceId} AND pm.project_id=#{projectId} AND pm.status='ACTIVE' AND pm.role='PROJECT_ADMIN' AND p.deleted=0
+            ) managers WHERE user_id IS NOT NULL ORDER BY user_id
+            """)
+    List<Long> findNotificationManagers(@Param("workspaceId") long workspaceId,@Param("projectId") long projectId);
+
+    @Select("""
+            SELECT COUNT(*) FROM dp_project p JOIN dp_workspace w ON w.id=p.workspace_id
+            WHERE p.id=#{projectId} AND p.workspace_id=#{workspaceId} AND p.deleted=0 AND p.status<>'ARCHIVED'
+              AND w.deleted=0 AND w.status='ACTIVE' AND EXISTS (SELECT 1 FROM dp_user u WHERE u.id=#{userId} AND u.status='ACTIVE' AND u.deleted=0)
+              AND (w.owner_user_id=#{userId} OR EXISTS (SELECT 1 FROM dp_workspace_member wm WHERE wm.workspace_id=w.id AND wm.user_id=#{userId} AND wm.status='ACTIVE'))
+            """)
+    int countActiveNotificationRecipient(@Param("userId") long userId,@Param("workspaceId") long workspaceId,@Param("projectId") long projectId);
 
     String COLUMNS = """
             id,

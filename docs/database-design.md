@@ -101,9 +101,16 @@ Workspace，并对成员用户、创建人设置外键。查询和更新始终�
 最多 4000 字符。应用层还会先安全截断并生成稳定 JSON。`content_hash` 不对外返回；它与
 `github_updated_at` 判断外部快照幂等，`version` 仅处理本地并发条件 UPDATE。
 
+### dp_notification
+
+V11 创建可靠站内通知表。`UNIQUE(recipient_user_id, dedupe_key)` 是重复扫描和多实例并发的最终
+幂等防线；`status/read_at` CHECK 保证 UNREAD/READ 一致，Project 复合外键保证 Scope。
+索引覆盖接收人未读分页、Workspace/Project 时间线及来源排查。历史通知不级联删除，不保存
+GitHub Body、Payload、Token 或 Secret。
+
 ## 尚未创建的规划表
 
-Notification、Audit、Outbox 和 Agent 表仍是后续规划，本阶段没有创建。V10 已创建 `dp_task`、不可变
+Audit、Outbox 和 Agent 表仍是后续规划。V10 已创建 `dp_task`、不可变
 `dp_task_status_history` 和软移除的 `dp_task_github_link`；ACTIVE Link 的生成列唯一键保证同一 GitHub
 stable object 同时最多关联一个 Task。
 
@@ -120,6 +127,7 @@ V7 add github repository metadata validators
 V8 add github commit reconciliation
 V9 add github issue pr review sync
 V10 add task workflow and github links
+V11 add reliable notifications
 ```
 
 V4 不修改 V1–V3，包含 `dp_workspace.owner_user_id/version`、

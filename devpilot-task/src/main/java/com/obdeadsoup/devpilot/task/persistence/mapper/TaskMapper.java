@@ -11,10 +11,34 @@ import org.apache.ibatis.annotations.Update;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import com.obdeadsoup.devpilot.task.application.port.TaskReminderCandidate;
 
 /** Task 的 scoped SQL。所有修改同时携带 scope、状态和 version，防止旧请求覆盖新状态。 */
 @Mapper
 public interface TaskMapper {
+    /** 有界扫描并在 SQL 中排除终态；Review 时间由最近的提交审核 History 投影。 */
+    @Select("""
+            <script>
+            SELECT t.id AS taskId,t.workspace_id AS workspaceId,t.project_id AS projectId,
+                   CONCAT(p.project_key,'-',t.id) AS displayKey,t.title,t.status,
+                   t.reporter_user_id AS reporterUserId,t.assignee_user_id AS assigneeUserId,
+                   t.due_at AS dueAt,
+                   (SELECT MAX(h.occurred_at) FROM dp_task_status_history h
+                    WHERE h.task_id=t.id AND h.action='SUBMITTED_FOR_REVIEW') AS submittedForReviewAt,
+                   t.version AS taskVersion
+            FROM dp_task t JOIN dp_project p ON p.id=t.project_id AND p.workspace_id=t.workspace_id
+            WHERE t.deleted=0 AND p.deleted=0 AND p.status&lt;&gt;'ARCHIVED'
+            <choose>
+              <when test='kind == "DUE"'>AND t.status NOT IN ('DONE','CANCELED') AND t.due_at &gt; #{point} AND t.due_at &lt;= #{upper}</when>
+              <when test='kind == "OVERDUE"'>AND t.status NOT IN ('DONE','CANCELED') AND t.due_at &lt; #{point}</when>
+              <when test='kind == "ESCALATION"'>AND t.status NOT IN ('DONE','CANCELED') AND t.due_at &lt;= #{point}</when>
+              <otherwise>AND t.status='IN_REVIEW' AND EXISTS (SELECT 1 FROM dp_task_status_history h WHERE h.task_id=t.id AND h.action='SUBMITTED_FOR_REVIEW' GROUP BY h.task_id HAVING MAX(h.occurred_at) &lt;= #{point})</otherwise>
+            </choose>
+            ORDER BY COALESCE(t.due_at,t.updated_at),t.id LIMIT #{limit}
+            </script>
+            """)
+    List<TaskReminderCandidate> findReminderCandidates(@Param("kind") String kind,@Param("point") LocalDateTime point,
+                                                        @Param("upper") LocalDateTime upper,@Param("limit") int limit);
     String COLUMNS = """
             id, workspace_id AS workspaceId, project_id AS projectId, title, description, status, priority,
             reporter_user_id AS reporterUserId, assignee_user_id AS assigneeUserId, due_at AS dueAt,
