@@ -16,8 +16,12 @@ management:
         include: health
 
 devpilot:
+  outbox:
+    enabled: false
   notification:
     reminder:
+      enabled: false
+    sse:
       enabled: false
   github:
     base-url: http://127.0.0.1:1

@@ -11,8 +11,12 @@ management:
       enabled: false
 
 devpilot:
+  outbox:
+    enabled: false
   notification:
     reminder:
+      enabled: false
+    sse:
       enabled: false
   identity:
     access-token-ttl: 2h

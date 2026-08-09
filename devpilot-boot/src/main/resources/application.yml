@@ -12,6 +12,17 @@ spring:
     validate-migration-naming: true
 
 devpilot:
+  outbox:
+    enabled: true
+    scan-interval: 5s
+    batch-size: 100
+    max-retries: 5
+    initial-backoff: 1s
+    max-backoff: 5m
+    processing-timeout: 2m
+    worker-core-threads: 2
+    worker-max-threads: 4
+    worker-queue-capacity: 200
   notification:
     reminder:
       enabled: true
@@ -21,6 +32,11 @@ devpilot:
       task-overdue-escalation-delay: 24h
       task-review-timeout: 24h
       pull-request-review-timeout: 24h
+    sse:
+      enabled: true
+      timeout: 30m
+      heartbeat-interval: 20s
+      max-connections-per-user: 5
   identity:
     access-token-ttl: 2h
   github:
