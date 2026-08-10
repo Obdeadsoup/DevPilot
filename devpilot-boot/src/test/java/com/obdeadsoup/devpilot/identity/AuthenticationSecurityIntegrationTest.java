@@ -37,6 +37,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @Testcontainers(disabledWithoutDocker = true)
@@ -144,6 +145,10 @@ class AuthenticationSecurityIntegrationTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.code").value("IDENTITY_0401"));
+
+        mockMvc.perform(get("/api/v1/notifications/stream"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("IDENTITY_0401"));
     }
 
     @Test
@@ -236,6 +241,23 @@ class AuthenticationSecurityIntegrationTest {
                 .andExpect(status().isForbidden())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.code").value("IDENTITY_0404"));
+    }
+
+    @Test
+    void bearerTokenEstablishesNotificationSseAndReceivesConnectedEnvelope() throws Exception {
+        String accessToken = accessToken(login(TEST_USERNAME, TEST_PASSWORD)
+                .andExpect(status().isOk())
+                .andReturn());
+
+        MvcResult result = mockMvc.perform(get("/api/v1/notifications/stream")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
+                .andExpect(request().asyncStarted())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM))
+                .andReturn();
+
+        assertThat(result.getResponse().getContentAsString())
+                .contains("event:connected", "\"connected\":true", "\"unreadCount\":0")
+                .doesNotContain("accessToken", "passwordHash");
     }
 
     @Test

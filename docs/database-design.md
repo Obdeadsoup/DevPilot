@@ -110,7 +110,7 @@ GitHub Body、Payload、Token 或 Secret。
 
 ## 尚未创建的规划表
 
-Audit、Outbox 和 Agent 表仍是后续规划。V10 已创建 `dp_task`、不可变
+Agent 表仍是后续规划。V10 已创建 `dp_task`、不可变
 `dp_task_status_history` 和软移除的 `dp_task_github_link`；ACTIVE Link 的生成列唯一键保证同一 GitHub
 stable object 同时最多关联一个 Task。
 
@@ -128,6 +128,8 @@ V8 add github commit reconciliation
 V9 add github issue pr review sync
 V10 add task workflow and github links
 V11 add reliable notifications
+V12 add transactional outbox and instant notification types
+V13 add dead replay tracking and append-only audit
 ```
 
 V4 不修改 V1–V3，包含 `dp_workspace.owner_user_id/version`、
@@ -150,6 +152,20 @@ UNIQUE(workspace_id, active_repository_full_name)
 已解绑历史的两个生成列均为 NULL，因此同一仓库可经历任意多轮绑定/解绑；活动 Binding 仍全局按稳定
 GitHub Repository ID 唯一。V6 还增加 Repository `version >= 0` CHECK，原有
 `ACTIVE / DISABLED` CHECK 保持不变。
+
+V12 不修改 V1–V11，新增 `dp_outbox_event`。`event_key` 唯一；`processing_status` 仅允许
+`PENDING/PROCESSING/RETRY_WAIT/PROCESSED/DEAD`；retry_count/version 非负。重试、stale、聚合和事件类型
+索引分别服务扫描与诊断。所有抢占和状态写入由 status+version 条件 UPDATE 仲裁。
+
+V12 仅通过 DROP/ADD 既有 CHECK 扩展 `dp_notification.notification_type`，加入六类 Task 即时通知，保留
+`UNIQUE(recipient_user_id,dedupe_key)` 不变。Outbox JSON 是最小业务事实快照，不保存 Task description、
+Token、Secret、Authentication 或 Java 类名。
+
+V13 不修改历史 migration。`dp_audit_log` 是 append-only 运维事实表，没有 updated_at/version/逻辑删除，
+索引覆盖 scope、actor、resource、action 与 result 的时间查询。metadata_json 由应用白名单限制，禁止 Payload、
+Token、Secret、SQL 和堆栈。`dp_outbox_event` 与 `dp_github_sync_run` 增加 replay_of、sequence、requestedBy、
+reason 及 FK/CHECK/唯一索引；原记录字段保持 NULL/0。Sync Run trigger CHECK 增加 MANUAL_REPLAY，既有开放 Run
+生成列唯一键保持不变。
 
 V7 不修改 V1–V6，仅为 `dp_github_repository` 增加内部字段 `metadata_etag VARCHAR(255)` 和
 `metadata_last_modified DATETIME(6)`。它们支持 Repository Metadata Conditional GET，不进入普通前端

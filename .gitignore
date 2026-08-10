@@ -37,7 +37,12 @@ docs/changes/*
 !docs/changes/10-github-issue-pr-review-file-map.md
 !docs/changes/11-task-workflow-file-map.md
 !docs/changes/12-notification-reminders-file-map.md
+!docs/changes/13-transactional-outbox-sse-file-map.md
+!docs/changes/14-dead-replay-audit-file-map.md
 docs/learning/*
+!docs/learning/
+!docs/learning/13-transactional-outbox-and-sse.md
+!docs/learning/14-dead-replay-and-audit.md
 
 # DevPilot web generated resources
 devpilot-web/node_modules/

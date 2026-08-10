@@ -53,7 +53,7 @@ public class DatabaseOutboxEventPublisher implements OutboxEventPublisher {
         } catch (DuplicateKeyException exception) {
             OutboxEventEntity existing = mapper.findByEventKeyForUpdate(event.eventKey())
                     .orElseThrow(() -> conflict("Duplicate event key winner is not visible"));
-            if (!sameFact(existing, event, payloadJson)) {
+            if (!sameFact(existing, event)) {
                 throw conflict("Outbox event key points to a different fact");
             }
             metrics.counter("devpilot.outbox.deduplicated", "eventType", event.eventType()).increment();
@@ -82,14 +82,21 @@ public class DatabaseOutboxEventPublisher implements OutboxEventPublisher {
         return entity;
     }
 
-    private boolean sameFact(
-            OutboxEventEntity existing, OutboxEventEnvelope event, String payloadJson) {
+    private boolean sameFact(OutboxEventEntity existing, OutboxEventEnvelope event) {
         return existing.getAggregateType().equals(event.aggregateType())
                 && existing.getAggregateId() == event.aggregateId()
                 && existing.getEventType().equals(event.eventType())
                 && existing.getSchemaVersion() == event.schemaVersion()
-                && existing.getPayloadJson().equals(payloadJson)
+                && sameJson(existing.getPayloadJson(), event)
                 && existing.getOccurredAt().equals(event.occurredAt());
+    }
+
+    private boolean sameJson(String existingPayloadJson, OutboxEventEnvelope event) {
+        try {
+            return objectMapper.readTree(existingPayloadJson).equals(event.payload());
+        } catch (JsonProcessingException exception) {
+            return false;
+        }
     }
 
     private OutboxProcessingException conflict(String message) {

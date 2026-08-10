@@ -3,12 +3,14 @@ package com.obdeadsoup.devpilot.notification.application;
 import com.obdeadsoup.devpilot.framework.error.BusinessException;
 import com.obdeadsoup.devpilot.identity.application.CurrentUserProvider;
 import com.obdeadsoup.devpilot.notification.error.NotificationErrorCode;
+import com.obdeadsoup.devpilot.notification.event.NotificationCommittedEvent;
 import com.obdeadsoup.devpilot.notification.persistence.mapper.NotificationMapper;
 import com.obdeadsoup.devpilot.project.application.port.ProjectNotificationRecipientQuery;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,18 +26,21 @@ public class NotificationApplicationService {
     private final CurrentUserProvider users;
     private final Clock clock;
     private final MeterRegistry metrics;
+    private final ApplicationEventPublisher events;
 
     public NotificationApplicationService(
             NotificationMapper mapper,
             ProjectNotificationRecipientQuery recipients,
             CurrentUserProvider users,
             Clock clock,
-            MeterRegistry metrics) {
+            MeterRegistry metrics,
+            ApplicationEventPublisher events) {
         this.mapper = mapper;
         this.recipients = recipients;
         this.users = users;
         this.clock = clock;
         this.metrics = metrics;
+        this.events = events;
     }
 
     /** 每条通知独立短事务；多实例同时 INSERT 由 recipient + dedupeKey 唯一索引仲裁，冲突是正常去重。 */
@@ -44,6 +49,12 @@ public class NotificationApplicationService {
         validate(command);
         try {
             mapper.insert(command);
+            long notificationId = mapper.findByRecipientAndDedupe(
+                            command.recipientUserId(), command.dedupeKey())
+                    .orElseThrow(() -> new IllegalStateException("Created notification is not visible"))
+                    .id();
+            events.publishEvent(new NotificationCommittedEvent(
+                    notificationId, command.recipientUserId(), command.occurredAt()));
             metrics.counter("notification.created", "result", "created").increment();
             return NotificationCreateResult.CREATED;
         } catch (DuplicateKeyException exception) {

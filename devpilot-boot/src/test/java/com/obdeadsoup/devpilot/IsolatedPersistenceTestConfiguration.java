@@ -1,5 +1,7 @@
 package com.obdeadsoup.devpilot;
 
+import com.obdeadsoup.devpilot.audit.persistence.mapper.AuditLogMapper;
+import com.obdeadsoup.devpilot.audit.persistence.mapper.DeadLetterMapper;
 import com.obdeadsoup.devpilot.github.persistence.mapper.GitHubDeliveryMapper;
 import com.obdeadsoup.devpilot.github.persistence.mapper.GitHubCommitMapper;
 import com.obdeadsoup.devpilot.github.persistence.mapper.GitHubIssueMapper;
@@ -18,6 +20,7 @@ import com.obdeadsoup.devpilot.task.persistence.mapper.TaskGitHubLinkMapper;
 import com.obdeadsoup.devpilot.task.persistence.mapper.TaskMapper;
 import com.obdeadsoup.devpilot.task.persistence.mapper.TaskStatusHistoryMapper;
 import com.obdeadsoup.devpilot.notification.persistence.mapper.NotificationMapper;
+import com.obdeadsoup.devpilot.outbox.persistence.mapper.OutboxEventMapper;
 import org.mockito.Mockito;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -25,6 +28,9 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 
 @TestConfiguration(proxyBeanMethods = false)
 class IsolatedPersistenceTestConfiguration {
+    @Bean AuditLogMapper auditLogMapper() { return Mockito.mock(AuditLogMapper.class); }
+    @Bean DeadLetterMapper deadLetterMapper() { return Mockito.mock(DeadLetterMapper.class); }
+    @Bean OutboxEventMapper outboxEventMapper() { return Mockito.mock(OutboxEventMapper.class); }
     @Bean NotificationMapper notificationMapper() { return Mockito.mock(NotificationMapper.class); }
 
     @Bean

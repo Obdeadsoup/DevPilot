@@ -28,6 +28,7 @@ Only create:
 - devpilot-task
 - devpilot-notification
 - devpilot-outbox
+- devpilot-audit
 
 Dependency direction:
 
@@ -40,6 +41,8 @@ Dependency direction:
 - outbox -> framework
 - task -> framework, identity, project and outbox
 - notification -> framework, identity, project, task, github and outbox
+- audit -> framework, identity, project, github and outbox
+- project, github and outbox must not depend on audit
 - task and notification may depend on outbox API; outbox must not depend on business modules
 - boot may depend on notification; business modules must not depend on notification
 - framework must not depend on business modules

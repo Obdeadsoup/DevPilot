@@ -64,6 +64,7 @@ devpilot-project
 devpilot-github
 devpilot-task
 devpilot-notification
+devpilot-outbox
 devpilot-audit
 devpilot-knowledge
 devpilot-agent
@@ -97,6 +98,10 @@ devpilot-github
 - [第 11 节变更文件地图](docs/changes/11-task-workflow-file-map.md)
 - [Notification 提醒学习笔记](docs/learning/12-notification-reminders.md)
 - [第 12 节变更文件地图](docs/changes/12-notification-reminders-file-map.md)
+- [Transactional Outbox 与 SSE 学习笔记](docs/learning/13-transactional-outbox-and-sse.md)
+- [第 13 节变更文件地图](docs/changes/13-transactional-outbox-sse-file-map.md)
+- [DEAD Replay 与 Audit 学习笔记](docs/learning/14-dead-replay-and-audit.md)
+- [第 14 节变更文件地图](docs/changes/14-dead-replay-audit-file-map.md)
 - [Codex 分阶段指令](codex-prompts/all-prompts.md)
 
 ## 开发方式
@@ -326,12 +331,13 @@ ACTIVE Workspace Member 可见 INTERNAL 项目，PRIVATE 项目还要求 ACTIVE 
 Membership。所有单项目查询都同时携带 `workspaceId + projectId`。
 
 本阶段已开放 GitHub Repository 绑定生命周期、工程化读取 Client、Commit/Issue/PR/Review 快照同步和
-数据库 Run/Checkpoint 状态机，但仍未实现 GitHub App JWT / Installation Token、跨实例 Credential 并发协调、Audit、Outbox、
-Notification 或 Agent 业务能力。Task 已提供本地 BACKLOG/TODO/IN_PROGRESS/IN_REVIEW/DONE/CANCELED
+数据库 Run/Checkpoint 状态机，但仍未实现 GitHub App JWT / Installation Token、跨实例 Credential 并发协调、Audit 或 Agent。
+Task 已提供本地 BACKLOG/TODO/IN_PROGRESS/IN_REVIEW/DONE/CANCELED
 状态机、版本条件更新、History、Project Activity 与显式 GitHub Issue/PR Snapshot 关联；PR MERGED 和
 Issue CLOSED 不会自动完成 Task。当前已实现数据库站内 Notification、Task 到期/逾期/Review 与
-PR current-head Review 超时的 fixedDelay 有界扫描。数据库是可靠来源，前端第一版可轮询
-`GET /api/v1/notifications/unread-count`；SSE、邮件和第三方 Channel 尚未实现。
+PR current-head Review 超时扫描，以及 MySQL Transactional Outbox 驱动的六类 Task 即时通知。
+Outbox 支持 PENDING/PROCESSING/RETRY_WAIT/PROCESSED/DEAD、version claim、有限重试和 stale 恢复。
+数据库 Notification 是可靠来源；单实例 SSE 支持多连接和 Heartbeat，断线后由 REST 查询补偿。
 
 Notification API（接收人只来自当前 Principal，不接受客户端 userId）：
 
@@ -340,7 +346,12 @@ GET  /api/v1/notifications
 GET  /api/v1/notifications/unread-count
 POST /api/v1/notifications/{notificationId}/read
 POST /api/v1/notifications/read-all
+GET  /api/v1/notifications/stream
 ```
+
+SSE 使用 Stateless Bearer Header 和 Fetch-based SSE Client，不接受 query token。它是低延迟 Channel，
+不是可靠消息队列，也不提供精确一次或跨实例广播。尚未实现 RabbitMQ/Kafka、Debezium CDC、邮件、企业 IM、
+Outbox 管理后台、DEAD 人工重放和完整审计。
 
 停止应用后关闭容器：
 

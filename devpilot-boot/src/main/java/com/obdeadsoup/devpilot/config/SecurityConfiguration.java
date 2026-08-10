@@ -86,6 +86,7 @@ public class SecurityConfiguration {
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/auth/me").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").authenticated()
+                .requestMatchers("/api/v1/notifications/**").authenticated()
                 .requestMatchers("/api/v1/workspaces/**").authenticated()
                 .anyRequest().denyAll()
         );

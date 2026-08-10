@@ -8,6 +8,7 @@ import com.obdeadsoup.devpilot.task.domain.TaskAction;
 import com.obdeadsoup.devpilot.task.domain.TaskStatus;
 import com.obdeadsoup.devpilot.task.domain.TaskTransition;
 import com.obdeadsoup.devpilot.task.domain.TaskTransitionPolicy;
+import com.obdeadsoup.devpilot.task.application.outbox.TaskOutboxEventFactory;
 import com.obdeadsoup.devpilot.task.error.TaskErrorCode;
 import com.obdeadsoup.devpilot.task.persistence.entity.TaskEntity;
 import com.obdeadsoup.devpilot.task.persistence.mapper.TaskMapper;
@@ -23,10 +24,13 @@ public class TaskWorkflowService {
     private final TaskApplicationService taskApplicationService; private final TaskMapper taskMapper;
     private final TaskAuthorizationService authorizationService; private final TaskTransitionPolicy transitionPolicy;
     private final TaskPersistenceService persistenceService; private final CurrentUserProvider currentUserProvider; private final Clock clock;
+    private final TaskOutboxEventFactory outboxEvents;
     public TaskWorkflowService(TaskApplicationService taskApplicationService, TaskMapper taskMapper, TaskAuthorizationService authorizationService,
-                               TaskTransitionPolicy transitionPolicy, TaskPersistenceService persistenceService, CurrentUserProvider currentUserProvider, Clock taskClock) {
+                               TaskTransitionPolicy transitionPolicy, TaskPersistenceService persistenceService, CurrentUserProvider currentUserProvider, Clock taskClock,
+                               TaskOutboxEventFactory outboxEvents) {
         this.taskApplicationService=taskApplicationService; this.taskMapper=taskMapper; this.authorizationService=authorizationService;
         this.transitionPolicy=transitionPolicy; this.persistenceService=persistenceService; this.currentUserProvider=currentUserProvider; this.clock=taskClock;
+        this.outboxEvents=outboxEvents;
     }
     public TaskResponse planTask(long w,long p,long id,long v,String reason){return perform(w,p,id,v,reason,TaskAction.PLANNED);}
     public TaskResponse returnToBacklog(long w,long p,long id,long v,String reason){return perform(w,p,id,v,reason,TaskAction.RETURNED_TO_BACKLOG);}
@@ -48,6 +52,7 @@ public class TaskWorkflowService {
             throw taskApplicationService.writeConflict(workspaceId,projectId,taskId,expectedVersion);
         }
         persistenceService.recordTransition(task,transition,actor,normalizeReason(reason),expectedVersion+1,now);
+        outboxEvents.publishWorkflow(task,project.projectKey(),expectedVersion+1,actor,action,now);
         return TaskResponse.from(taskApplicationService.requireTask(workspaceId,projectId,taskId),project.projectKey(),true);
     }
     private void validateReason(String reason){ if(reason!=null && reason.trim().length()>1000) throw new BusinessException(TaskErrorCode.INVALID_TASK_REASON); }

@@ -21,13 +21,16 @@ devpilot-project         Workspace/Project、成员、RBAC、生命周期和活�
 devpilot-github          仓库绑定、Webhook、API Client、同步
 devpilot-task            任务、迭代、状态机、截止规则
 devpilot-notification    通知和未读计数
-devpilot-audit           安全、业务和 Agent 审计
+devpilot-outbox          Task 事务事件、有限重试与恢复
+devpilot-audit           DEAD 查询、人工 Replay 与 append-only 运维审计
 devpilot-knowledge       文档、会议纪要、检索
 devpilot-agent           会话、工具、提议、确认和执行
 ```
 
-当前依赖：identity→framework，project→framework+identity，task→framework+identity+project，
-github→framework+project+task，boot→全部初始模块。Workspace、两级成员关系、角色、Permission
+当前依赖：identity→framework，project→framework+identity，task→framework+identity+project+outbox，
+github→framework+project+task，notification→framework+identity+project+task+github+outbox，
+audit→framework+identity+project+github+outbox，boot→全部模块。audit 是末端运维模块，上游不反向依赖。
+Workspace、两级成员关系、角色、Permission
 和授权服务全部属于 project；identity 只向 project 提供当前用户和用户有效性能力，绝不反向
 依赖 project。移除 Workspace Member 与撤销其 Project Membership 在 project 模块同一事务
 内完成。禁止 project 依赖 github。
@@ -84,7 +87,20 @@ RECEIVED → PROCESSING → SUCCEEDED
 `version` 条件更新抢占。每次失败增加 `retry_count`；可重试且未超过上限时进入
 `RETRY_WAIT`，不可重试或超过上限时进入 `DEAD`。数据库扫描恢复丢失内存事件的
 `RECEIVED`、到期 `RETRY_WAIT` 和超时 `PROCESSING`。`FAILED` 保留用于兼容 V1，
-不再是普通自动失败路径。人工重放、审计和消息队列尚未实现。
+不再是普通自动失败路径。Outbox 与 GitHub Sync Run 已支持受 scope/RBAC 保护的人工 Replay；Delivery
+专用 Replay 与消息队列尚未实现。
+
+## DEAD Replay 与 Audit
+
+```text
+管理员查询 DEAD 摘要 → scope/RBAC → reason + expectedVersion
+→ 锁定原 DEAD（不修改）→ 创建新 PENDING Replay → 同事务 SUCCESS Audit
+→ COMMIT 后快速唤醒 → 原 Worker/Retry/幂等链路
+```
+
+Outbox 只允许六类 Task V1 事件重放；GitHub Sync 使用 MANUAL_REPLAY，且不回退 Checkpoint。
+失败或拒绝操作通过 REQUIRES_NEW 写 FAILURE/DENIED Audit，Audit Mapper 不提供 UPDATE/DELETE。
+现有代码没有 Correlation ID 基础设施，本节没有单独引入，字段暂为 NULL。
 
 ## GitHub API Client
 
@@ -214,7 +230,18 @@ Authentication，GitHub App permission 也不替代 DevPilot 的本地授权。
 提供 `plan`、`returnToBacklog`、`startTask`、`submitForReview`、`requestChanges`、`completeTask`、
 `cancelTask`、`reopenTask`。每个动作负责状态、权限、负责人、乐观锁、状态历史和 Project Activity；
 Issue/PR/Review Snapshot 不会自动推进 Task。Task 通过 Port 读取 GitHub Snapshot，避免 task→github
-循环依赖；通知尚未实现。
+循环依赖。
+
+## Transactional Outbox 与即时通知
+
+`task -> outbox` 只调用中立 Publisher，`notification -> task + outbox` 注册白名单 Handler；outbox 不依赖
+任何业务模块，task 也不反向依赖 notification。Task/History/Activity/Outbox 同事务，提交后本地事件仅作
+快速唤醒，数据库 Scanner 负责恢复。Worker 用 status+version claim；Notification 副作用与 PROCESSED
+在一个事务内。`event_key` 与 `recipient_user_id+dedupe_key` 构成发布和业务两层幂等。
+
+Notification commit 后通过 AFTER_COMMIT 向当前 JVM 的 `SseEmitter` Registry 尽力发送最小 ID Envelope。
+Registry 支持每用户多连接、上限淘汰、Heartbeat 和失败清理。SSE 不改变 Outbox/Notification 语义；断线和
+跨实例遗漏由 REST 查询数据库补偿。跨实例广播、MQ、CDC 与 DEAD 人工重放未实现。
 
 ## Agent 架构
 

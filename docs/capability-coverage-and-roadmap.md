@@ -45,18 +45,22 @@ Checkpoint overlap 和 Sync Run 有限重试/DEAD/超时恢复已经完成。Iss
 ### 阶段 3：可靠同步
 
 Commit 对账已具备 API `RETRY_WAIT/DEAD`、数据库 version claim、定时恢复和受 RBAC 保护的人工 202 触发。
-下一步实现 GitHub App Token、DEAD 管理/审计和更完整的人工重放。当前数据库 claim
+DEAD 查询、GitHub Sync MANUAL_REPLAY 与 append-only Audit 已完成；Replay 不回退 Checkpoint，并继续沿用
+overlap 与下游幂等。下一步实现 GitHub App Token 与可观测性。当前数据库 claim
 已提供跨实例单 Run 互斥；Credential Semaphore 仍只限制单 JVM 的 HTTP 并发。
 
 ### 阶段 4：任务与通知
 
 本地 Task 状态机、Issue/PR 显式关联、乐观锁、状态 History 与 Project Activity 已完成。Task 截止、
-逾期升级、Task/PR Review 超时与可靠站内通知已完成；前端可轮询未读数。SSE/邮件尚未实现，GitHub 状态
-不会自动修改 Task。
+逾期升级、Task/PR Review 超时与可靠站内通知已完成。Task 六类即时事件已通过 MySQL Transactional
+Outbox 实现可靠落库和有限重试；单实例 SSE 提供多连接、Heartbeat 与低延迟提示，断线由 REST 补偿。
+邮件、第三方 Channel、跨实例 SSE 和精确一次送达尚未实现，GitHub 状态不会自动修改 Task。
 
 ### 阶段 5：工程化
 
-Outbox、RabbitMQ、消费幂等、Testcontainers、ArchUnit、Prometheus、CI、压测和故障演练。
+Outbox、两层消费幂等、DEAD 管理、六类 Task V1 受控人工重放与 SUCCESS/FAILURE/DENIED Audit 已落地。
+原 DEAD 不修改；新 Replay 仍经过原 Worker。RabbitMQ/Kafka、CDC、跨实例广播、Audit WORM、Correlation ID、
+ArchUnit、CI、压测和更完整故障演练仍是后续能力。
 
 ### 阶段 6：知识库与 Agent L1
 

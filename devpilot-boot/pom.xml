@@ -16,6 +16,10 @@
     <dependencies>
         <dependency>
             <groupId>com.obdeadsoup</groupId>
+            <artifactId>devpilot-audit</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.obdeadsoup</groupId>
             <artifactId>devpilot-outbox</artifactId>
         </dependency>
         <dependency>

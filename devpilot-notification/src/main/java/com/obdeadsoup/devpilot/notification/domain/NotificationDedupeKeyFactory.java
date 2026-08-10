@@ -12,6 +12,10 @@ public class NotificationDedupeKeyFactory {
     public String taskOverdue(long id,LocalDateTime due){return "task:"+id+":overdue:"+epoch(due)+":initial";}
     public String taskOverdueEscalated(long id,LocalDateTime due){return "task:"+id+":overdue:"+epoch(due)+":escalation:24h";}
     public String taskReviewTimeout(long id,LocalDateTime start){return "task:"+id+":review-timeout:"+epoch(start);}
+    public String taskInstant(long taskId,long taskVersion,String semantic){
+        if(taskId<=0||taskVersion<0||semantic==null||!semantic.matches("[a-z-]+")) throw new IllegalArgumentException("invalid task notification fact");
+        return "task:"+taskId+":v"+taskVersion+":"+semantic;
+    }
     /** Head SHA 变化代表新代码，必须允许新一轮 Review 提醒。 */
     public String pullRequestReviewTimeout(long id,String sha,LocalDateTime start){
         if(sha==null||!sha.matches("[0-9a-f]{40}")) throw new IllegalArgumentException("invalid head sha");

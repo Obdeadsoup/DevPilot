@@ -8,6 +8,7 @@ import com.obdeadsoup.devpilot.project.persistence.mapper.ProjectMapper;
 import com.obdeadsoup.devpilot.task.api.dto.TaskResponse;
 import com.obdeadsoup.devpilot.task.application.command.CreateTaskCommand;
 import com.obdeadsoup.devpilot.task.application.command.UpdateTaskCommand;
+import com.obdeadsoup.devpilot.task.application.outbox.TaskOutboxEventFactory;
 import com.obdeadsoup.devpilot.task.domain.TaskPriority;
 import com.obdeadsoup.devpilot.task.domain.TaskStatus;
 import com.obdeadsoup.devpilot.task.error.TaskErrorCode;
@@ -31,12 +32,15 @@ public class TaskApplicationService {
     private final TaskPersistenceService persistenceService;
     private final CurrentUserProvider currentUserProvider;
     private final Clock clock;
+    private final TaskOutboxEventFactory outboxEvents;
 
     public TaskApplicationService(TaskMapper taskMapper, ProjectMapper projectMapper,
                                   TaskAuthorizationService authorizationService, TaskPersistenceService persistenceService,
-                                  CurrentUserProvider currentUserProvider, Clock taskClock) {
+                                  CurrentUserProvider currentUserProvider, Clock taskClock,
+                                  TaskOutboxEventFactory outboxEvents) {
         this.taskMapper = taskMapper; this.projectMapper = projectMapper; this.authorizationService = authorizationService;
         this.persistenceService = persistenceService; this.currentUserProvider = currentUserProvider; this.clock = taskClock;
+        this.outboxEvents = outboxEvents;
     }
 
     /** 创建 BACKLOG Task；初始 version 与 CREATED history 均为 0，Task/History/Activity 在一个事务提交。 */
@@ -75,7 +79,9 @@ public class TaskApplicationService {
         authorizationService.requireEligibleAssignee(assigneeUserId, workspaceId, projectId);
         if (Long.valueOf(assigneeUserId).equals(task.getAssigneeUserId())) return TaskResponse.from(task, project.projectKey(), true);
         if (taskMapper.updateAssignee(workspaceId, projectId, taskId, assigneeUserId, expectedVersion) != 1) throw writeConflict(workspaceId, projectId, taskId, expectedVersion);
-        persistenceService.recordAssignment(task, expectedVersion + 1, true, LocalDateTime.now(clock));
+        LocalDateTime occurredAt = LocalDateTime.now(clock);
+        persistenceService.recordAssignment(task, expectedVersion + 1, true, occurredAt);
+        outboxEvents.publishAssigned(task, project.projectKey(), expectedVersion + 1, actor, assigneeUserId, occurredAt);
         return TaskResponse.from(requireTask(workspaceId, projectId, taskId), project.projectKey(), true);
     }
 
@@ -84,8 +90,11 @@ public class TaskApplicationService {
         long actor = currentUserProvider.requireUserId(); ProjectEntity project = requireWritableProject(workspaceId, projectId);
         TaskEntity task = requireTask(workspaceId, projectId, taskId); authorizationService.requireAssignment(actor, task);
         if (task.getAssigneeUserId() == null) return TaskResponse.from(task, project.projectKey(), true);
+        long previousAssignee = task.getAssigneeUserId();
         if (taskMapper.updateAssignee(workspaceId, projectId, taskId, null, expectedVersion) != 1) throw writeConflict(workspaceId, projectId, taskId, expectedVersion);
-        persistenceService.recordAssignment(task, expectedVersion + 1, false, LocalDateTime.now(clock));
+        LocalDateTime occurredAt = LocalDateTime.now(clock);
+        persistenceService.recordAssignment(task, expectedVersion + 1, false, occurredAt);
+        outboxEvents.publishUnassigned(task, project.projectKey(), expectedVersion + 1, actor, previousAssignee, occurredAt);
         return TaskResponse.from(requireTask(workspaceId, projectId, taskId), project.projectKey(), true);
     }
 
