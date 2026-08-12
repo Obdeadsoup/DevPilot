@@ -132,6 +132,9 @@ V12 add transactional outbox and instant notification types
 V13 add dead replay tracking and append-only audit
 ```
 
+第 15 节没有新增或修改数据库结构。Backlog Mapper 只使用 V1/V2、V8、V12、V13 已有状态/时间/Replay
+字段与扫描索引做有限聚合；Gauge 从周期内存快照读取，不在 Prometheus scrape 时查询数据库。
+
 V4 不修改 V1–V3，包含 `dp_workspace.owner_user_id/version`、
 `dp_workspace_member` 和 `dp_project_member`。V5 不修改旧迁移，增加
 `dp_project.created_by`、Project version 检查以及活动 Project Key 生成列唯一索引。

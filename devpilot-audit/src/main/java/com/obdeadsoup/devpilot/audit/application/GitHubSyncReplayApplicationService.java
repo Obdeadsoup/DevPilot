@@ -15,24 +15,32 @@ public class GitHubSyncReplayApplicationService {
     private final CurrentUserProvider users; private final ReplayAuthorizationService authorization;
     private final ReplayReasonValidator reasons; private final GitHubSyncReplayTransactionService transaction;
     private final AuditRecorder audit; private final AuditCommandFactory commands;
+    private final AuditReplayMetrics metrics;
     public GitHubSyncReplayApplicationService(CurrentUserProvider users,ReplayAuthorizationService authorization,
                                               ReplayReasonValidator reasons,GitHubSyncReplayTransactionService transaction,
-                                              AuditRecorder audit,AuditCommandFactory commands){
+                                              AuditRecorder audit,AuditCommandFactory commands,
+                                              AuditReplayMetrics metrics){
         this.users=users;this.authorization=authorization;this.reasons=reasons;this.transaction=transaction;
-        this.audit=audit;this.commands=commands;}
+        this.audit=audit;this.commands=commands;this.metrics=metrics;}
     public ReplayReceiptResponse replay(long workspaceId,long projectId,long bindingId,long runId,ReplayRequest request){
         long userId=users.requireUserId(); String reason=null;
         try{
             authorization.requireSyncReplay(userId,workspaceId,projectId);
             reason=reasons.validate(request.reason());
-            return transaction.replay(userId,workspaceId,projectId,bindingId,runId,request.expectedVersion(),reason);
+            ReplayReceiptResponse receipt = transaction.replay(
+                    userId,workspaceId,projectId,bindingId,runId,request.expectedVersion(),reason);
+            metrics.record("github_sync", "created");
+            return receipt;
         }catch(BusinessException exception){
             recordRejected(userId,workspaceId,projectId,runId,reason,exception.errorCode().code(),
                     exception.errorCode()==AuditErrorCode.AUDIT_ACCESS_DENIED?AuditResult.DENIED:AuditResult.FAILURE);
+            metrics.record("github_sync",
+                    exception.errorCode()==AuditErrorCode.AUDIT_ACCESS_DENIED ? "denied" : "failed");
             throw exception;
         }catch(DataIntegrityViolationException exception){
             var conflict=new BusinessException(AuditErrorCode.SYNC_RUN_ALREADY_HAS_OPEN_REPLAY);
             recordRejected(userId,workspaceId,projectId,runId,reason,conflict.errorCode().code(),AuditResult.FAILURE);
+            metrics.record("github_sync", "failed");
             throw conflict;
         }
     }

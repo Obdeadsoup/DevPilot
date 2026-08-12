@@ -16,6 +16,7 @@ import com.obdeadsoup.devpilot.task.application.outbox.TaskInstantEventType;
 import com.obdeadsoup.devpilot.task.application.outbox.TaskInstantNotificationPayloadV1;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.time.Duration;
 
 /**
  * 把一个白名单 Task V1 事件转换为接收人维度的可靠 Notification。重复处理依赖
@@ -28,18 +29,21 @@ public class TaskNotificationOutboxHandler implements OutboxEventHandler {
     private final ProjectNotificationRecipientQuery recipientQuery;
     private final NotificationApplicationService notifications;
     private final NotificationDedupeKeyFactory dedupeKeys;
+    private final NotificationMetrics metrics;
 
     public TaskNotificationOutboxHandler(
             TaskInstantEventType eventType,
             ObjectMapper objectMapper,
             ProjectNotificationRecipientQuery recipientQuery,
             NotificationApplicationService notifications,
-            NotificationDedupeKeyFactory dedupeKeys) {
+            NotificationDedupeKeyFactory dedupeKeys,
+            NotificationMetrics metrics) {
         this.eventType = eventType;
         this.objectMapper = objectMapper;
         this.recipientQuery = recipientQuery;
         this.notifications = notifications;
         this.dedupeKeys = dedupeKeys;
+        this.metrics = metrics;
     }
 
     @Override
@@ -54,16 +58,23 @@ public class TaskNotificationOutboxHandler implements OutboxEventHandler {
 
     @Override
     public OutboxHandleResult handle(OutboxEventEnvelope event) {
-        TaskInstantNotificationPayloadV1 payload = deserialize(event);
-        validate(event, payload);
-        Set<Long> recipientIds = recipients(payload);
-        if (recipientIds.isEmpty()) {
-            throw invalid("Task event has no eligible recipient snapshot");
+        long started = System.nanoTime();
+        try {
+            TaskInstantNotificationPayloadV1 payload = deserialize(event);
+            validate(event, payload);
+            Set<Long> recipientIds = recipients(payload);
+            if (recipientIds.isEmpty()) {
+                throw invalid("Task event has no eligible recipient snapshot");
+            }
+            for (long recipientId : recipientIds) {
+                notifications.createIfAbsent(command(payload, recipientId));
+            }
+            metrics.handler(eventType.name(), "success", Duration.ofNanos(System.nanoTime() - started));
+            return OutboxHandleResult.PROCESSED;
+        } catch (RuntimeException exception) {
+            metrics.handler(eventType.name(), "failed", Duration.ofNanos(System.nanoTime() - started));
+            throw exception;
         }
-        for (long recipientId : recipientIds) {
-            notifications.createIfAbsent(command(payload, recipientId));
-        }
-        return OutboxHandleResult.PROCESSED;
     }
 
     private TaskInstantNotificationPayloadV1 deserialize(OutboxEventEnvelope event) {

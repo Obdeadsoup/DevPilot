@@ -156,9 +156,9 @@ class GitHubApiHttpExecutorTest {
         assertThat(response.body().id()).isEqualTo(321L);
         assertThat(harness.delays()).hasSize(1);
         assertThat(harness.registry().counter(
-                "github.api.retries",
+                "devpilot.github.api.retries",
                 "operation", "repository.metadata.get",
-                "failureType", "TRANSIENT_SERVER_ERROR"
+                "failure_type", "TRANSIENT_SERVER_ERROR"
         ).count()).isEqualTo(1.0);
         harness.server().verify();
     }

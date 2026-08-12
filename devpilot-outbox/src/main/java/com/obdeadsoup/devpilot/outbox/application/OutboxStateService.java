@@ -4,7 +4,6 @@ import com.obdeadsoup.devpilot.outbox.domain.OutboxEventStatus;
 import com.obdeadsoup.devpilot.outbox.domain.OutboxRetryPolicy;
 import com.obdeadsoup.devpilot.outbox.persistence.entity.OutboxEventEntity;
 import com.obdeadsoup.devpilot.outbox.persistence.mapper.OutboxEventMapper;
-import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -22,13 +21,13 @@ public class OutboxStateService {
     private final OutboxEventMapper mapper;
     private final OutboxRetryPolicy retryPolicy;
     private final Clock clock;
-    private final MeterRegistry metrics;
+    private final OutboxMetrics metrics;
 
     public OutboxStateService(
             OutboxEventMapper mapper,
             OutboxRetryPolicy retryPolicy,
             Clock clock,
-            MeterRegistry metrics) {
+            OutboxMetrics metrics) {
         this.mapper = mapper;
         this.retryPolicy = retryPolicy;
         this.clock = clock;
@@ -55,7 +54,7 @@ public class OutboxStateService {
         if (mapper.markProcessed(event.getId(), event.getVersion(), LocalDateTime.now(clock)) != 1) {
             throw new IllegalStateException("Outbox processed state conflict");
         }
-        metrics.counter("devpilot.outbox.processed", "eventType", event.getEventType()).increment();
+        metrics.processed(event.getEventType());
     }
 
     /** 处理事务回滚后，以独立事务安全记录 Retry/DEAD，避免错误状态随原异常一起回滚。 */
@@ -76,10 +75,7 @@ public class OutboxStateService {
                 decision.errorCode(),
                 bounded(decision.safeMessage()));
         if (updated == 1) {
-            metrics.counter(
-                    dead ? "devpilot.outbox.dead" : "devpilot.outbox.retry_wait",
-                    "eventType", event.getEventType(),
-                    "failureType", decision.failureType().name()).increment();
+            metrics.failed(event.getEventType(), decision.failureType().name(), dead);
         }
         return target;
     }
@@ -96,10 +92,7 @@ public class OutboxStateService {
         int updated = mapper.recoverStale(
                 event.getId(), event.getVersion(), cutoff, target.name(), failureCount, retryAt);
         if (updated == 1) {
-            metrics.counter(
-                    dead ? "devpilot.outbox.dead" : "devpilot.outbox.retry_wait",
-                    "eventType", event.getEventType(),
-                    "failureType", "PROCESSING_TIMEOUT").increment();
+            metrics.failed(event.getEventType(), "PROCESSING_TIMEOUT", dead);
         }
         return target;
     }

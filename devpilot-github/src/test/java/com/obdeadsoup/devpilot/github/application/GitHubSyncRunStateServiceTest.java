@@ -19,6 +19,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 class GitHubSyncRunStateServiceTest {
 
@@ -29,7 +30,8 @@ class GitHubSyncRunStateServiceTest {
     private final GitHubSyncRetryPolicy retryPolicy =
             new GitHubSyncRetryPolicy(GitHubTestProperties.reconciliation());
     private final GitHubSyncRunStateService service = new GitHubSyncRunStateService(
-            mapper, checkpointService, retryPolicy, Clock.fixed(NOW, ZoneOffset.UTC)
+            mapper, checkpointService, retryPolicy, Clock.fixed(NOW, ZoneOffset.UTC),
+            new GitHubSyncMetrics(new SimpleMeterRegistry())
     );
 
     @Test

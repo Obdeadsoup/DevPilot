@@ -21,15 +21,18 @@ public class GitHubDeliveryStateService {
     private final GitHubDeliveryMapper deliveryMapper;
     private final GitHubDeliveryRetryPolicy retryPolicy;
     private final Clock clock;
+    private final GitHubDeliveryMetrics metrics;
 
     public GitHubDeliveryStateService(
             GitHubDeliveryMapper deliveryMapper,
             GitHubDeliveryRetryPolicy retryPolicy,
-            Clock clock
+            Clock clock,
+            GitHubDeliveryMetrics metrics
     ) {
         this.deliveryMapper = deliveryMapper;
         this.retryPolicy = retryPolicy;
         this.clock = clock;
+        this.metrics = metrics;
     }
 
     /** RECEIVED/到期 RETRY_WAIT 抢占为 PROCESSING；并发失败返回空。 */
@@ -81,6 +84,9 @@ public class GitHubDeliveryStateService {
             );
             result = GitHubDeliveryStatus.DEAD;
         }
+        if (updated == 1 && result == GitHubDeliveryStatus.DEAD) {
+            metrics.transitionedToDead(delivery.eventType());
+        }
         return updated == 1 ? Optional.of(result) : Optional.empty();
     }
 
@@ -105,6 +111,9 @@ public class GitHubDeliveryStateService {
                     delivery.id(), delivery.version(), cutoff, recoveredAt
             );
             result = GitHubDeliveryStatus.DEAD;
+        }
+        if (updated == 1 && result == GitHubDeliveryStatus.DEAD) {
+            metrics.transitionedToDead(delivery.eventType());
         }
         return updated == 1 ? Optional.of(result) : Optional.empty();
     }

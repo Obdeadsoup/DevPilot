@@ -46,7 +46,7 @@ Checkpoint overlap 和 Sync Run 有限重试/DEAD/超时恢复已经完成。Iss
 
 Commit 对账已具备 API `RETRY_WAIT/DEAD`、数据库 version claim、定时恢复和受 RBAC 保护的人工 202 触发。
 DEAD 查询、GitHub Sync MANUAL_REPLAY 与 append-only Audit 已完成；Replay 不回退 Checkpoint，并继续沿用
-overlap 与下游幂等。下一步实现 GitHub App Token 与可观测性。当前数据库 claim
+overlap 与下游幂等。GitHub API Token 仍是环境引用，GitHub App Authentication 尚未实现。当前数据库 claim
 已提供跨实例单 Run 互斥；Credential Semaphore 仍只限制单 JVM 的 HTTP 并发。
 
 ### 阶段 4：任务与通知
@@ -59,8 +59,10 @@ Outbox 实现可靠落库和有限重试；单实例 SSE 提供多连接、Heart
 ### 阶段 5：工程化
 
 Outbox、两层消费幂等、DEAD 管理、六类 Task V1 受控人工重放与 SUCCESS/FAILURE/DENIED Audit 已落地。
-原 DEAD 不修改；新 Replay 仍经过原 Worker。RabbitMQ/Kafka、CDC、跨实例广播、Audit WORM、Correlation ID、
-ArchUnit、CI、压测和更完整故障演练仍是后续能力。
+第 15 节已增加安全 Correlation ID、有限异步 MDC、Micrometer/Prometheus-ready endpoint、Delivery/Sync/Outbox
+backlog snapshot、oldest age、open DEAD 与 liveness/readiness。原 DEAD 不修改；新 Replay 仍经过原 Worker。
+RabbitMQ/Kafka、CDC、跨实例广播、Audit WORM、OpenTelemetry、Grafana、Alertmanager、ArchUnit、CI、压测和
+生产 SLO/SLA 验证仍是后续能力。
 
 ### 阶段 6：知识库与 Agent L1
 

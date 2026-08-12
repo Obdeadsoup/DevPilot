@@ -44,13 +44,14 @@ DevPilot 不复刻 GitHub，而是建立一个面向小团队的“项目上下�
 - 项目活动时间线
 - 同步任务状态和失败重试
 - 站内通知与关键操作审计
-- Docker Compose、自动化测试、健康检查
+- Docker Compose、自动化测试、liveness/readiness、Prometheus-ready 指标
 
 ## 技术路线
 
 第一阶段：Java 21、Spring Boot 3.5.x、Maven 多模块、Spring Security、MyBatis-Plus、MySQL 8、Redis 7、Flyway、Actuator、JUnit 5、Testcontainers、Docker Compose。
 
-后续按真实需要引入 RabbitMQ、SSE、Quartz/XXL-JOB、Spring AI/LangChain4j、向量检索、Prometheus、OpenTelemetry。
+当前已使用 MySQL Transactional Outbox、SSE、Micrometer 与 Prometheus Registry。后续只按真实需要评估
+RabbitMQ、Quartz/XXL-JOB、Spring AI/LangChain4j、向量检索与 OpenTelemetry。
 
 > 不为简历标签提前堆中间件，只有真实业务问题出现时才引入对应技术。
 
@@ -102,6 +103,8 @@ devpilot-github
 - [第 13 节变更文件地图](docs/changes/13-transactional-outbox-sse-file-map.md)
 - [DEAD Replay 与 Audit 学习笔记](docs/learning/14-dead-replay-and-audit.md)
 - [第 14 节变更文件地图](docs/changes/14-dead-replay-audit-file-map.md)
+- [Observability、Metrics、Health、Backlog 与 SLO 学习笔记](docs/learning/15-observability-metrics-health-slo.md)
+- [第 15 节变更文件地图](docs/changes/15-observability-metrics-health-slo-file-map.md)
 - [Codex 分阶段指令](codex-prompts/all-prompts.md)
 
 ## 开发方式
@@ -156,7 +159,21 @@ java -jar .\devpilot-boot\target\devpilot-boot-0.0.1-SNAPSHOT.jar --spring.profi
 
 ```powershell
 Invoke-RestMethod http://localhost:8080/actuator/health
+Invoke-RestMethod http://localhost:8080/actuator/health/liveness
+Invoke-RestMethod http://localhost:8080/actuator/health/readiness
+Invoke-RestMethod http://localhost:8080/actuator/metrics
+Invoke-WebRequest http://localhost:8080/actuator/prometheus
 ```
+
+默认 profile 仍只暴露 `health`。`local` 或 `observability` profile 才启用 Prometheus export 并暴露
+`health,metrics,prometheus`；这一匿名 scrape 策略仅用于本机/受控运维网络，不是互联网生产安全方案。
+请求使用安全格式的 `X-Correlation-ID` 关联同步日志；GitHub/Outbox 后台任务只传播有限 MDC 或创建新的处理 ID，
+它不是 OpenTelemetry Trace，也不参与鉴权和业务幂等。
+
+当前 Delivery、GitHub Sync 与 Outbox 提供处理耗时、ready backlog、oldest ready age、stale processing 和
+open DEAD 指标；Notification 提供创建/去重、Handler、SSE connection/send 指标。原 DEAD 历史仍保留，
+open DEAD 会排除已被成功或开放 Replay 解决的记录。本节只建立 SLI/SLO 测量基础，未宣称达到任何 p95/p99
+或 99.9% SLO/SLA；也未部署生产 Prometheus、Grafana、Alertmanager 或 OpenTelemetry。
 #### 前端
 
 ```powershell

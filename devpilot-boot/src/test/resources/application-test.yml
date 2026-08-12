@@ -14,8 +14,16 @@ management:
     web:
       exposure:
         include: health
+  endpoint:
+    health:
+      group:
+        readiness:
+          include: readinessState
 
 devpilot:
+  observability:
+    backlog:
+      enabled: false
   outbox:
     enabled: false
   notification:

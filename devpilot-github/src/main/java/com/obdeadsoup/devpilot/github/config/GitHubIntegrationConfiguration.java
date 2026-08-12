@@ -9,6 +9,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import com.obdeadsoup.devpilot.github.application.GitHubDeliveryRetryPolicy;
+import com.obdeadsoup.devpilot.framework.correlation.CorrelationIdTaskDecorator;
 
 import java.time.Clock;
 
@@ -19,7 +20,8 @@ import java.time.Clock;
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties({
         GitHubIntegrationProperties.class,
-        GitHubReconciliationProperties.class
+        GitHubReconciliationProperties.class,
+        GitHubBacklogProperties.class
 })
 @EnableAsync
 @EnableScheduling
@@ -31,12 +33,15 @@ public class GitHubIntegrationConfiguration {
     }
 
     @Bean("githubDeliveryTaskExecutor")
-    TaskExecutor githubDeliveryTaskExecutor(GitHubIntegrationProperties properties) {
+    TaskExecutor githubDeliveryTaskExecutor(
+            GitHubIntegrationProperties properties,
+            CorrelationIdTaskDecorator correlationIdTaskDecorator) {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         executor.setCorePoolSize(properties.workerCoreThreads());
         executor.setMaxPoolSize(properties.workerMaxThreads());
         executor.setQueueCapacity(properties.workerQueueCapacity());
         executor.setThreadNamePrefix("github-delivery-");
+        executor.setTaskDecorator(correlationIdTaskDecorator);
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(10);
         return executor;

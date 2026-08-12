@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.obdeadsoup.devpilot.notification.config.NotificationSseProperties;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import com.obdeadsoup.devpilot.notification.application.NotificationMetrics;
 import java.time.Duration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -11,9 +12,10 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 class NotificationSseRegistryTest {
 
+    private final SimpleMeterRegistry meters = new SimpleMeterRegistry();
     private final NotificationSseRegistry registry = new NotificationSseRegistry(
             new NotificationSseProperties(true, Duration.ofMinutes(30), Duration.ofSeconds(20), 2),
-            new SimpleMeterRegistry());
+            meters, new NotificationMetrics(meters));
 
     @AfterEach
     void close() {
@@ -31,6 +33,7 @@ class NotificationSseRegistryTest {
         assertThat(registry.activeConnections(10)).isEqualTo(2);
         assertThat(registry.activeConnections(20)).isEqualTo(1);
         assertThat(registry.activeConnections()).isEqualTo(3);
+        assertThat(meters.get("devpilot.notification.sse.connections").gauge().value()).isEqualTo(3);
     }
 
     @Test

@@ -1,5 +1,8 @@
 package com.obdeadsoup.devpilot.github.config;
 
+import com.obdeadsoup.devpilot.framework.correlation.CorrelationIdAccessor;
+import com.obdeadsoup.devpilot.framework.correlation.CorrelationIdPolicy;
+import com.obdeadsoup.devpilot.framework.correlation.CorrelationIdTaskDecorator;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
@@ -12,6 +15,9 @@ class GitHubIntegrationPropertiesTest {
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withUserConfiguration(GitHubIntegrationConfiguration.class)
+            .withBean(CorrelationIdPolicy.class)
+            .withBean(CorrelationIdAccessor.class)
+            .withBean(CorrelationIdTaskDecorator.class)
             .withPropertyValues(
                     "devpilot.github.base-url=https://api.github.com",
                     "devpilot.github.api-version=2022-11-28",

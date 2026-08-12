@@ -8,7 +8,6 @@ import com.obdeadsoup.devpilot.outbox.domain.OutboxProcessingException;
 import com.obdeadsoup.devpilot.outbox.event.OutboxStoredSignal;
 import com.obdeadsoup.devpilot.outbox.persistence.entity.OutboxEventEntity;
 import com.obdeadsoup.devpilot.outbox.persistence.mapper.OutboxEventMapper;
-import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
@@ -22,13 +21,13 @@ public class DatabaseOutboxEventPublisher implements OutboxEventPublisher {
     private final OutboxEventMapper mapper;
     private final ObjectMapper objectMapper;
     private final ApplicationEventPublisher events;
-    private final MeterRegistry metrics;
+    private final OutboxMetrics metrics;
 
     public DatabaseOutboxEventPublisher(
             OutboxEventMapper mapper,
             ObjectMapper objectMapper,
             ApplicationEventPublisher events,
-            MeterRegistry metrics) {
+            OutboxMetrics metrics) {
         this.mapper = mapper;
         this.objectMapper = objectMapper;
         this.events = events;
@@ -46,8 +45,7 @@ public class DatabaseOutboxEventPublisher implements OutboxEventPublisher {
         OutboxEventEntity entity = toEntity(event, payloadJson);
         try {
             mapper.insert(entity);
-            metrics.counter("devpilot.outbox.published", "eventType", event.eventType(), "result", "created")
-                    .increment();
+            metrics.published(event.eventType(), "created");
             events.publishEvent(new OutboxStoredSignal(entity.getId()));
             return entity.getId();
         } catch (DuplicateKeyException exception) {
@@ -56,7 +54,7 @@ public class DatabaseOutboxEventPublisher implements OutboxEventPublisher {
             if (!sameFact(existing, event)) {
                 throw conflict("Outbox event key points to a different fact");
             }
-            metrics.counter("devpilot.outbox.deduplicated", "eventType", event.eventType()).increment();
+            metrics.deduplicated(event.eventType());
             return existing.getId();
         }
     }

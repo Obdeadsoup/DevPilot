@@ -11,6 +11,9 @@ management:
       enabled: false
 
 devpilot:
+  observability:
+    backlog:
+      enabled: false
   outbox:
     enabled: false
   notification:

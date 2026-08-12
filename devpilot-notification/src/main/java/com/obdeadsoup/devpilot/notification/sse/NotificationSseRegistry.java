@@ -15,6 +15,7 @@ import java.util.function.Supplier;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import com.obdeadsoup.devpilot.notification.config.NotificationSseProperties;
+import com.obdeadsoup.devpilot.notification.application.NotificationMetrics;
 
 /**
  * 按 userId 保存线程安全的多连接集合，不保存 Token 或 Principal。单用户超限时关闭最旧连接，
@@ -26,10 +27,16 @@ public class NotificationSseRegistry {
     private final Map<Long, Deque<Connection>> connections = new ConcurrentHashMap<>();
     private final AtomicLong sequence = new AtomicLong();
     private final NotificationSseProperties properties;
+    private final NotificationMetrics metrics;
 
-    public NotificationSseRegistry(NotificationSseProperties properties, MeterRegistry meterRegistry) {
+    public NotificationSseRegistry(
+            NotificationSseProperties properties,
+            MeterRegistry meterRegistry,
+            NotificationMetrics metrics) {
         this.properties = properties;
-        Gauge.builder("devpilot.notification.sse.active_connections", this, NotificationSseRegistry::activeConnections)
+        this.metrics = metrics;
+        Gauge.builder("devpilot.notification.sse.connections", this, NotificationSseRegistry::activeConnections)
+                .description("当前 JVM 上活跃的 Notification SSE 连接数")
                 .register(meterRegistry);
     }
 
@@ -54,13 +61,13 @@ public class NotificationSseRegistry {
     }
 
     public void sendConnected(long userId, SseEmitter emitter, Object data) {
-        sendOne(userId, emitter, () -> SseEmitter.event().name("connected").data(data));
+        sendOne(userId, emitter, "connected", () -> SseEmitter.event().name("connected").data(data));
     }
 
     public void sendNotification(long userId, long notificationId, Object data) {
         forEach(userId, emitter -> sendOne(
                 userId,
-                emitter,
+                emitter, "notification",
                 () -> SseEmitter.event()
                         .name("notification-created")
                         .id(Long.toString(notificationId))
@@ -71,7 +78,7 @@ public class NotificationSseRegistry {
         List<Long> userIds = List.copyOf(connections.keySet());
         for (long userId : userIds) {
             forEach(userId, emitter -> sendOne(
-                    userId, emitter, () -> SseEmitter.event().comment("heartbeat")));
+                    userId, emitter, "heartbeat", () -> SseEmitter.event().comment("heartbeat")));
         }
     }
 
@@ -107,10 +114,14 @@ public class NotificationSseRegistry {
         snapshot.forEach(action);
     }
 
-    private void sendOne(long userId, SseEmitter emitter, Supplier<SseEmitter.SseEventBuilder> event) {
+    private void sendOne(
+            long userId, SseEmitter emitter, String channel,
+            Supplier<SseEmitter.SseEventBuilder> event) {
         try {
             emitter.send(event.get());
+            metrics.sseSend(channel, true);
         } catch (IOException | IllegalStateException exception) {
+            metrics.sseSend(channel, false);
             remove(userId, emitter);
             emitter.completeWithError(exception);
         }

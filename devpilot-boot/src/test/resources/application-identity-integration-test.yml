@@ -8,7 +8,7 @@ spring:
 management:
   health:
     redis:
-      enabled: false
+      enabled: true
 
 devpilot:
   outbox:

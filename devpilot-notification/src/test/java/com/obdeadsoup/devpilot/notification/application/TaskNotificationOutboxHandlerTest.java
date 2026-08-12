@@ -55,7 +55,8 @@ class TaskNotificationOutboxHandlerTest {
 
     private void handle(TaskInstantEventType type, TaskInstantNotificationPayloadV1 payload) {
         TaskNotificationOutboxHandler handler = new TaskNotificationOutboxHandler(
-                type, objectMapper, recipients, notifications, dedupeKeys);
+                type, objectMapper, recipients, notifications, dedupeKeys,
+                new NotificationMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()));
         handler.handle(new OutboxEventEnvelope(
                 "task:103:v7:" + type.eventKeySuffix(), "TASK", 103, type.name(), 1,
                 objectMapper.valueToTree(payload), payload.occurredAt()));

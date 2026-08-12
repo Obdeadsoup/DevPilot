@@ -17,25 +17,32 @@ public class OutboxReplayApplicationService {
     private final CurrentUserProvider users; private final ReplayAuthorizationService authorization;
     private final ReplayReasonValidator reasons; private final OutboxReplayTransactionService transaction;
     private final AuditRecorder audit; private final AuditCommandFactory commands;
+    private final AuditReplayMetrics metrics;
     public OutboxReplayApplicationService(CurrentUserProvider users,ReplayAuthorizationService authorization,
                                           ReplayReasonValidator reasons,OutboxReplayTransactionService transaction,
-                                          AuditRecorder audit,AuditCommandFactory commands){
+                                          AuditRecorder audit,AuditCommandFactory commands,
+                                          AuditReplayMetrics metrics){
         this.users=users;this.authorization=authorization;this.reasons=reasons;this.transaction=transaction;
-        this.audit=audit;this.commands=commands;}
+        this.audit=audit;this.commands=commands;this.metrics=metrics;}
 
     public ReplayReceiptResponse replay(long workspaceId,long projectId,long eventId,ReplayRequest request){
         long userId=users.requireUserId(); String reason=null;
         try{
             authorization.requireOutboxAdministration(userId,workspaceId,projectId);
             reason=reasons.validate(request.reason());
-            return transaction.replay(userId,workspaceId,projectId,eventId,request.expectedVersion(),reason);
+            ReplayReceiptResponse receipt = transaction.replay(
+                    userId,workspaceId,projectId,eventId,request.expectedVersion(),reason);
+            metrics.record("outbox", "created");
+            return receipt;
         }catch(BusinessException exception){
             recordRejected(userId,workspaceId,projectId,eventId,reason,exception.errorCode().code(),
                     exception.errorCode()==AuditErrorCode.AUDIT_ACCESS_DENIED?AuditResult.DENIED:AuditResult.FAILURE);
+            metrics.record("outbox", exception.errorCode()==AuditErrorCode.AUDIT_ACCESS_DENIED ? "denied" : "failed");
             throw exception;
         }catch(DataIntegrityViolationException exception){
             var conflict=new BusinessException(AuditErrorCode.DEAD_EVENT_ALREADY_HAS_OPEN_REPLAY);
             recordRejected(userId,workspaceId,projectId,eventId,reason,conflict.errorCode().code(),AuditResult.FAILURE);
+            metrics.record("outbox", "failed");
             throw conflict;
         }
     }

@@ -2,6 +2,11 @@ package com.obdeadsoup.devpilot;
 
 import com.obdeadsoup.devpilot.audit.application.AuditQueryService;
 import com.obdeadsoup.devpilot.audit.application.OutboxReplayApplicationService;
+import com.obdeadsoup.devpilot.github.application.GitHubBacklogSnapshotService;
+import com.obdeadsoup.devpilot.github.application.GitHubBacklogRefreshScheduler;
+import com.obdeadsoup.devpilot.outbox.application.OutboxBacklogSnapshotService;
+import com.obdeadsoup.devpilot.outbox.application.OutboxBacklogRefreshScheduler;
+import com.obdeadsoup.devpilot.framework.correlation.CorrelationIdFilter;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
@@ -33,6 +38,11 @@ class DevPilotApplicationTests {
     @Autowired private NotificationSseRegistry notificationSseRegistry;
     @Autowired private AuditQueryService auditQueryService;
     @Autowired private OutboxReplayApplicationService outboxReplayApplicationService;
+    @Autowired private GitHubBacklogSnapshotService gitHubBacklogSnapshotService;
+    @Autowired private OutboxBacklogSnapshotService outboxBacklogSnapshotService;
+    @Autowired private CorrelationIdFilter correlationIdFilter;
+    @Autowired(required = false) private GitHubBacklogRefreshScheduler gitHubBacklogRefreshScheduler;
+    @Autowired(required = false) private OutboxBacklogRefreshScheduler outboxBacklogRefreshScheduler;
 
     @Test
     void contextLoads() {
@@ -47,5 +57,10 @@ class DevPilotApplicationTests {
         assertThat(notificationSseRegistry).isNotNull();
         assertThat(auditQueryService).isNotNull();
         assertThat(outboxReplayApplicationService).isNotNull();
+        assertThat(gitHubBacklogSnapshotService).isNotNull();
+        assertThat(outboxBacklogSnapshotService).isNotNull();
+        assertThat(correlationIdFilter).isNotNull();
+        assertThat(gitHubBacklogRefreshScheduler).isNull();
+        assertThat(outboxBacklogRefreshScheduler).isNull();
     }
 }

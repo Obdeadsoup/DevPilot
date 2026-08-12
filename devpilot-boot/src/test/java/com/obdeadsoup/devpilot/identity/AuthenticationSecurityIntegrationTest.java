@@ -95,6 +95,19 @@ class AuthenticationSecurityIntegrationTest {
     }
 
     @Test
+    void readinessUsesLiveDatabaseAndRedisWhileLivenessStaysApplicationOnly() throws Exception {
+        mockMvc.perform(get("/actuator/health/liveness"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("mysql"))));
+        mockMvc.perform(get("/actuator/health/readiness"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("\"status\":\"UP\"")))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("password"))));
+    }
+
+    @Test
     void flywayCreatesNormalizedUserTableWithUniqueUsernameAndEmail() {
         Integer tableCount = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)

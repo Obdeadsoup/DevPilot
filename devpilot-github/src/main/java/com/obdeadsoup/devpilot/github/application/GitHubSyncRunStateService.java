@@ -28,17 +28,20 @@ public class GitHubSyncRunStateService {
     private final GitHubSyncCheckpointService checkpointService;
     private final GitHubSyncRetryPolicy retryPolicy;
     private final Clock clock;
+    private final GitHubSyncMetrics metrics;
 
     public GitHubSyncRunStateService(
             GitHubSyncRunMapper runMapper,
             GitHubSyncCheckpointService checkpointService,
             GitHubSyncRetryPolicy retryPolicy,
-            Clock clock
+            Clock clock,
+            GitHubSyncMetrics metrics
     ) {
         this.runMapper = runMapper;
         this.checkpointService = checkpointService;
         this.retryPolicy = retryPolicy;
         this.clock = clock;
+        this.metrics = metrics;
     }
 
     @Transactional
@@ -95,9 +98,11 @@ public class GitHubSyncRunStateService {
         checkpointService.completeWithinCurrentTransaction(
                 checkpoint, successfulBoundary, lastSeenCommitSha
         );
-        if (runMapper.markSucceeded(run.id(), run.version(), LocalDateTime.now(clock)) != 1) {
+        LocalDateTime completedAt = LocalDateTime.now(clock);
+        if (runMapper.markSucceeded(run.id(), run.version(), completedAt) != 1) {
             throw new BusinessException(GitHubSyncErrorCode.SYNC_STATE_CONFLICT);
         }
+        metrics.completed(run, "success", completedAt);
     }
 
     /** 失败记录使用独立事务，不会随此前页面或业务事务的回滚而丢失。 */
@@ -125,6 +130,13 @@ public class GitHubSyncRunStateService {
             );
             result = GitHubSyncRunStatus.DEAD;
         }
+        if (updated == 1) {
+            LocalDateTime completedAt = LocalDateTime.ofInstant(now, ZoneOffset.UTC);
+            metrics.completed(run, result.name().toLowerCase(java.util.Locale.ROOT), completedAt);
+            if (result == GitHubSyncRunStatus.DEAD) {
+                metrics.transitionedToDead(run);
+            }
+        }
         return updated == 1 ? Optional.of(result) : Optional.empty();
     }
 
@@ -148,6 +160,13 @@ public class GitHubSyncRunStateService {
                     run.id(), run.version(), cutoff, LocalDateTime.ofInstant(now, ZoneOffset.UTC)
             );
             result = GitHubSyncRunStatus.DEAD;
+        }
+        if (updated == 1) {
+            LocalDateTime completedAt = LocalDateTime.ofInstant(now, ZoneOffset.UTC);
+            metrics.completed(run, result.name().toLowerCase(java.util.Locale.ROOT), completedAt);
+            if (result == GitHubSyncRunStatus.DEAD) {
+                metrics.transitionedToDead(run);
+            }
         }
         return updated == 1 ? Optional.of(result) : Optional.empty();
     }

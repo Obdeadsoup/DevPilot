@@ -21,6 +21,18 @@ mybatis-plus:
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 
 logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] [%X{correlationId:-}] %logger{36} - %msg%n"
   level:
     com.obdeadsoup.devpilot.github.application.GitHubWebhookService: DEBUG
     com.obdeadsoup.devpilot.framework.error.GlobalExceptionHandler: DEBUG
+
+management:
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus

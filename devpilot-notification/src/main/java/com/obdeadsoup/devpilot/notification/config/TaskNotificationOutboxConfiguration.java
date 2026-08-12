@@ -3,6 +3,7 @@ package com.obdeadsoup.devpilot.notification.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.obdeadsoup.devpilot.notification.application.NotificationApplicationService;
 import com.obdeadsoup.devpilot.notification.application.TaskNotificationOutboxHandler;
+import com.obdeadsoup.devpilot.notification.application.NotificationMetrics;
 import com.obdeadsoup.devpilot.notification.domain.NotificationDedupeKeyFactory;
 import com.obdeadsoup.devpilot.outbox.domain.OutboxEventHandler;
 import com.obdeadsoup.devpilot.project.application.port.ProjectNotificationRecipientQuery;
@@ -13,6 +14,11 @@ import org.springframework.context.annotation.Configuration;
 /** 为六种 Task V1 事件注册唯一的白名单 Handler，不使用反射或 Payload 中的类名。 */
 @Configuration(proxyBeanMethods = false)
 public class TaskNotificationOutboxConfiguration {
+    private final NotificationMetrics metrics;
+
+    public TaskNotificationOutboxConfiguration(NotificationMetrics metrics) {
+        this.metrics = metrics;
+    }
 
     @Bean
     OutboxEventHandler taskAssignedOutboxHandler(ObjectMapper mapper, ProjectNotificationRecipientQuery recipients,
@@ -56,6 +62,6 @@ public class TaskNotificationOutboxConfiguration {
             ProjectNotificationRecipientQuery recipients,
             NotificationApplicationService notifications,
             NotificationDedupeKeyFactory keys) {
-        return new TaskNotificationOutboxHandler(type, mapper, recipients, notifications, keys);
+        return new TaskNotificationOutboxHandler(type, mapper, recipients, notifications, keys, metrics);
     }
 }

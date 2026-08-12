@@ -2,6 +2,7 @@ package com.obdeadsoup.devpilot.github.application.client;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.instrument.Counter;
 import org.springframework.http.HttpMethod;
 
 import java.util.concurrent.TimeUnit;
@@ -22,34 +23,29 @@ public final class GitHubApiMetrics {
 
     public void request(String operation, HttpMethod method, Integer status, long durationNanos) {
         String statusTag = status == null ? "IO" : Integer.toString(status);
-        registry.counter(
-                "github.api.requests",
-                "operation", operation,
-                "method", method.name(),
-                "status", statusTag
-        ).increment();
-        Timer.builder("github.api.duration")
+        Counter.builder("devpilot.github.api.requests").description("GitHub API 请求累计次数")
+                .tags("operation", operation, "method", method.name(), "status", statusTag)
+                .register(registry).increment();
+        Timer.builder("devpilot.github.api.duration")
+                .description("GitHub API 请求耗时")
                 .tags("operation", operation, "method", method.name())
                 .register(registry)
                 .record(durationNanos, TimeUnit.NANOSECONDS);
     }
 
     public void failure(String operation, GitHubApiFailureType failureType) {
-        registry.counter(
-                "github.api.failures",
-                "operation", operation,
-                "failureType", failureType.name()
-        ).increment();
+        Counter.builder("devpilot.github.api.failures").description("GitHub API 失败累计次数")
+                .tags("operation", operation, "failure_type", failureType.name())
+                .register(registry).increment();
         if (failureType == GitHubApiFailureType.RATE_LIMITED) {
-            registry.counter("github.api.rate_limited", "operation", operation).increment();
+            Counter.builder("devpilot.github.api.rate.limited").description("GitHub API 限流累计次数")
+                    .tag("operation", operation).register(registry).increment();
         }
     }
 
     public void retry(String operation, GitHubApiFailureType failureType) {
-        registry.counter(
-                "github.api.retries",
-                "operation", operation,
-                "failureType", failureType.name()
-        ).increment();
+        Counter.builder("devpilot.github.api.retries").description("GitHub API 同步 Retry 累计次数")
+                .tags("operation", operation, "failure_type", failureType.name())
+                .register(registry).increment();
     }
 }

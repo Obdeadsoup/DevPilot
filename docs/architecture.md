@@ -100,7 +100,8 @@ RECEIVED → PROCESSING → SUCCEEDED
 
 Outbox 只允许六类 Task V1 事件重放；GitHub Sync 使用 MANUAL_REPLAY，且不回退 Checkpoint。
 失败或拒绝操作通过 REQUIRES_NEW 写 FAILURE/DENIED Audit，Audit Mapper 不提供 UPDATE/DELETE。
-现有代码没有 Correlation ID 基础设施，本节没有单独引入，字段暂为 NULL。
+第 15 节起 HTTP 请求通过安全格式的 `X-Correlation-ID` 写入 MDC，新 Replay Audit 尽量保存该值；历史记录
+仍允许 NULL。它仅用于单实例日志关联，不是权限凭证、业务幂等键或 OpenTelemetry Trace。
 
 ## GitHub API Client
 
@@ -242,6 +243,24 @@ Issue/PR/Review Snapshot 不会自动推进 Task。Task 通过 Port 读取 GitHu
 Notification commit 后通过 AFTER_COMMIT 向当前 JVM 的 `SseEmitter` Registry 尽力发送最小 ID Envelope。
 Registry 支持每用户多连接、上限淘汰、Heartbeat 和失败清理。SSE 不改变 Outbox/Notification 语义；断线和
 跨实例遗漏由 REST 查询数据库补偿。跨实例广播、MQ、CDC 与 DEAD 人工重放未实现。
+
+## Observability 与 Health
+
+```text
+HTTP → CorrelationIdFilter → MDC/Response Header → Controller/Service/Audit
+                         └→ GitHub TaskDecorator（有限传播）
+Database 状态机 → 模块 Metrics façade → Micrometer → Prometheus Registry
+模块 Backlog Mapper → 周期 Snapshot → AtomicReference → Gauge（不执行 SQL）
+Actuator → livenessState / readinessState+db+redis
+```
+
+Delivery、Sync Run、Outbox、Notification/SSE 与 Replay 在各自模块的真实边界发 Counter/Timer；Tag 只来自固定
+状态/资源/事件白名单。GitHub 与 Outbox 各自查询内部表并刷新 immutable backlog snapshot，失败保留 last good。
+Historical DEAD Counter 与当前 open DEAD Gauge 分离，成功/开放 Replay 会解决原 DEAD 的 open 状态。
+
+liveness 不检查数据库、Redis、GitHub 或 backlog，防止外部故障触发重启风暴；readiness 包含当前核心依赖的
+MySQL/Redis，但不包含 GitHub API 或业务积压。默认只暴露 health；local/observability 才暴露 metrics/prometheus。
+完整边界见第 15 节学习文档。OpenTelemetry、生产 Prometheus、Grafana、Alertmanager 尚未实现。
 
 ## Agent 架构
 

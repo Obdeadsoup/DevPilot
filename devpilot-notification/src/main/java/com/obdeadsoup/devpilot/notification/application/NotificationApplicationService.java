@@ -6,7 +6,6 @@ import com.obdeadsoup.devpilot.notification.error.NotificationErrorCode;
 import com.obdeadsoup.devpilot.notification.event.NotificationCommittedEvent;
 import com.obdeadsoup.devpilot.notification.persistence.mapper.NotificationMapper;
 import com.obdeadsoup.devpilot.project.application.port.ProjectNotificationRecipientQuery;
-import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import org.springframework.dao.DuplicateKeyException;
@@ -25,7 +24,7 @@ public class NotificationApplicationService {
     private final ProjectNotificationRecipientQuery recipients;
     private final CurrentUserProvider users;
     private final Clock clock;
-    private final MeterRegistry metrics;
+    private final NotificationMetrics metrics;
     private final ApplicationEventPublisher events;
 
     public NotificationApplicationService(
@@ -33,7 +32,7 @@ public class NotificationApplicationService {
             ProjectNotificationRecipientQuery recipients,
             CurrentUserProvider users,
             Clock clock,
-            MeterRegistry metrics,
+            NotificationMetrics metrics,
             ApplicationEventPublisher events) {
         this.mapper = mapper;
         this.recipients = recipients;
@@ -55,10 +54,10 @@ public class NotificationApplicationService {
                     .id();
             events.publishEvent(new NotificationCommittedEvent(
                     notificationId, command.recipientUserId(), command.occurredAt()));
-            metrics.counter("notification.created", "result", "created").increment();
+            metrics.created(command.type().name(), false);
             return NotificationCreateResult.CREATED;
         } catch (DuplicateKeyException exception) {
-            metrics.counter("notification.created", "result", "deduplicated").increment();
+            metrics.created(command.type().name(), true);
             return NotificationCreateResult.ALREADY_EXISTS;
         }
     }

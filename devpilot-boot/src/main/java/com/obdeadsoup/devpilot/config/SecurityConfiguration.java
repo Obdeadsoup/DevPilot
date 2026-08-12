@@ -10,6 +10,7 @@ import com.obdeadsoup.devpilot.identity.security.JsonAuthenticationEntryPoint;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
@@ -24,6 +25,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 import java.security.SecureRandom;
+import java.util.Arrays;
 
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(IdentityProperties.class)
@@ -68,7 +70,8 @@ public class SecurityConfiguration {
             HttpSecurity http,
             BearerTokenAuthenticationFilter bearerTokenAuthenticationFilter,
             JsonAuthenticationEntryPoint authenticationEntryPoint,
-            JsonAccessDeniedHandler accessDeniedHandler
+            JsonAccessDeniedHandler accessDeniedHandler,
+            Environment environment
     ) throws Exception {
         http.csrf(AbstractHttpConfigurer::disable);
         http.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
@@ -80,16 +83,26 @@ public class SecurityConfiguration {
                 .authenticationEntryPoint(authenticationEntryPoint)
                 .accessDeniedHandler(accessDeniedHandler)
         );
-        http.authorizeHttpRequests(authorize -> authorize
-                .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
+        boolean observabilityProfile = Arrays.stream(environment.getActiveProfiles())
+                .anyMatch(profile -> profile.equals("local") || profile.equals("observability"));
+        http.authorizeHttpRequests(authorize -> {
+            authorize.requestMatchers(HttpMethod.GET,
+                            "/actuator/health", "/actuator/health/liveness", "/actuator/health/readiness",
+                            "/livez", "/readyz").permitAll();
+            if (observabilityProfile) {
+                // 本地/受控运维网络才开放 scrape；生产默认 profile 仍由 exposure + denyAll 双重保护。
+                authorize.requestMatchers(HttpMethod.GET, "/actuator/prometheus", "/actuator/metrics", "/actuator/metrics/**")
+                        .permitAll();
+            }
+            authorize
                 .requestMatchers(HttpMethod.POST, "/api/v1/github/webhooks").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/auth/me").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").authenticated()
                 .requestMatchers("/api/v1/notifications/**").authenticated()
                 .requestMatchers("/api/v1/workspaces/**").authenticated()
-                .anyRequest().denyAll()
-        );
+                .anyRequest().denyAll();
+        });
         http.addFilterBefore(bearerTokenAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }

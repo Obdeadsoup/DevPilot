@@ -1,0 +1,13 @@
+management:
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] [%X{correlationId:-}] %logger{36} - %msg%n"

@@ -21,6 +21,8 @@ import com.obdeadsoup.devpilot.task.persistence.mapper.TaskMapper;
 import com.obdeadsoup.devpilot.task.persistence.mapper.TaskStatusHistoryMapper;
 import com.obdeadsoup.devpilot.notification.persistence.mapper.NotificationMapper;
 import com.obdeadsoup.devpilot.outbox.persistence.mapper.OutboxEventMapper;
+import com.obdeadsoup.devpilot.outbox.persistence.mapper.OutboxBacklogMapper;
+import com.obdeadsoup.devpilot.github.persistence.mapper.GitHubBacklogMapper;
 import org.mockito.Mockito;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -31,6 +33,8 @@ class IsolatedPersistenceTestConfiguration {
     @Bean AuditLogMapper auditLogMapper() { return Mockito.mock(AuditLogMapper.class); }
     @Bean DeadLetterMapper deadLetterMapper() { return Mockito.mock(DeadLetterMapper.class); }
     @Bean OutboxEventMapper outboxEventMapper() { return Mockito.mock(OutboxEventMapper.class); }
+    @Bean OutboxBacklogMapper outboxBacklogMapper() { return Mockito.mock(OutboxBacklogMapper.class); }
+    @Bean GitHubBacklogMapper gitHubBacklogMapper() { return Mockito.mock(GitHubBacklogMapper.class); }
     @Bean NotificationMapper notificationMapper() { return Mockito.mock(NotificationMapper.class); }
 
     @Bean
