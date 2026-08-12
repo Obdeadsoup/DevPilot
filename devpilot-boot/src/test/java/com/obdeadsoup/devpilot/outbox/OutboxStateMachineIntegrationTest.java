@@ -10,6 +10,7 @@ import com.obdeadsoup.devpilot.outbox.domain.OutboxFailureType;
 import com.obdeadsoup.devpilot.outbox.persistence.entity.OutboxEventEntity;
 import com.obdeadsoup.devpilot.outbox.persistence.mapper.OutboxEventMapper;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -75,10 +76,10 @@ class OutboxStateMachineIntegrationTest {
 
     @Test
     void retryWaitHonorsDueTimeAndPermanentFailureBecomesDead() {
-        long future = insert("future", "RETRY_WAIT", 1, LocalDateTime.now().plusMinutes(5), null, 2);
+        long future = insert("future", "RETRY_WAIT", 1, LocalDateTime.now(ZoneOffset.UTC).plusMinutes(5), null, 2);
         assertThat(states.claim(future)).isEmpty();
 
-        long due = insert("due", "RETRY_WAIT", 1, LocalDateTime.now().minusSeconds(1), null, 2);
+        long due = insert("due", "RETRY_WAIT", 1, LocalDateTime.now(ZoneOffset.UTC).minusSeconds(1), null, 2);
         OutboxEventEntity claimed = states.claim(due).orElseThrow();
         assertThat(claimed.getVersion()).isEqualTo(3);
         OutboxEventStatus result = states.markFailed(claimed, new OutboxFailureDecision(
@@ -89,14 +90,14 @@ class OutboxStateMachineIntegrationTest {
 
     @Test
     void staleProcessingRecoversAndOldVersionCannotOverwriteRecoveredState() {
-        LocalDateTime started = LocalDateTime.now().minusMinutes(10);
+        LocalDateTime started = LocalDateTime.now(ZoneOffset.UTC).minusMinutes(10);
         long id = insert("stale", "PROCESSING", 0, null, started, 4);
         OutboxEventEntity stale = mapper.findById(id).orElseThrow();
 
-        assertThat(states.recoverStale(stale, LocalDateTime.now().minusMinutes(2)))
+        assertThat(states.recoverStale(stale, LocalDateTime.now(ZoneOffset.UTC).minusMinutes(2)))
                 .isEqualTo(OutboxEventStatus.RETRY_WAIT);
         assertThat(status(id)).isEqualTo("RETRY_WAIT");
-        assertThat(mapper.markProcessed(id, 4, LocalDateTime.now())).isZero();
+        assertThat(mapper.markProcessed(id, 4, LocalDateTime.now(ZoneOffset.UTC))).isZero();
         assertThat(mapper.findById(id).orElseThrow().getVersion()).isEqualTo(5);
     }
 

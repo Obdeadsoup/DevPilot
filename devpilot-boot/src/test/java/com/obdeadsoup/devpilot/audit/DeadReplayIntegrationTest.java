@@ -37,7 +37,10 @@ class DeadReplayIntegrationTest {
     @Autowired GitHubSyncReplayApplicationService sync;
 
     @BeforeEach void setup(){
-        jdbc.update("DELETE FROM dp_audit_log");jdbc.update("DELETE FROM dp_outbox_event");
+        jdbc.update("DELETE FROM dp_audit_log");
+        jdbc.update("DELETE FROM dp_outbox_event WHERE replay_of_event_id IS NOT NULL");
+        jdbc.update("DELETE FROM dp_outbox_event");
+        jdbc.update("DELETE FROM dp_github_sync_run WHERE replay_of_run_id IS NOT NULL");
         jdbc.update("DELETE FROM dp_github_sync_run");jdbc.update("DELETE FROM dp_github_sync_checkpoint");
         jdbc.update("DELETE FROM dp_github_repository");jdbc.update("DELETE FROM dp_task");
         jdbc.update("DELETE FROM dp_project_member");jdbc.update("DELETE FROM dp_workspace_member");

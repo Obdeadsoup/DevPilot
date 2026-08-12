@@ -5,7 +5,8 @@
 `notification -> identity/project/task/github`，上游模块不反向依赖 notification。Task 候选、Project
 Manager 与 PR Review 状态均通过中立只读 Port 提供；Scheduler 只触发 fixedDelay 扫描。每条通知在独立
 短事务 INSERT，重复扫描与多实例并发由 `(recipient_user_id, dedupe_key)` 唯一索引收敛。数据库 Notification
-是可靠来源；当前没有 SSE、邮件、Outbox 或分布式锁。
+是可靠来源。Task 即时事件已使用 Transactional Outbox，单实例 SSE 仅作低延迟提示；邮件、跨实例广播和
+分布式锁未实现。
 
 ## 原则
 
@@ -171,7 +172,7 @@ bind → ACTIVE ⇄ DISABLED
 - Activity 来源唯一键防重复业务时间线。
 - 开放 Sync Run 唯一键防重复任务，version 条件 UPDATE 防重复 claim 和旧状态覆盖。
 - Webhook 保证实时性，数据库 Run 驱动的定时 API 对账保证 Commit 完整性。
-- Outbox/MQ 尚未实现。
+- Task 即时通知已使用 MySQL Transactional Outbox；RabbitMQ/Kafka 等 MQ 未实现。
 
 ## Issue / PR / Review 快照同步
 
@@ -242,7 +243,22 @@ Issue/PR/Review Snapshot 不会自动推进 Task。Task 通过 Port 读取 GitHu
 
 Notification commit 后通过 AFTER_COMMIT 向当前 JVM 的 `SseEmitter` Registry 尽力发送最小 ID Envelope。
 Registry 支持每用户多连接、上限淘汰、Heartbeat 和失败清理。SSE 不改变 Outbox/Notification 语义；断线和
-跨实例遗漏由 REST 查询数据库补偿。跨实例广播、MQ、CDC 与 DEAD 人工重放未实现。
+跨实例遗漏由 REST 查询数据库补偿。Outbox 与 GitHub Sync 已提供受控 DEAD 人工重放和 Audit；跨实例广播、
+MQ 与 CDC 未实现。
+
+## 架构守护、CI 与性能基线
+
+`devpilot-boot` 装配全部模块，因此 ArchUnit 在其 test classpath 扫描生产 class。规则守住业务模块无环、
+Framework 单向依赖、已批准模块方向、Controller 不直连 Mapper、Domain 不依赖 Web/Persistence 技术实现，
+以及跨模块不得直连其他模块的 Mapper/Entity/Repository 实现。Application Service 访问本模块 Persistence
+属于当前明确边界，不做形式化禁止。
+
+首次规则执行发现 Task 曾直接注入 Identity `UserMapper` 和 Project `ProjectMapper/ProjectEntity`。当前已分别改为
+`IdentityUserEligibilityService` 与 `ProjectTaskContextQuery` + 最小 DTO，规则没有为既有违规设置豁免。
+
+Backend CI 在 Pull Request、main push 和手工触发时使用 JDK 21 执行完整 Maven verify 与 Compose 配置验证；
+它不部署应用，也不访问真实 GitHub。JMeter 是人工 non-GUI 基线，读链路与每线程独立 Task Workflow 都保留
+鉴权、事务和日志，并与第 15 节 Metrics 同时间窗分析，不进入普通 PR Gate。
 
 ## Observability 与 Health
 

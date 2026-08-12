@@ -9,6 +9,11 @@ management:
   health:
     redis:
       enabled: false
+  endpoint:
+    health:
+      group:
+        readiness:
+          include: readinessState,db
 
 devpilot:
   observability:

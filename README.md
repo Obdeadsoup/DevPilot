@@ -44,7 +44,7 @@ DevPilot 不复刻 GitHub，而是建立一个面向小团队的“项目上下�
 - 项目活动时间线
 - 同步任务状态和失败重试
 - 站内通知与关键操作审计
-- Docker Compose、自动化测试、liveness/readiness、Prometheus-ready 指标
+- Docker Compose、自动化测试、ArchUnit、Backend CI、liveness/readiness、Prometheus-ready 指标
 
 ## 技术路线
 
@@ -71,7 +71,7 @@ devpilot-knowledge
 devpilot-agent
 ```
 
-第一轮只创建：
+当前传统后端阶段已装配：
 
 ```text
 devpilot-boot
@@ -79,6 +79,10 @@ devpilot-framework
 devpilot-identity
 devpilot-project
 devpilot-github
+devpilot-task
+devpilot-notification
+devpilot-outbox
+devpilot-audit
 ```
 
 ## 文档
@@ -105,6 +109,11 @@ devpilot-github
 - [第 14 节变更文件地图](docs/changes/14-dead-replay-audit-file-map.md)
 - [Observability、Metrics、Health、Backlog 与 SLO 学习笔记](docs/learning/15-observability-metrics-health-slo.md)
 - [第 15 节变更文件地图](docs/changes/15-observability-metrics-health-slo-file-map.md)
+- [传统后端工程化收尾学习笔记](docs/learning/16-backend-engineering-closure.md)
+- [第 16 节测试矩阵](docs/testing/16-backend-test-matrix.md)
+- [第 16 节性能基线记录](docs/performance/16-backend-baseline.md)
+- [第 16 节 Backend Freeze Checklist](docs/checklists/16-backend-freeze-checklist.md)
+- [第 16 节变更文件地图](docs/changes/16-backend-closure-ci-archunit-performance-file-map.md)
 - [Codex 分阶段指令](codex-prompts/all-prompts.md)
 
 ## 开发方式
@@ -165,6 +174,9 @@ Invoke-RestMethod http://localhost:8080/actuator/metrics
 Invoke-WebRequest http://localhost:8080/actuator/prometheus
 ```
 
+根目录 Backend CI 在 Pull Request、`main` push 和手工触发时执行同一条完整验证，并运行 ArchUnit 与
+Testcontainers；这是 CI，不包含自动部署。JMeter 基线保存在 `performance/jmeter`，仅人工运行，不作为普通 PR Gate。
+
 默认 profile 仍只暴露 `health`。`local` 或 `observability` profile 才启用 Prometheus export 并暴露
 `health,metrics,prometheus`；这一匿名 scrape 策略仅用于本机/受控运维网络，不是互联网生产安全方案。
 请求使用安全格式的 `X-Correlation-ID` 关联同步日志；GitHub/Outbox 后台任务只传播有限 MDC 或创建新的处理 ID，
@@ -178,7 +190,7 @@ open DEAD 会排除已被成功或开放 Replay 解决的记录。本节只建�
 
 ```powershell
 Set-Location .\devpilot-web
-npm install
+npm ci
 npm run typecheck
 npm run build
 npm run dev
@@ -348,7 +360,7 @@ ACTIVE Workspace Member 可见 INTERNAL 项目，PRIVATE 项目还要求 ACTIVE 
 Membership。所有单项目查询都同时携带 `workspaceId + projectId`。
 
 本阶段已开放 GitHub Repository 绑定生命周期、工程化读取 Client、Commit/Issue/PR/Review 快照同步和
-数据库 Run/Checkpoint 状态机，但仍未实现 GitHub App JWT / Installation Token、跨实例 Credential 并发协调、Audit 或 Agent。
+数据库 Run/Checkpoint 状态机，但仍未实现 GitHub App JWT / Installation Token、跨实例 Credential 并发协调或 Agent。
 Task 已提供本地 BACKLOG/TODO/IN_PROGRESS/IN_REVIEW/DONE/CANCELED
 状态机、版本条件更新、History、Project Activity 与显式 GitHub Issue/PR Snapshot 关联；PR MERGED 和
 Issue CLOSED 不会自动完成 Task。当前已实现数据库站内 Notification、Task 到期/逾期/Review 与
@@ -367,8 +379,8 @@ GET  /api/v1/notifications/stream
 ```
 
 SSE 使用 Stateless Bearer Header 和 Fetch-based SSE Client，不接受 query token。它是低延迟 Channel，
-不是可靠消息队列，也不提供精确一次或跨实例广播。尚未实现 RabbitMQ/Kafka、Debezium CDC、邮件、企业 IM、
-Outbox 管理后台、DEAD 人工重放和完整审计。
+不是可靠消息队列，也不提供精确一次或跨实例广播。当前已有受控 Outbox/GitHub Sync DEAD 人工重放和
+SUCCESS/FAILURE/DENIED Audit；尚未实现 RabbitMQ/Kafka、Debezium CDC、邮件、企业 IM、跨实例 SSE 或通用管理后台。
 
 停止应用后关闭容器：
 

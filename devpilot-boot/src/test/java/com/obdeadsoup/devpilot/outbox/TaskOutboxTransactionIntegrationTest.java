@@ -91,7 +91,7 @@ class TaskOutboxTransactionIntegrationTest {
                 "TASK_SUBMITTED_FOR_REVIEW_V1", "TASK_COMPLETED_V1", "TASK_REOPENED_V1", "TASK_UNASSIGNED_V1");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM dp_task_status_history WHERE task_id=?", Long.class, task.id()))
                 .isEqualTo(8);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM dp_project_activity WHERE source_task_id=?", Long.class, task.id()))
+        assertThat(taskActivityCount(task.id()))
                 .isGreaterThanOrEqualTo(9);
     }
 
@@ -109,7 +109,7 @@ class TaskOutboxTransactionIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT assignee_user_id FROM dp_task WHERE id=?", Long.class, task.id()))
                 .isNull();
         assertThat(jdbc.queryForObject("SELECT version FROM dp_task WHERE id=?", Long.class, task.id())).isZero();
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM dp_project_activity WHERE source_task_id=?", Long.class, task.id()))
+        assertThat(taskActivityCount(task.id()))
                 .isEqualTo(1);
 
         tasks.updateTaskProfile(100, 200, task.id(),
@@ -123,6 +123,13 @@ class TaskOutboxTransactionIntegrationTest {
 
     private List<String> eventTypes() {
         return jdbc.queryForList("SELECT event_type FROM dp_outbox_event ORDER BY id", String.class);
+    }
+
+    private long taskActivityCount(long taskId) {
+        return jdbc.queryForObject("""
+                SELECT COUNT(*) FROM dp_project_activity
+                WHERE source_type='TASK' AND source_delivery_id LIKE CONCAT('task:', ?, ':v%')
+                """, Long.class, taskId);
     }
 
     private void clearData() {

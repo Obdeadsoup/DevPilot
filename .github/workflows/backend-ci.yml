@@ -1,0 +1,56 @@
+name: Backend CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Build, test, and verify architecture
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 21 and Maven cache
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Show tool versions
+        run: |
+          java -version
+          mvn -version
+
+      - name: Verify backend
+        run: mvn -B -ntp clean verify
+
+      - name: Validate Docker Compose configuration
+        env:
+          DEVPILOT_MYSQL_PASSWORD: ci-compose-validation-only
+          DEVPILOT_MYSQL_ROOT_PASSWORD: ci-compose-root-validation-only
+          DEVPILOT_REDIS_PASSWORD: ci-compose-validation-only
+        run: docker compose config
+
+      - name: Upload test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-test-reports
+          path: |
+            **/target/surefire-reports/**
+            **/target/failsafe-reports/**
+          if-no-files-found: ignore
+          retention-days: 7

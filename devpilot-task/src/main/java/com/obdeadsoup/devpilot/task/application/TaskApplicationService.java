@@ -3,8 +3,8 @@ package com.obdeadsoup.devpilot.task.application;
 import com.obdeadsoup.devpilot.framework.error.BusinessException;
 import com.obdeadsoup.devpilot.identity.application.CurrentUserProvider;
 import com.obdeadsoup.devpilot.project.domain.ProjectPermission;
-import com.obdeadsoup.devpilot.project.persistence.entity.ProjectEntity;
-import com.obdeadsoup.devpilot.project.persistence.mapper.ProjectMapper;
+import com.obdeadsoup.devpilot.project.application.port.ProjectTaskContext;
+import com.obdeadsoup.devpilot.project.application.port.ProjectTaskContextQuery;
 import com.obdeadsoup.devpilot.task.api.dto.TaskResponse;
 import com.obdeadsoup.devpilot.task.application.command.CreateTaskCommand;
 import com.obdeadsoup.devpilot.task.application.command.UpdateTaskCommand;
@@ -27,18 +27,18 @@ import java.time.LocalDateTime;
 @Service
 public class TaskApplicationService {
     private final TaskMapper taskMapper;
-    private final ProjectMapper projectMapper;
+    private final ProjectTaskContextQuery projectTaskContextQuery;
     private final TaskAuthorizationService authorizationService;
     private final TaskPersistenceService persistenceService;
     private final CurrentUserProvider currentUserProvider;
     private final Clock clock;
     private final TaskOutboxEventFactory outboxEvents;
 
-    public TaskApplicationService(TaskMapper taskMapper, ProjectMapper projectMapper,
+    public TaskApplicationService(TaskMapper taskMapper, ProjectTaskContextQuery projectTaskContextQuery,
                                   TaskAuthorizationService authorizationService, TaskPersistenceService persistenceService,
                                   CurrentUserProvider currentUserProvider, Clock taskClock,
                                   TaskOutboxEventFactory outboxEvents) {
-        this.taskMapper = taskMapper; this.projectMapper = projectMapper; this.authorizationService = authorizationService;
+        this.taskMapper = taskMapper; this.projectTaskContextQuery = projectTaskContextQuery; this.authorizationService = authorizationService;
         this.persistenceService = persistenceService; this.currentUserProvider = currentUserProvider; this.clock = taskClock;
         this.outboxEvents = outboxEvents;
     }
@@ -47,20 +47,20 @@ public class TaskApplicationService {
     @Transactional
     public TaskResponse createTask(long workspaceId, long projectId, CreateTaskCommand command) {
         long actor = currentUserProvider.requireUserId();
-        ProjectEntity project = requireWritableProject(workspaceId, projectId);
+        String projectKey = requireWritableProject(workspaceId, projectId);
         authorizationService.requirePermission(actor, workspaceId, projectId, ProjectPermission.TASK_CREATE);
         if (command.assigneeUserId() != null) authorizationService.requireEligibleAssignee(command.assigneeUserId(), workspaceId, projectId);
         LocalDateTime now = LocalDateTime.now(clock);
         TaskEntity task = preparedTask(workspaceId, projectId, actor, command.title(), command.description(), command.priority(),
                 command.assigneeUserId(), command.dueAt(), now);
-        return TaskResponse.from(persistenceService.create(task, actor, now), project.projectKey(), true);
+        return TaskResponse.from(persistenceService.create(task, actor, now), projectKey, true);
     }
 
     /** 只更新资料字段；expectedVersion 是客户端读到的版本，更新 0 行绝不按成功处理。 */
     @Transactional
     public TaskResponse updateTaskProfile(long workspaceId, long projectId, long taskId, UpdateTaskCommand command) {
         long actor = currentUserProvider.requireUserId();
-        ProjectEntity project = requireWritableProject(workspaceId, projectId);
+        String projectKey = requireWritableProject(workspaceId, projectId);
         TaskEntity task = requireTask(workspaceId, projectId, taskId);
         authorizationService.requireProfileUpdate(actor, task);
         validateInput(command.title(), command.description(), command.dueAt());
@@ -69,33 +69,33 @@ public class TaskApplicationService {
             throw writeConflict(workspaceId, projectId, taskId, command.expectedVersion());
         }
         persistenceService.recordProfileUpdate(task, command.expectedVersion() + 1, LocalDateTime.now(clock));
-        return TaskResponse.from(requireTask(workspaceId, projectId, taskId), project.projectKey(), true);
+        return TaskResponse.from(requireTask(workspaceId, projectId, taskId), projectKey, true);
     }
 
     @Transactional
     public TaskResponse assignTask(long workspaceId, long projectId, long taskId, long assigneeUserId, long expectedVersion) {
-        long actor = currentUserProvider.requireUserId(); ProjectEntity project = requireWritableProject(workspaceId, projectId);
+        long actor = currentUserProvider.requireUserId(); String projectKey = requireWritableProject(workspaceId, projectId);
         TaskEntity task = requireTask(workspaceId, projectId, taskId); authorizationService.requireAssignment(actor, task);
         authorizationService.requireEligibleAssignee(assigneeUserId, workspaceId, projectId);
-        if (Long.valueOf(assigneeUserId).equals(task.getAssigneeUserId())) return TaskResponse.from(task, project.projectKey(), true);
+        if (Long.valueOf(assigneeUserId).equals(task.getAssigneeUserId())) return TaskResponse.from(task, projectKey, true);
         if (taskMapper.updateAssignee(workspaceId, projectId, taskId, assigneeUserId, expectedVersion) != 1) throw writeConflict(workspaceId, projectId, taskId, expectedVersion);
         LocalDateTime occurredAt = LocalDateTime.now(clock);
         persistenceService.recordAssignment(task, expectedVersion + 1, true, occurredAt);
-        outboxEvents.publishAssigned(task, project.projectKey(), expectedVersion + 1, actor, assigneeUserId, occurredAt);
-        return TaskResponse.from(requireTask(workspaceId, projectId, taskId), project.projectKey(), true);
+        outboxEvents.publishAssigned(task, projectKey, expectedVersion + 1, actor, assigneeUserId, occurredAt);
+        return TaskResponse.from(requireTask(workspaceId, projectId, taskId), projectKey, true);
     }
 
     @Transactional
     public TaskResponse unassignTask(long workspaceId, long projectId, long taskId, long expectedVersion) {
-        long actor = currentUserProvider.requireUserId(); ProjectEntity project = requireWritableProject(workspaceId, projectId);
+        long actor = currentUserProvider.requireUserId(); String projectKey = requireWritableProject(workspaceId, projectId);
         TaskEntity task = requireTask(workspaceId, projectId, taskId); authorizationService.requireAssignment(actor, task);
-        if (task.getAssigneeUserId() == null) return TaskResponse.from(task, project.projectKey(), true);
+        if (task.getAssigneeUserId() == null) return TaskResponse.from(task, projectKey, true);
         long previousAssignee = task.getAssigneeUserId();
         if (taskMapper.updateAssignee(workspaceId, projectId, taskId, null, expectedVersion) != 1) throw writeConflict(workspaceId, projectId, taskId, expectedVersion);
         LocalDateTime occurredAt = LocalDateTime.now(clock);
         persistenceService.recordAssignment(task, expectedVersion + 1, false, occurredAt);
-        outboxEvents.publishUnassigned(task, project.projectKey(), expectedVersion + 1, actor, previousAssignee, occurredAt);
-        return TaskResponse.from(requireTask(workspaceId, projectId, taskId), project.projectKey(), true);
+        outboxEvents.publishUnassigned(task, projectKey, expectedVersion + 1, actor, previousAssignee, occurredAt);
+        return TaskResponse.from(requireTask(workspaceId, projectId, taskId), projectKey, true);
     }
 
     TaskEntity preparedTask(long workspaceId, long projectId, long reporterId, String title, String description,
@@ -108,12 +108,12 @@ public class TaskApplicationService {
         return task;
     }
 
-    ProjectEntity requireWritableProject(long workspaceId, long projectId) {
-        ProjectEntity project = projectMapper.findByScope(workspaceId, projectId)
+    String requireWritableProject(long workspaceId, long projectId) {
+        ProjectTaskContext project = projectTaskContextQuery.findByScope(workspaceId, projectId)
                 .orElseThrow(() -> new BusinessException(TaskErrorCode.TASK_NOT_FOUND));
-        if ("ARCHIVED".equals(project.status())) throw new BusinessException(TaskErrorCode.TASK_PROJECT_ARCHIVED);
-        if (projectMapper.countActiveProjectScope(workspaceId, projectId) != 1) throw new BusinessException(TaskErrorCode.TASK_NOT_FOUND);
-        return project;
+        if (project.archived()) throw new BusinessException(TaskErrorCode.TASK_PROJECT_ARCHIVED);
+        if (!project.activeScope()) throw new BusinessException(TaskErrorCode.TASK_NOT_FOUND);
+        return project.projectKey();
     }
 
     TaskEntity requireTask(long workspaceId, long projectId, long taskId) {

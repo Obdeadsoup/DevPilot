@@ -2,7 +2,6 @@ package com.obdeadsoup.devpilot.task.application;
 
 import com.obdeadsoup.devpilot.framework.error.BusinessException;
 import com.obdeadsoup.devpilot.identity.application.CurrentUserProvider;
-import com.obdeadsoup.devpilot.project.persistence.entity.ProjectEntity;
 import com.obdeadsoup.devpilot.task.api.dto.TaskResponse;
 import com.obdeadsoup.devpilot.task.domain.TaskAction;
 import com.obdeadsoup.devpilot.task.domain.TaskStatus;
@@ -43,7 +42,7 @@ public class TaskWorkflowService {
 
     /** 每个动作都以 expectedVersion 条件 UPDATE 抢占一次状态迁移，并同事务写 History 与 Activity。 */
     private TaskResponse perform(long workspaceId,long projectId,long taskId,long expectedVersion,String reason,TaskAction action) {
-        ProjectEntity project=taskApplicationService.requireWritableProject(workspaceId,projectId);
+        String projectKey=taskApplicationService.requireWritableProject(workspaceId,projectId);
         TaskEntity task=taskApplicationService.requireTask(workspaceId,projectId,taskId); long actor=currentUserProvider.requireUserId();
         authorizationService.requireWorkflow(actor,task,action); validateReason(reason);
         TaskTransition transition=transitionPolicy.transition(TaskStatus.valueOf(task.getStatus()),action); LocalDateTime now=LocalDateTime.now(clock);
@@ -52,8 +51,8 @@ public class TaskWorkflowService {
             throw taskApplicationService.writeConflict(workspaceId,projectId,taskId,expectedVersion);
         }
         persistenceService.recordTransition(task,transition,actor,normalizeReason(reason),expectedVersion+1,now);
-        outboxEvents.publishWorkflow(task,project.projectKey(),expectedVersion+1,actor,action,now);
-        return TaskResponse.from(taskApplicationService.requireTask(workspaceId,projectId,taskId),project.projectKey(),true);
+        outboxEvents.publishWorkflow(task,projectKey,expectedVersion+1,actor,action,now);
+        return TaskResponse.from(taskApplicationService.requireTask(workspaceId,projectId,taskId),projectKey,true);
     }
     private void validateReason(String reason){ if(reason!=null && reason.trim().length()>1000) throw new BusinessException(TaskErrorCode.INVALID_TASK_REASON); }
     private String normalizeReason(String reason){ return reason==null||reason.isBlank()?null:reason.trim(); }

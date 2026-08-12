@@ -1,7 +1,7 @@
 package com.obdeadsoup.devpilot.task.application;
 
 import com.obdeadsoup.devpilot.framework.error.BusinessException;
-import com.obdeadsoup.devpilot.identity.persistence.mapper.UserMapper;
+import com.obdeadsoup.devpilot.identity.application.IdentityUserEligibilityService;
 import com.obdeadsoup.devpilot.project.application.ProjectAuthorizationService;
 import com.obdeadsoup.devpilot.project.domain.ProjectPermission;
 import com.obdeadsoup.devpilot.project.domain.ProjectRole;
@@ -19,11 +19,12 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class TaskAuthorizationService {
     private final ProjectAuthorizationService projectAuthorizationService;
-    private final UserMapper userMapper;
+    private final IdentityUserEligibilityService identityUserEligibilityService;
 
-    public TaskAuthorizationService(ProjectAuthorizationService projectAuthorizationService, UserMapper userMapper) {
+    public TaskAuthorizationService(ProjectAuthorizationService projectAuthorizationService,
+                                    IdentityUserEligibilityService identityUserEligibilityService) {
         this.projectAuthorizationService = projectAuthorizationService;
-        this.userMapper = userMapper;
+        this.identityUserEligibilityService = identityUserEligibilityService;
     }
 
     @Transactional(readOnly = true)
@@ -57,7 +58,7 @@ public class TaskAuthorizationService {
 
     @Transactional(readOnly = true)
     public void requireEligibleAssignee(long userId, long workspaceId, long projectId) {
-        if (userMapper.countActiveById(userId) != 1
+        if (!identityUserEligibilityService.isActive(userId)
                 || !projectAuthorizationService.hasPermission(userId, workspaceId, projectId, ProjectPermission.TASK_READ)) {
             throw new BusinessException(TaskErrorCode.TASK_ASSIGNEE_NOT_ELIGIBLE);
         }

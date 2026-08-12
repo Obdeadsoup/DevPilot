@@ -40,7 +40,12 @@ docs/changes/*
 !docs/changes/13-transactional-outbox-sse-file-map.md
 !docs/changes/14-dead-replay-audit-file-map.md
 !docs/changes/15-observability-metrics-health-slo-file-map.md
+!docs/changes/16-backend-closure-ci-archunit-performance-file-map.md
 docs/learning/*
+!docs/learning/16-backend-engineering-closure.md
+
+# Local performance results
+performance/jmeter/results/
 
 # DevPilot web generated resources
 devpilot-web/node_modules/

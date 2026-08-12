@@ -11,6 +11,9 @@ management:
       enabled: true
 
 devpilot:
+  observability:
+    backlog:
+      enabled: false
   outbox:
     enabled: false
   notification:
@@ -23,3 +26,5 @@ devpilot:
   github:
     base-url: http://127.0.0.1:1
     delivery-recovery-enabled: false
+    reconciliation:
+      enabled: false

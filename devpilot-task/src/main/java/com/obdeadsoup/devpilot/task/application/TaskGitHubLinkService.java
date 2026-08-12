@@ -3,7 +3,6 @@ package com.obdeadsoup.devpilot.task.application;
 import com.obdeadsoup.devpilot.framework.error.BusinessException;
 import com.obdeadsoup.devpilot.identity.application.CurrentUserProvider;
 import com.obdeadsoup.devpilot.project.domain.ProjectPermission;
-import com.obdeadsoup.devpilot.project.persistence.entity.ProjectEntity;
 import com.obdeadsoup.devpilot.task.api.dto.TaskGitHubLinkResponse;
 import com.obdeadsoup.devpilot.task.api.dto.TaskResponse;
 import com.obdeadsoup.devpilot.task.application.command.CreateTaskFromIssueCommand;
@@ -50,7 +49,7 @@ public class TaskGitHubLinkService {
 
     public TaskResponse link(long workspaceId,long projectId,long taskId,long expectedVersion,
                              TaskExternalReferenceSnapshot reference,TaskGitHubRelationType relation) {
-        ProjectEntity project=taskApplicationService.requireWritableProject(workspaceId,projectId);
+        String projectKey=taskApplicationService.requireWritableProject(workspaceId,projectId);
         TaskEntity task=taskApplicationService.requireTask(workspaceId,projectId,taskId); long actor=currentUserProvider.requireUserId();
         authorizationService.requireLinkUpdate(actor,task);
         if(reference.workspaceId()!=workspaceId || reference.projectId()!=projectId) throw new BusinessException(TaskErrorCode.TASK_EXTERNAL_REFERENCE_SCOPE_MISMATCH);
@@ -67,11 +66,11 @@ public class TaskGitHubLinkService {
             throw taskApplicationService.writeConflict(workspaceId,projectId,taskId,expectedVersion);
         }
         persistenceService.recordLink(task,expectedVersion+1,false,LocalDateTime.now(clock));
-        return TaskResponse.from(taskApplicationService.requireTask(workspaceId,projectId,taskId),project.projectKey(),true);
+        return TaskResponse.from(taskApplicationService.requireTask(workspaceId,projectId,taskId),projectKey,true);
     }
 
     public TaskResponse removeGitHubLink(long workspaceId,long projectId,long taskId,long linkId,long expectedTaskVersion,long expectedLinkVersion) {
-        ProjectEntity project=taskApplicationService.requireWritableProject(workspaceId,projectId);
+        String projectKey=taskApplicationService.requireWritableProject(workspaceId,projectId);
         TaskEntity task=taskApplicationService.requireTask(workspaceId,projectId,taskId); long actor=currentUserProvider.requireUserId();
         authorizationService.requireLinkUpdate(actor,task);
         TaskGitHubLinkEntity link=linkMapper.findByTaskScopeAndId(workspaceId,projectId,taskId,linkId)
@@ -80,7 +79,7 @@ public class TaskGitHubLinkService {
         boolean manager=authorizationService.isManager(actor,workspaceId,projectId);
         if(taskMapper.incrementVersionForLink(workspaceId,projectId,taskId,expectedTaskVersion,manager)!=1) throw taskApplicationService.writeConflict(workspaceId,projectId,taskId,expectedTaskVersion);
         persistenceService.recordLink(task,expectedTaskVersion+1,true,LocalDateTime.now(clock));
-        return TaskResponse.from(taskApplicationService.requireTask(workspaceId,projectId,taskId),project.projectKey(),true);
+        return TaskResponse.from(taskApplicationService.requireTask(workspaceId,projectId,taskId),projectKey,true);
     }
 
     /**
@@ -88,7 +87,7 @@ public class TaskGitHubLinkService {
      * 最多一个有效关联；冲突时整个新 Task/History/Activity 事务回滚并返回稳定 409。
      */
     public TaskResponse createTaskFromIssue(long workspaceId,long projectId,long issueSnapshotId,CreateTaskFromIssueCommand command) {
-        long actor=currentUserProvider.requireUserId(); ProjectEntity project=taskApplicationService.requireWritableProject(workspaceId,projectId);
+        long actor=currentUserProvider.requireUserId(); String projectKey=taskApplicationService.requireWritableProject(workspaceId,projectId);
         authorizationService.requirePermission(actor,workspaceId,projectId,ProjectPermission.TASK_CREATE);
         TaskExternalReferenceSnapshot issue=referenceReader.readIssue(workspaceId,projectId,issueSnapshotId);
         if(command.assigneeUserId()!=null) authorizationService.requireEligibleAssignee(command.assigneeUserId(),workspaceId,projectId);
@@ -102,7 +101,7 @@ public class TaskGitHubLinkService {
         } catch (DuplicateKeyException exception) { throw new BusinessException(TaskErrorCode.TASK_EXTERNAL_RESOURCE_ALREADY_LINKED); }
         if(taskMapper.incrementVersionForLink(workspaceId,projectId,task.getId(),0,false)!=1) throw new BusinessException(TaskErrorCode.TASK_VERSION_CONFLICT);
         persistenceService.recordLink(task,1,false,now);
-        return TaskResponse.from(taskApplicationService.requireTask(workspaceId,projectId,task.getId()),project.projectKey(),true);
+        return TaskResponse.from(taskApplicationService.requireTask(workspaceId,projectId,task.getId()),projectKey,true);
     }
 
     @Transactional(readOnly=true)

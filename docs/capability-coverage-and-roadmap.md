@@ -58,11 +58,15 @@ Outbox 实现可靠落库和有限重试；单实例 SSE 提供多连接、Heart
 
 ### 阶段 5：工程化
 
-Outbox、两层消费幂等、DEAD 管理、六类 Task V1 受控人工重放与 SUCCESS/FAILURE/DENIED Audit 已落地。
+**传统后端工程化主线已阶段性完成。** Outbox、两层消费幂等、DEAD 管理、六类 Task V1 受控人工重放与 SUCCESS/FAILURE/DENIED Audit 已落地。
 第 15 节已增加安全 Correlation ID、有限异步 MDC、Micrometer/Prometheus-ready endpoint、Delivery/Sync/Outbox
 backlog snapshot、oldest age、open DEAD 与 liveness/readiness。原 DEAD 不修改；新 Replay 仍经过原 Worker。
-RabbitMQ/Kafka、CDC、跨实例广播、Audit WORM、OpenTelemetry、Grafana、Alertmanager、ArchUnit、CI、压测和
-生产 SLO/SLA 验证仍是后续能力。
+第 16 节以 ArchUnit、Backend CI、测试矩阵、JMeter 可执行基线和 Freeze Checklist 固化工程边界。性能尚未
+实跑，不能据此声明生产容量或 SLO/SLA。RabbitMQ/Kafka、CDC、跨实例广播、Audit WORM、OpenTelemetry、
+Grafana、Alertmanager 和生产 SLO/SLA 验证仍是后续能力。
+
+下一阶段路线：`Frontend/E2E alignment → Knowledge / Agent L1`。前端先与当前后端契约和权限边界全面对齐，
+再进入知识库与 Agent；这里的阶段性完成不等于生产就绪。
 
 ### 阶段 6：知识库与 Agent L1
 

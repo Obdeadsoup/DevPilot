@@ -182,3 +182,9 @@ RETRY_WAIT 扫描、超时 RUNNING 扫描和 Binding 历史查询。
 V9 不修改 V1–V8，新增三张快照表，把 Checkpoint/Run 的 resource_type 扩展到
 `ISSUE / PULL_REQUEST / PULL_REQUEST_REVIEW`，并扩展 Activity 类型 CHECK。所有快照子资源都有 Scope 外键、
 stable ID 唯一键、更新时间查询索引、非负 version 与内容 Hash CHECK。
+
+## 第 16 节数据库冻结结论
+
+本节没有新增或修改 Flyway migration，当前历史保持 V1→V13。ArchUnit、CI、测试矩阵和 JMeter 性能方案
+均不需要新业务表。完整 `mvn clean verify` 中的 Testcontainers 会从空 MySQL 实例执行 Flyway 全量迁移，
+用于持续验证 migration 顺序与新环境可安装性；不得通过改写历史 migration 修复已发布结构。

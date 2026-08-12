@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.obdeadsoup.devpilot.github.application.GitHubBacklogSnapshotService;
 import com.obdeadsoup.devpilot.outbox.application.OutboxBacklogSnapshotService;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -50,7 +51,7 @@ class BacklogSnapshotIntegrationTest {
 
     @Test
     void distinguishesReadyFutureRetryStaleAndResolvedDead() {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
         insertDelivery("received", "RECEIVED", null, null);
         insertDelivery("retry-due", "RETRY_WAIT", now.minusMinutes(1), null);
         insertDelivery("retry-future", "RETRY_WAIT", now.plusMinutes(5), null);
@@ -100,7 +101,8 @@ class BacklogSnapshotIntegrationTest {
                   workspace_id,project_id,repository_id,github_delivery_id,event_type,signature_status,
                   processing_status,payload_json,payload_sha256,retry_count,next_retry_at,processing_started_at,received_at)
                 VALUES(100,200,300,?,'ping','VALID',?,JSON_OBJECT('zen','test'),?,0,?,?,?)
-                """, id, status, "0".repeat(64), retryAt, startedAt, LocalDateTime.now().minusMinutes(2));
+                """, id, status, "0".repeat(64), retryAt, startedAt,
+                LocalDateTime.now(ZoneOffset.UTC).minusMinutes(2));
     }
 
     private long insertSync(String resource, String trigger, String status, LocalDateTime retryAt,
@@ -123,7 +125,7 @@ class BacklogSnapshotIntegrationTest {
                   replay_of_event_id,replay_sequence,replay_requested_by,replay_reason)
                 VALUES(?,'TASK',1,'TASK_ASSIGNED',1,JSON_OBJECT('taskId',1),?,0,?,?,?,
                        ?,IF(? IS NULL,0,1),IF(? IS NULL,NULL,10),IF(? IS NULL,NULL,'test replay'))
-                """, key, status, retryAt, startedAt, LocalDateTime.now().minusMinutes(2),
+                """, key, status, retryAt, startedAt, LocalDateTime.now(ZoneOffset.UTC).minusMinutes(2),
                 replayOf, replayOf, replayOf, replayOf);
         return jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
     }
