@@ -25,12 +25,14 @@ devpilot-notification    通知和未读计数
 devpilot-outbox          Task 事务事件、有限重试与恢复
 devpilot-audit           DEAD 查询、人工 Replay 与 append-only 运维审计
 devpilot-knowledge       文档、会议纪要、检索
-devpilot-agent           会话、工具、提议、确认和执行
+devpilot-agent           Agent 集成边界：Browser API、RBAC、Run 投影、RPC、Tool Gateway、人工确认
 ```
 
 当前依赖：identity→framework，project→framework+identity，task→framework+identity+project+outbox，
 github→framework+project+task，notification→framework+identity+project+task+github+outbox，
 audit→framework+identity+project+github+outbox，boot→全部模块。audit 是末端运维模块，上游不反向依赖。
+Agent 第 1 章新增 agent→framework+identity+project，boot→agent；当前 agent 没有 Java 业务类，也不依赖
+task/github/outbox/audit。Python `agent-service` 是独立进程和独立 Python 工程，不是 Maven dependency。
 Workspace、两级成员关系、角色、Permission
 和授权服务全部属于 project；identity 只向 project 提供当前用户和用户有效性能力，绝不反向
 依赖 project。移除 Workspace Member 与撤销其 Project Membership 在 project 模块同一事务
@@ -281,17 +283,21 @@ MySQL/Redis，但不包含 GitHub API 或业务积压。默认只暴露 health�
 ## Agent 架构
 
 ```text
-用户
-→ Agent Orchestrator
-→ 权限与风险策略
-→ 只读工具 / 提议工具
-→ 人工确认
-→ 执行服务
-→ 正式业务应用服务
-→ 审计
+Browser → Java devpilot-agent（HTTP / RBAC / Scope / Run 业务投影）
+        → AgentRuntime gRPC → Python agent-service（LLM / Agent Loop / runtime state）
+
+Python agent-service → DevPilotToolGateway gRPC → Java devpilot-agent
+        → 权限与风险策略 → 只读工具 / Proposal → 人工确认
+        → 正式业务 Application Service → 审计
 ```
 
-执行工具只接受已保存并已确认的 Proposal ID，不直接接受自由文本改数据。
+`devpilot-agent` 是 Agent Integration / Application Boundary，不是 Agent Runtime。User/RBAC、Workspace/Project、
+GitHub Snapshot、Task 和未来 AgentRun 业务投影归 Java；执行期 step/checkpoint 与 Conversation runtime context
+归 Python。两个进程不共享业务表，Python 不访问 `dp_*`，Java 不读取 Python Runtime 内部表。
+
+跨语言唯一契约源位于 `contracts/agent/v1`：`AgentRuntime` 是 Java→Python，`DevPilotToolGateway` 是
+Python→Java。当前只有最小 proto 和工程骨架，没有 Stub、网络调用、HTTP API、AgentRun 表或真实 Tool。
+未来执行工具只接受已保存并已确认的 Proposal ID，不直接接受自由文本改数据。
 
 ## 测试
 

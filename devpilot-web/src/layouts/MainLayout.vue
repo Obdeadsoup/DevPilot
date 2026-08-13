@@ -32,6 +32,18 @@
           Backend: {{ healthStatus }}
         </el-tag>
 
+        <!-- Notification Bell -->
+        <el-badge
+          :value="notificationStore.unreadCount"
+          :hidden="notificationStore.unreadCount === 0"
+          :max="99"
+          class="bell-badge"
+        >
+          <el-button type="info" size="small" circle @click="notificationStore.toggleDrawer">
+            <el-icon><Bell /></el-icon>
+          </el-button>
+        </el-badge>
+
         <!-- Developer Console Toggle -->
         <el-button type="info" size="small" link @click="devConsoleStore.toggleDrawer">
           开发者控制台 ({{ devConsoleStore.logs.length }})
@@ -49,6 +61,7 @@
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item command="profile">当前用户详情</el-dropdown-item>
+                <el-dropdown-item command="notifications">消息通知中心</el-dropdown-item>
                 <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -78,6 +91,10 @@
               <el-icon><Folder /></el-icon>
               <span>项目列表</span>
             </el-menu-item>
+            <el-menu-item :index="`/workspaces/${scopeStore.currentWorkspaceId}/audit-logs`">
+              <el-icon><Postcard /></el-icon>
+              <span>审计日志 (Audit)</span>
+            </el-menu-item>
           </template>
 
           <template v-if="scopeStore.currentWorkspaceId && scopeStore.currentProjectId">
@@ -85,6 +102,10 @@
               <el-menu-item :index="`/workspaces/${scopeStore.currentWorkspaceId}/projects/${scopeStore.currentProjectId}/overview`">
                 <el-icon><InfoFilled /></el-icon>
                 <span>项目概览</span>
+              </el-menu-item>
+              <el-menu-item :index="`/workspaces/${scopeStore.currentWorkspaceId}/projects/${scopeStore.currentProjectId}/tasks`">
+                <el-icon><Checked /></el-icon>
+                <span>Task 任务管理</span>
               </el-menu-item>
               <el-menu-item :index="`/workspaces/${scopeStore.currentWorkspaceId}/projects/${scopeStore.currentProjectId}/repositories`">
                 <el-icon><Connection /></el-icon>
@@ -107,11 +128,20 @@
                   <span>Pull Request 列表</span>
                 </el-menu-item>
               </el-sub-menu>
+
+              <el-menu-item :index="`/workspaces/${scopeStore.currentWorkspaceId}/projects/${scopeStore.currentProjectId}/operations`">
+                <el-icon><Tools /></el-icon>
+                <span>DEAD 运维与 Replay</span>
+              </el-menu-item>
             </el-menu-item-group>
           </template>
 
           <el-divider style="margin: 12px 0;" />
 
+          <el-menu-item index="/notifications">
+            <el-icon><Bell /></el-icon>
+            <span>消息通知中心</span>
+          </el-menu-item>
           <el-menu-item index="/developer-console">
             <el-icon><Monitor /></el-icon>
             <span>开发者控制台</span>
@@ -138,26 +168,36 @@
     >
       <DeveloperConsoleView embedded />
     </el-drawer>
+
+    <!-- Notification Drawer -->
+    <NotificationDrawer />
   </el-container>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useScopeStore } from '@/stores/scope'
 import { useDeveloperConsoleStore } from '@/stores/developerConsole'
+import { useNotificationStore } from '@/stores/notification'
+import { notificationStreamService } from '@/services/notificationStream'
 import { getHealthApi } from '@/api/modules/health'
 import { logoutApi } from '@/api/modules/auth'
 import DeveloperConsoleView from '@/views/DeveloperConsoleView.vue'
+import NotificationDrawer from '@/components/notification/NotificationDrawer.vue'
 
 import {
   Menu as MenuIcon,
   Folder,
   InfoFilled,
+  Checked,
   Connection,
   List,
   Document,
+  Tools,
+  Postcard,
+  Bell,
   Monitor,
   Cpu,
 } from '@element-plus/icons-vue'
@@ -166,6 +206,7 @@ const router = useRouter()
 const authStore = useAuthStore()
 const scopeStore = useScopeStore()
 const devConsoleStore = useDeveloperConsoleStore()
+const notificationStore = useNotificationStore()
 
 const healthStatus = ref<string>('UNKNOWN')
 
@@ -176,15 +217,28 @@ onMounted(async () => {
   } catch {
     healthStatus.value = 'DOWN'
   }
+
+  if (authStore.isAuthenticated) {
+    notificationStore.fetchUnreadCount()
+    notificationStreamService.connect()
+  }
+})
+
+onUnmounted(() => {
+  notificationStreamService.disconnect()
 })
 
 async function handleUserCommand(command: string) {
   if (command === 'profile') {
     router.push('/me')
+  } else if (command === 'notifications') {
+    router.push('/notifications')
   } else if (command === 'logout') {
     try {
       await logoutApi()
     } finally {
+      notificationStreamService.disconnect()
+      notificationStore.clearNotifications()
       authStore.clearAuth()
       scopeStore.clearAll()
       router.push('/login')
@@ -222,6 +276,10 @@ async function handleUserCommand(command: string) {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+.bell-badge {
+  display: flex;
+  align-items: center;
 }
 .user-info {
   display: flex;

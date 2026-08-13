@@ -55,6 +55,11 @@ const routes = [
         meta: { public: true },
       },
       {
+        path: 'notifications',
+        name: 'NotificationList',
+        component: () => import('@/views/notification/NotificationList.vue'),
+      },
+      {
         path: 'workspaces',
         name: 'WorkspaceList',
         component: WorkspaceList,
@@ -83,6 +88,21 @@ const routes = [
         path: 'workspaces/:workspaceId/projects/:projectId/overview',
         name: 'ProjectDetail',
         component: ProjectDetail,
+      },
+      {
+        path: 'workspaces/:workspaceId/projects/:projectId/tasks',
+        name: 'TaskList',
+        component: () => import('@/views/task/TaskList.vue'),
+      },
+      {
+        path: 'workspaces/:workspaceId/projects/:projectId/tasks/new',
+        name: 'TaskCreate',
+        component: () => import('@/views/task/TaskCreate.vue'),
+      },
+      {
+        path: 'workspaces/:workspaceId/projects/:projectId/tasks/:taskId',
+        name: 'TaskDetail',
+        component: () => import('@/views/task/TaskDetail.vue'),
       },
       {
         path: 'workspaces/:workspaceId/projects/:projectId/repositories',
@@ -128,6 +148,16 @@ const routes = [
         path: 'workspaces/:workspaceId/projects/:projectId/sync-runs/:bindingId/:runId',
         name: 'SyncRunDetail',
         component: SyncRunDetail,
+      },
+      {
+        path: 'workspaces/:workspaceId/audit-logs',
+        name: 'AuditLogList',
+        component: () => import('@/views/audit/AuditLogList.vue'),
+      },
+      {
+        path: 'workspaces/:workspaceId/projects/:projectId/operations',
+        name: 'OperationsView',
+        component: () => import('@/views/operations/OperationsView.vue'),
       },
       {
         path: 'developer-console',

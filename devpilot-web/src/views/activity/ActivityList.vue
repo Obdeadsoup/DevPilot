@@ -19,13 +19,13 @@
               :key="item.id"
               :timestamp="item.occurredAt"
               placement="top"
-              :type="item.sourceType === 'GITHUB' ? 'primary' : 'info'"
+              :type="item.sourceType === 'TASK' ? 'warning' : item.sourceType === 'GITHUB' ? 'primary' : 'info'"
             >
               <el-card shadow="never" class="activity-card">
                 <div class="activity-header">
                   <span class="activity-title">{{ item.title }}</span>
                   <div class="tags">
-                    <el-tag size="small" type="info">{{ item.sourceType }}</el-tag>
+                    <el-tag size="small" :type="item.sourceType === 'TASK' ? 'warning' : 'info'">{{ item.sourceType }}</el-tag>
                     <el-tag size="small" type="success">{{ item.activityType }}</el-tag>
                   </div>
                 </div>

@@ -35,7 +35,7 @@ class DevPilotModuleArchitectureTest {
     void frameworkMustNotDependOnBusinessModules() {
         noClasses().that().resideInAPackage(BASE + "framework..")
                 .should().dependOnClassesThat().resideInAnyPackage(
-                        packages("identity", "project", "outbox", "task", "github", "notification", "audit"))
+                        packages("identity", "project", "outbox", "task", "github", "notification", "audit", "agent"))
                 .because("framework 只能提供中立基础设施，不能引用具体业务包")
                 .check(CLASSES);
     }
@@ -43,13 +43,13 @@ class DevPilotModuleArchitectureTest {
     @Test
     @DisplayName("业务模块只能沿已批准方向依赖")
     void businessModulesMustFollowApprovedDirections() {
-        forbid("identity", new String[]{"project", "outbox", "task", "github", "notification", "audit"});
-        forbid("project", new String[]{"outbox", "task", "github", "notification", "audit"});
-        forbid("outbox", new String[]{"identity", "project", "task", "github", "notification", "audit"});
-        forbid("task", new String[]{"github", "notification", "audit"});
-        forbid("github", new String[]{"notification", "audit"});
-        forbid("notification", new String[]{"audit"});
-        forbid("audit", new String[]{"task", "notification"});
+        forbid("identity", new String[]{"project", "outbox", "task", "github", "notification", "audit", "agent"});
+        forbid("project", new String[]{"outbox", "task", "github", "notification", "audit", "agent"});
+        forbid("outbox", new String[]{"identity", "project", "task", "github", "notification", "audit", "agent"});
+        forbid("task", new String[]{"github", "notification", "audit", "agent"});
+        forbid("github", new String[]{"notification", "audit", "agent"});
+        forbid("notification", new String[]{"audit", "agent"});
+        forbid("audit", new String[]{"task", "notification", "agent"});
     }
 
     private void forbid(String sourceModule, String[] forbiddenModules) {

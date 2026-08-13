@@ -30,6 +30,7 @@
         <module>devpilot-github</module>
         <module>devpilot-notification</module>
         <module>devpilot-audit</module>
+        <module>devpilot-agent</module>
         <module>devpilot-boot</module>
     </modules>
 
@@ -89,6 +90,12 @@
             <dependency>
                 <groupId>com.obdeadsoup</groupId>
                 <artifactId>devpilot-github</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.obdeadsoup</groupId>
+                <artifactId>devpilot-agent</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

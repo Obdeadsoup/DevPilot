@@ -20,7 +20,7 @@ class CrossModulePersistenceBoundaryTest {
     @Test
     @DisplayName("跨模块调用不得绕过公开应用服务或 Port 直连 Persistence")
     void modulesMustNotAccessAnotherModulesPersistenceImplementation() {
-        for (String owner : new String[]{"identity", "project", "outbox", "task", "github", "notification", "audit"}) {
+        for (String owner : new String[]{"identity", "project", "outbox", "task", "github", "notification", "audit", "agent"}) {
             noClasses().that().resideOutsideOfPackage(BASE + owner + "..")
                     .should().dependOnClassesThat().resideInAnyPackage(
                             BASE + owner + ".persistence.mapper..",

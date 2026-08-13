@@ -8,6 +8,9 @@
             <StatusBadge v-if="issue" :status="issue.state" type="issue" style="margin-left: 12px;" />
           </div>
           <div>
+            <el-button type="success" size="small" @click="createTaskDialogVisible = true">
+              创建为本地 Task (POST .../from-github-issue)
+            </el-button>
             <el-button link @click="$router.push(`/workspaces/${workspaceId}/projects/${projectId}/github/issues`)">
               返回列表
             </el-button>
@@ -62,31 +65,79 @@
           <RawJsonPanel :data="rawJson" title="GET .../github/issues/{id} 原始响应" />
         </template>
       </PageState>
+
+      <!-- Create Task Dialog -->
+      <el-dialog v-model="createTaskDialogVisible" title="从当前 GitHub Issue 显式创建 Task" width="480px">
+        <el-form label-position="top">
+          <el-form-item label="优先级 (priority)">
+            <el-radio-group v-model="createTaskForm.priority">
+              <el-radio value="LOW">LOW</el-radio>
+              <el-radio value="MEDIUM">MEDIUM (默认)</el-radio>
+              <el-radio value="HIGH">HIGH</el-radio>
+              <el-radio value="URGENT">URGENT</el-radio>
+            </el-radio-group>
+          </el-form-item>
+
+          <el-form-item label="分配负责人 User ID (可选)">
+            <el-input-number v-model="createTaskForm.assigneeUserId" :min="1" style="width: 100%;" placeholder="数字 User ID" />
+          </el-form-item>
+
+          <el-form-item label="截止时间 (dueAt, 可选)">
+            <el-date-picker
+              v-model="createTaskForm.dueAt"
+              type="datetime"
+              placeholder="选择时间"
+              value-format="YYYY-MM-DDTHH:mm:ss"
+              style="width: 100%;"
+            />
+          </el-form-item>
+        </el-form>
+
+        <template #footer>
+          <el-button @click="createTaskDialogVisible = false">取消</el-button>
+          <el-button type="primary" :loading="creatingTask" @click="handleCreateTaskFromIssue">
+            确认创建 Task
+          </el-button>
+        </template>
+      </el-dialog>
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { getIssueApi } from '@/api/modules/snapshot'
+import { createTaskFromIssueApi } from '@/api/modules/task'
 import { parseJsonArraySafe } from '@/utils/safeExternalContent'
 import type { GitHubIssue } from '@/types/api'
+import type { TaskPriority } from '@/types/task'
 import StatusBadge from '@/components/StatusBadge.vue'
 import PageState from '@/components/PageState.vue'
 import ExternalContent from '@/components/ExternalContent.vue'
 import RawJsonPanel from '@/components/RawJsonPanel.vue'
 
 const route = useRoute()
+const router = useRouter()
+
 const workspaceId = Number(route.params.workspaceId)
 const projectId = Number(route.params.projectId)
 const issueId = Number(route.params.issueId)
 
 const loading = ref(false)
+const creatingTask = ref(false)
 const hasError = ref(false)
 const errorMsg = ref('')
 const issue = ref<GitHubIssue | null>(null)
 const rawJson = ref<any>(null)
+
+const createTaskDialogVisible = ref(false)
+const createTaskForm = reactive({
+  priority: 'MEDIUM' as TaskPriority,
+  assigneeUserId: undefined as number | undefined,
+  dueAt: undefined as string | undefined,
+})
 
 const assignees = computed(() => parseJsonArraySafe(issue.value?.assigneesJson))
 const labels = computed(() => parseJsonArraySafe(issue.value?.labelsJson))
@@ -110,6 +161,31 @@ async function fetchDetail() {
     errorMsg.value = err.message || '网络连接失败'
   } finally {
     loading.value = false
+  }
+}
+
+async function handleCreateTaskFromIssue() {
+  creatingTask.value = true
+  try {
+    const res = await createTaskFromIssueApi(workspaceId, projectId, issueId, {
+      priority: createTaskForm.priority,
+      assigneeUserId: createTaskForm.assigneeUserId || undefined,
+      dueAt: createTaskForm.dueAt || undefined,
+    })
+
+    if (res.success && res.data) {
+      ElMessage.success('从 Issue 创建 Task 成功')
+      createTaskDialogVisible.value = false
+      router.push(`/workspaces/${workspaceId}/projects/${projectId}/tasks/${res.data.id}`)
+    } else if (res.code === 'TASK_0504') {
+      ElMessage.warning('该 Issue 快照已经关联了有效 Task')
+    } else {
+      ElMessage.error(`创建 Task 失败 [${res.code}]: ${res.message}`)
+    }
+  } catch (err: any) {
+    ElMessage.error(err.message || '网络请求错误')
+  } finally {
+    creatingTask.value = false
   }
 }
 

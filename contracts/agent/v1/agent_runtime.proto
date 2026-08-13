@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package devpilot.agent.v1;
+
+option java_multiple_files = true;
+option java_package = "com.obdeadsoup.devpilot.agent.contract.v1";
+
+// Java 调用 Python 的 Agent Runtime 边界。
+service AgentRuntime {
+  rpc StartRun(StartRunRequest) returns (StartRunResponse);
+  rpc StreamRun(StreamRunRequest) returns (stream AgentEvent);
+  rpc CancelRun(CancelRunRequest) returns (CancelRunResponse);
+}
+
+// Python 调用 Java 的受控 Tool Gateway 边界。
+service DevPilotToolGateway {
+  rpc ExecuteTool(ExecuteToolRequest) returns (ExecuteToolResponse);
+}
+
+message StartRunRequest {
+  string request_id = 1;
+}
+
+message StartRunResponse {
+  string run_id = 1;
+}
+
+message StreamRunRequest {
+  string run_id = 1;
+}
+
+message AgentEvent {
+  string event_id = 1;
+}
+
+message CancelRunRequest {
+  string run_id = 1;
+}
+
+message CancelRunResponse {
+  bool accepted = 1;
+}
+
+message ExecuteToolRequest {
+  string request_id = 1;
+}
+
+message ExecuteToolResponse {
+  string result_id = 1;
+}

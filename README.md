@@ -83,7 +83,13 @@ devpilot-task
 devpilot-notification
 devpilot-outbox
 devpilot-audit
+devpilot-agent
 ```
+
+Agent 第 1 章已增加边界骨架：Java `devpilot-agent` 是 Browser API、RBAC、Run 业务投影、RPC Adapter、
+Tool Gateway 与 Human confirmation 的未来集成边界；独立 Python `agent-service` 才是未来 LLM / Agent Loop
+Runtime。两者不共享业务表，并以 `contracts/agent/v1` 的 `.proto` 作为唯一跨语言契约来源。当前没有实现
+真实 Agent、AgentRun 表、Tool 或 gRPC 网络调用。
 
 ## 文档
 
@@ -114,6 +120,9 @@ devpilot-audit
 - [第 16 节性能基线记录](docs/performance/16-backend-baseline.md)
 - [第 16 节 Backend Freeze Checklist](docs/checklists/16-backend-freeze-checklist.md)
 - [第 16 节变更文件地图](docs/changes/16-backend-closure-ci-archunit-performance-file-map.md)
+- [Agent 第 1 章服务边界 ADR](docs/agent/01-service-boundary.md)
+- [Agent 第 1 章变更文件地图](docs/changes/agent-01-service-boundary-file-map.md)
+- [Agent v1 RPC Contract](contracts/agent/v1/README.md)
 - [Codex 分阶段指令](codex-prompts/all-prompts.md)
 
 ## 开发方式
