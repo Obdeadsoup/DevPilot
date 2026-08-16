@@ -1,1 +1,1 @@
-"""经 Java Tool Gateway 授权执行工具的未来边界。"""
+"""最小 Tool 协议、Registry 与无副作用本地演示工具。"""

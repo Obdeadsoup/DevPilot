@@ -69,8 +69,9 @@ Grafana、Alertmanager 和生产 SLO/SLA 验证仍是后续能力。
 再进入知识库与 Agent；这里的阶段性完成不等于生产就绪。
 
 Agent L0 边界骨架已建立：Java `devpilot-agent` 作为集成/Application Boundary，Python `agent-service` 作为
-未来 Runtime，`contracts/agent/v1` 作为唯一跨语言契约源，并明确数据所有权与双向 RPC 方向。这只是目录、POM、
-proto 草案和 smoke test，不表示 Agent L1 已实现。
+Runtime，`contracts/agent/v1` 作为唯一跨语言契约源，并明确数据所有权与双向 RPC 方向。第 2 章已增加 Python
+单进程、FakeModel 驱动的最小 Agent Loop，用于验证结构化 ToolCall 与停止条件；它仍不表示 Agent L1、真实 LLM、
+业务 Tool 或跨进程 RPC 已实现。
 
 ### 阶段 6：知识库与 Agent L1
 

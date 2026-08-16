@@ -1,1 +1,1 @@
-"""Agent Loop 与执行期 checkpoint 的未来边界。"""
+"""Message、停止语义和最小 Agent Loop；checkpoint 仍留待后续章节。"""

@@ -22,5 +22,5 @@ Proposal/Confirm 字段或 Tool catalog。后续扩展必须保持字段号稳�
 再生成两端代码。
 
 跨服务的 authentication/authorization 不由占位字段替代。Java 始终是 User/RBAC、Workspace/Project、
-GitHub Snapshot、Task 和未来 AgentRun 业务投影的权威拥有者；Python 保存的 request identity 仅用于关联一次
-RPC，不可据此提升权限。
+GitHub Snapshot、Task、Audit/Notification 和未来 AgentRun 业务投影的权威拥有者；Python 保存的 request
+identity 仅用于关联一次 RPC，不可据此提升权限。

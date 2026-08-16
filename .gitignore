@@ -49,6 +49,8 @@ docs/changes/*
 !docs/changes/15-observability-metrics-health-slo-file-map.md
 !docs/changes/16-backend-closure-ci-archunit-performance-file-map.md
 !docs/changes/agent-01-service-boundary-file-map.md
+!docs/changes/agent-01-boundary-audit-report.md
+!docs/changes/agent-02-minimal-runtime-file-map.md
 docs/learning/*
 !docs/learning/16-backend-engineering-closure.md
 

@@ -86,10 +86,10 @@ devpilot-audit
 devpilot-agent
 ```
 
-Agent 第 1 章已增加边界骨架：Java `devpilot-agent` 是 Browser API、RBAC、Run 业务投影、RPC Adapter、
-Tool Gateway 与 Human confirmation 的未来集成边界；独立 Python `agent-service` 才是未来 LLM / Agent Loop
-Runtime。两者不共享业务表，并以 `contracts/agent/v1` 的 `.proto` 作为唯一跨语言契约来源。当前没有实现
-真实 Agent、AgentRun 表、Tool 或 gRPC 网络调用。
+Agent 第 1 章已增加双进程边界骨架：Java `devpilot-agent` 是 Browser API、RBAC、Run 业务投影、RPC Adapter、
+Tool Gateway 与 Human confirmation 的未来集成边界；独立 Python `agent-service` 是 Agent Runtime。第 2 章已在
+Python 单进程内实现 Provider 无关的 Message、Model、ToolRegistry 与有 `max_steps` 的最小同步 Agent Loop，并用
+FakeModel 覆盖结构化 ToolCall 循环。两者仍不共享业务表；当前没有 AgentRun 表、真实 LLM、业务 Tool 或 gRPC 网络调用。
 
 ## 文档
 
@@ -122,6 +122,9 @@ Runtime。两者不共享业务表，并以 `contracts/agent/v1` 的 `.proto` �
 - [第 16 节变更文件地图](docs/changes/16-backend-closure-ci-archunit-performance-file-map.md)
 - [Agent 第 1 章服务边界 ADR](docs/agent/01-service-boundary.md)
 - [Agent 第 1 章变更文件地图](docs/changes/agent-01-service-boundary-file-map.md)
+- [Agent 第 1 章边界验收报告](docs/changes/agent-01-boundary-audit-report.md)
+- [Agent 第 2 章最小 Runtime](docs/agent/02-minimal-agent-runtime.md)
+- [Agent 第 2 章变更文件地图](docs/changes/agent-02-minimal-runtime-file-map.md)
 - [Agent v1 RPC Contract](contracts/agent/v1/README.md)
 - [Codex 分阶段指令](codex-prompts/all-prompts.md)
 

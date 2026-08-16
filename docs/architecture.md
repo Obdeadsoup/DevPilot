@@ -32,7 +32,8 @@ devpilot-agent           Agent 集成边界：Browser API、RBAC、Run 投影、
 github→framework+project+task，notification→framework+identity+project+task+github+outbox，
 audit→framework+identity+project+github+outbox，boot→全部模块。audit 是末端运维模块，上游不反向依赖。
 Agent 第 1 章新增 agent→framework+identity+project，boot→agent；当前 agent 没有 Java 业务类，也不依赖
-task/github/outbox/audit。Python `agent-service` 是独立进程和独立 Python 工程，不是 Maven dependency。
+task/github/outbox/audit。Python `agent-service` 是独立进程和独立 Python 工程，不是 Maven dependency；第 2 章只在
+该 Python 工程内增加同步最小 Agent Loop，未改变 Java 模块图。
 Workspace、两级成员关系、角色、Permission
 和授权服务全部属于 project；identity 只向 project 提供当前用户和用户有效性能力，绝不反向
 依赖 project。移除 Workspace Member 与撤销其 Project Membership 在 project 模块同一事务
@@ -292,11 +293,13 @@ Python agent-service → DevPilotToolGateway gRPC → Java devpilot-agent
 ```
 
 `devpilot-agent` 是 Agent Integration / Application Boundary，不是 Agent Runtime。User/RBAC、Workspace/Project、
-GitHub Snapshot、Task 和未来 AgentRun 业务投影归 Java；执行期 step/checkpoint 与 Conversation runtime context
-归 Python。两个进程不共享业务表，Python 不访问 `dp_*`，Java 不读取 Python Runtime 内部表。
+GitHub Snapshot、Task、Audit/Notification 和未来 AgentRun 业务投影归 Java；执行期 step/checkpoint 与
+Conversation runtime context 归 Python。两个进程不共享业务表，Python 不访问 `dp_*`，Java 不读取 Python
+Runtime 内部表。
 
 跨语言唯一契约源位于 `contracts/agent/v1`：`AgentRuntime` 是 Java→Python，`DevPilotToolGateway` 是
-Python→Java。当前只有最小 proto 和工程骨架，没有 Stub、网络调用、HTTP API、AgentRun 表或真实 Tool。
+Python→Java。当前已有 Python 单进程内的 Message → Model → ToolCall → Tool Result → Model → Final 控制循环；
+仍没有 Stub、网络调用、HTTP API、AgentRun 表、真实 LLM 或 DevPilot 业务 Tool。
 未来执行工具只接受已保存并已确认的 Proposal ID，不直接接受自由文本改数据。
 
 ## 测试

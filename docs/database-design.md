@@ -114,8 +114,8 @@ Agent 表仍是后续规划。V10 已创建 `dp_task`、不可变
 `dp_task_status_history` 和软移除的 `dp_task_github_link`；ACTIVE Link 的生成列唯一键保证同一 GitHub
 stable object 同时最多关联一个 Task。
 
-Agent 第 1 章没有新增 Flyway migration 或表。未来用户可见的 AgentRun 业务投影归 Java，仍遵循
-Workspace/Project scope、权限与 Audit；Python 只拥有执行期 step/checkpoint 和 Conversation runtime context。
+Agent 第 1 章没有新增 Flyway migration 或表。Audit/Notification 与未来用户可见的 AgentRun 业务投影归 Java，
+仍遵循 Workspace/Project scope、权限与 Audit；Python 只拥有执行期 step/checkpoint 和 Conversation runtime context。
 两个进程不得共享业务表：Python 不直接访问或更新 `dp_*`，Java 不直接读取 Python Runtime 内部表，跨边界只走
 版本化 RPC Contract。Knowledge index 与 Long-term memory 的所有权留待后续 ADR。
 

@@ -64,6 +64,7 @@ Python 不负责 DevPilot 用户认证、RBAC、Workspace/Project/Task/GitHub �
 | Workspace/Project | Java | 业务事实 |
 | GitHub Snapshot | Java | 已有同步与 Scope |
 | Task | Java | 状态机、事务与 Audit |
+| Audit/Notification | Java | 审计事实、可靠通知与接收人权限属于正式业务边界 |
 | AgentRun 业务投影 | Java（计划） | 用户可见业务记录、Scope 与 Audit |
 | Agent runtime step/checkpoint | Python | 执行期内部状态 |
 | Conversation runtime context | Python | Agent 执行上下文 |

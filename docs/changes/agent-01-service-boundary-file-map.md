@@ -66,6 +66,7 @@ agent-service -X→ Maven reactor
 | Workspace/Project | Java | 业务事实 |
 | GitHub Snapshot | Java | 已有同步与 Scope |
 | Task | Java | 状态机/事务/Audit |
+| Audit/Notification | Java | 审计事实、可靠通知与接收人权限属于正式业务边界 |
 | AgentRun 业务投影 | Java（计划） | 用户可见记录、Scope、Audit |
 | Agent runtime step/checkpoint | Python | 执行期内部状态 |
 | Conversation runtime context | Python | Agent 执行上下文 |
@@ -102,6 +103,7 @@ Python agent-service
 4. `agent-service/README.md`、`pyproject.toml`、包目录和 smoke test：理解 Python 独立工程。
 5. `DevPilotModuleArchitectureTest.java`：确认反向依赖仍被守护。
 6. `docs/architecture.md`、`docs/database-design.md` 与 roadmap：核对全局文档一致性。
+7. `docs/changes/agent-01-boundary-audit-report.md`：查看第 1 章逐项验收证据和真实测试结果。
 
 ## 本章明确未实现
 
