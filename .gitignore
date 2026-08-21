@@ -32,27 +32,7 @@ __pycache__/
 Thumbs.db
 
 # AI & AGENTS
-codex-prompts/
-docs/learning/*
-!docs/architecture.md
-!docs/database-design.md
-!docs/capability-coverage-and-roadmap.md
-!docs/changes/
-docs/changes/*
-!docs/changes/08-github-api-client-file-map.md
-!docs/changes/09-github-commit-reconciliation-file-map.md
-!docs/changes/10-github-issue-pr-review-file-map.md
-!docs/changes/11-task-workflow-file-map.md
-!docs/changes/12-notification-reminders-file-map.md
-!docs/changes/13-transactional-outbox-sse-file-map.md
-!docs/changes/14-dead-replay-audit-file-map.md
-!docs/changes/15-observability-metrics-health-slo-file-map.md
-!docs/changes/16-backend-closure-ci-archunit-performance-file-map.md
-!docs/changes/agent-01-service-boundary-file-map.md
-!docs/changes/agent-01-boundary-audit-report.md
-!docs/changes/agent-02-minimal-runtime-file-map.md
-docs/learning/*
-!docs/learning/16-backend-engineering-closure.md
+docs/*
 
 # Local performance results
 performance/jmeter/results/
@@ -63,3 +43,4 @@ devpilot-web/dist/
 devpilot-web/.vite/
 devpilot-web/*.tsbuildinfo
 frontend-handoff/
+
