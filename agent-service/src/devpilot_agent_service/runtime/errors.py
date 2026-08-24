@@ -2,6 +2,8 @@
 
 from enum import StrEnum
 
+from devpilot_agent_service.model.errors import ProviderErrorKind
+
 
 class StopReason(StrEnum):
     MODEL_FINAL = "model_final"
@@ -9,6 +11,7 @@ class StopReason(StrEnum):
     MODEL_ERROR = "model_error"
     TOOL_ERROR = "tool_error"
     INVALID_TOOL_CALL = "invalid_tool_call"
+    MAX_TOOL_CALLS = "max_tool_calls"
 
 
 class AgentRuntimeError(Exception):
@@ -20,8 +23,14 @@ class AgentRuntimeError(Exception):
 class ModelInvocationError(AgentRuntimeError):
     stop_reason = StopReason.MODEL_ERROR
 
-    def __init__(self, step_number: int) -> None:
+    def __init__(
+        self,
+        step_number: int,
+        provider_kind: ProviderErrorKind = ProviderErrorKind.UNKNOWN,
+    ) -> None:
         super().__init__(f"model invocation failed at step {step_number}")
+        self.step_number = step_number
+        self.provider_kind = provider_kind
 
 
 class InvalidModelResponseError(AgentRuntimeError):
@@ -62,6 +71,26 @@ class MaxStepsExceeded(AgentRuntimeError):
     def __init__(self, max_steps: int) -> None:
         super().__init__(f"agent run exceeded max_steps={max_steps}")
         self.max_steps = max_steps
+
+
+class MaxToolCallsExceeded(AgentRuntimeError):
+    """一次 run 的累计 ToolCall 数量超过硬预算。"""
+
+    stop_reason = StopReason.MAX_TOOL_CALLS
+
+    def __init__(self, max_tool_calls: int) -> None:
+        super().__init__(f"agent run exceeded max_tool_calls={max_tool_calls}")
+        self.max_tool_calls = max_tool_calls
+
+
+class DuplicateToolCallIdError(AgentRuntimeError):
+    """Provider 在同一次 run 中重复使用已经出现过的 tool_call_id。"""
+
+    stop_reason = StopReason.INVALID_TOOL_CALL
+
+    def __init__(self) -> None:
+        # 不回显由模型生成的原始 id，避免错误通道承载不可控内容。
+        super().__init__("model returned a duplicate tool_call_id")
 
 
 class DuplicateToolError(ValueError):

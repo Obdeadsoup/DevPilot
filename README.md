@@ -4,9 +4,9 @@
 
 DevPilot 以真实 GitHub 仓库为数据来源，通过 Webhook 与 GitHub API 同步 Push、Issue、Pull Request、Review 等研发活动，并在本地形成工作空间、项目、成员、任务、通知、审计和知识库能力。
 
-在传统后端链路稳定后，DevPilot 将接入 Agent：让 Agent 在继承当前用户权限的前提下完成项目问答、进度总结、需求拆分、风险识别和任务草案生成；高风险写操作必须经人工确认后，再调用正式业务服务执行。
+在传统后端链路稳定后，DevPilot 接入 Agent：让 Agent 在继承当前用户权限的前提下完成项目问答、进度总结、需求拆分、风险识别和任务草案生成；高风险写操作必须经人工确认后，再调用正式业务服务执行。
 
-## 为什么做 DevPilot
+## 项目解决的痛点
 
 学生团队和小型开发团队常见问题：
 
@@ -19,7 +19,15 @@ DevPilot 以真实 GitHub 仓库为数据来源，通过 Webhook 与 GitHub API 
 
 DevPilot 不复刻 GitHub，而是建立一个面向小团队的“项目上下文层”，把仓库活动、任务、文档和 Agent 工具连接起来。
 
-## 核心链路
+## 系统架构图
+
+
+
+## 技术栈
+
+## 模块结构
+
+## 核心业务链路
 
 ```text
 创建工作空间
@@ -53,80 +61,6 @@ DevPilot 不复刻 GitHub，而是建立一个面向小团队的“项目上下�
 当前已使用 MySQL Transactional Outbox、SSE、Micrometer 与 Prometheus Registry。后续只按真实需要评估
 RabbitMQ、Quartz/XXL-JOB、Spring AI/LangChain4j、向量检索与 OpenTelemetry。
 
-> 不为简历标签提前堆中间件，只有真实业务问题出现时才引入对应技术。
-
-## 目标模块
-
-```text
-devpilot-boot
-devpilot-framework
-devpilot-identity
-devpilot-project
-devpilot-github
-devpilot-task
-devpilot-notification
-devpilot-outbox
-devpilot-audit
-devpilot-knowledge
-devpilot-agent
-```
-
-当前传统后端阶段已装配：
-
-```text
-devpilot-boot
-devpilot-framework
-devpilot-identity
-devpilot-project
-devpilot-github
-devpilot-task
-devpilot-notification
-devpilot-outbox
-devpilot-audit
-devpilot-agent
-```
-
-Agent 第 1 章已增加双进程边界骨架：Java `devpilot-agent` 是 Browser API、RBAC、Run 业务投影、RPC Adapter、
-Tool Gateway 与 Human confirmation 的未来集成边界；独立 Python `agent-service` 是 Agent Runtime。第 2 章已在
-Python 单进程内实现 Provider 无关的 Message、Model、ToolRegistry 与有 `max_steps` 的最小同步 Agent Loop，并用
-FakeModel 覆盖结构化 ToolCall 循环。两者仍不共享业务表；当前没有 AgentRun 表、真实 LLM、业务 Tool 或 gRPC 网络调用。
-
-## 文档
-
-- [正式项目介绍](docs/project-introduction.md)
-- [产品需求](docs/requirements.md)
-- [系统架构](docs/architecture.md)
-- [数据库设计](docs/database-design.md)
-- [能力覆盖与路线](docs/capability-coverage-and-roadmap.md)
-- [作用域 RBAC 学习笔记](docs/learning/05-scoped-rbac.md)
-- [Workspace / Project 生命周期学习笔记](docs/learning/06-workspace-project-lifecycle.md)
-- [GitHub Repository 绑定学习笔记](docs/learning/07-github-repository-binding.md)
-- [GitHub REST API Client 工程化学习笔记](docs/learning/08-github-api-client-engineering.md)
-- [第 8 节变更文件地图](docs/changes/08-github-api-client-file-map.md)
-- [Webhook/API Commit 对账学习笔记](docs/learning/09-webhook-api-reconciliation.md)
-- [第 9 节变更文件地图](docs/changes/09-github-commit-reconciliation-file-map.md)
-- [Task 状态机与 GitHub 关联学习笔记](docs/learning/11-task-workflow-and-github-links.md)
-- [第 11 节变更文件地图](docs/changes/11-task-workflow-file-map.md)
-- [Notification 提醒学习笔记](docs/learning/12-notification-reminders.md)
-- [第 12 节变更文件地图](docs/changes/12-notification-reminders-file-map.md)
-- [Transactional Outbox 与 SSE 学习笔记](docs/learning/13-transactional-outbox-and-sse.md)
-- [第 13 节变更文件地图](docs/changes/13-transactional-outbox-sse-file-map.md)
-- [DEAD Replay 与 Audit 学习笔记](docs/learning/14-dead-replay-and-audit.md)
-- [第 14 节变更文件地图](docs/changes/14-dead-replay-audit-file-map.md)
-- [Observability、Metrics、Health、Backlog 与 SLO 学习笔记](docs/learning/15-observability-metrics-health-slo.md)
-- [第 15 节变更文件地图](docs/changes/15-observability-metrics-health-slo-file-map.md)
-- [传统后端工程化收尾学习笔记](docs/learning/16-backend-engineering-closure.md)
-- [第 16 节测试矩阵](docs/testing/16-backend-test-matrix.md)
-- [第 16 节性能基线记录](docs/performance/16-backend-baseline.md)
-- [第 16 节 Backend Freeze Checklist](docs/checklists/16-backend-freeze-checklist.md)
-- [第 16 节变更文件地图](docs/changes/16-backend-closure-ci-archunit-performance-file-map.md)
-- [Agent 第 1 章服务边界 ADR](docs/agent/01-service-boundary.md)
-- [Agent 第 1 章变更文件地图](docs/changes/agent-01-service-boundary-file-map.md)
-- [Agent 第 1 章边界验收报告](docs/changes/agent-01-boundary-audit-report.md)
-- [Agent 第 2 章最小 Runtime](docs/agent/02-minimal-agent-runtime.md)
-- [Agent 第 2 章变更文件地图](docs/changes/agent-02-minimal-runtime-file-map.md)
-- [Agent v1 RPC Contract](contracts/agent/v1/README.md)
-- [Codex 分阶段指令](codex-prompts/all-prompts.md)
 
 ## 开发方式
 
@@ -143,7 +77,7 @@ FakeModel 覆盖结构化 ToolCall 循环。两者仍不共享业务表；当前
 
 Codex 可以承担 DTO、Mapper、普通 CRUD、配置和重复测试代码；权限边界、状态流转、事务、幂等、重试、外部 API 限流和 Agent 安全必须由项目负责人真正理解。
 
-## 本地启动
+## 本地快速启动
 
 ### 前置环境
 
@@ -198,6 +132,7 @@ Testcontainers；这是 CI，不包含自动部署。JMeter 基线保存在 `per
 open DEAD 指标；Notification 提供创建/去重、Handler、SSE connection/send 指标。原 DEAD 历史仍保留，
 open DEAD 会排除已被成功或开放 Replay 解决的记录。本节只建立 SLI/SLO 测量基础，未宣称达到任何 p95/p99
 或 99.9% SLO/SLA；也未部署生产 Prometheus、Grafana、Alertmanager 或 OpenTelemetry。
+
 #### 前端
 
 ```powershell
@@ -401,3 +336,5 @@ docker compose down
 ```
 
 Named volume 默认保留数据；如需删除数据卷，应在确认不再需要本地数据后显式操作。
+
+### 未来规划

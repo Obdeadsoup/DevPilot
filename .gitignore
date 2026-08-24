@@ -33,6 +33,12 @@ Thumbs.db
 
 # AI & AGENTS
 docs/*
+!docs/agent/
+docs/agent/*
+!docs/agent/03-provider-and-reliable-loop.md
+!docs/changes/
+docs/changes/*
+!docs/changes/agent-03-provider-reliable-loop-file-map.md
 
 # Local performance results
 performance/jmeter/results/

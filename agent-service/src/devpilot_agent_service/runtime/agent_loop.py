@@ -5,10 +5,13 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from devpilot_agent_service.model.base import Model
+from devpilot_agent_service.model.errors import ProviderError, ProviderErrorKind
 from devpilot_agent_service.model.types import ModelResponse, ModelResponseKind
 from devpilot_agent_service.runtime.errors import (
+    DuplicateToolCallIdError,
     InvalidModelResponseError,
     MaxStepsExceeded,
+    MaxToolCallsExceeded,
     ModelInvocationError,
     StopReason,
 )
@@ -43,15 +46,23 @@ class AgentLoop:
         registry: ToolRegistry,
         *,
         max_steps: int = 8,
+        max_tool_calls: int = 16,
         system_prompt: str | None = None,
     ) -> None:
         if not isinstance(max_steps, int) or isinstance(max_steps, bool) or max_steps < 1:
             raise ValueError("max_steps 必须是正整数")
+        if (
+            not isinstance(max_tool_calls, int)
+            or isinstance(max_tool_calls, bool)
+            or max_tool_calls < 1
+        ):
+            raise ValueError("max_tool_calls 必须是正整数")
         if system_prompt is not None and not isinstance(system_prompt, str):
             raise TypeError("system_prompt 必须是字符串或 None")
         self._model = model
         self._registry = registry
         self._max_steps = max_steps
+        self._max_tool_calls = max_tool_calls
         self._system_prompt = system_prompt
 
     def run(
@@ -60,7 +71,7 @@ class AgentLoop:
         *,
         history: Sequence[Message] = (),
     ) -> RunResult:
-        """从用户消息开始，直到模型 Final 或稳定失败，最多调用模型 max_steps 次。"""
+        """从用户消息推进到 Final；模型轮数、工具总数和重复调用均受 run 级硬约束。"""
 
         if not isinstance(user_input, str):
             raise TypeError("user_input 必须是字符串")
@@ -73,6 +84,8 @@ class AgentLoop:
         messages.extend(history)
         messages.append(Message.user(user_input))
         trace: list[RuntimeTraceStep] = []
+        executed_tool_call_ids: set[str] = set()
+        tool_call_count = 0
 
         # 有界 for-loop 是运行时硬停止线；模型持续请求工具也不能形成无限循环。
         for step_number in range(1, self._max_steps + 1):
@@ -81,8 +94,10 @@ class AgentLoop:
                     tuple(messages),
                     self._registry.definitions(),
                 )
+            except ProviderError as error:
+                raise ModelInvocationError(step_number, error.kind) from error
             except Exception as error:
-                raise ModelInvocationError(step_number) from error
+                raise ModelInvocationError(step_number, ProviderErrorKind.UNKNOWN) from error
 
             if not isinstance(response, ModelResponse):
                 raise InvalidModelResponseError(step_number)
@@ -103,6 +118,18 @@ class AgentLoop:
                     trace=tuple(trace),
                 )
 
+            current_ids = [tool_call.call_id for tool_call in response.tool_calls]
+            if len(current_ids) != len(set(current_ids)) or any(
+                call_id in executed_tool_call_ids for call_id in current_ids
+            ):
+                # 整批预检，避免一个响应的前半批已产生副作用后才发现重复 id。
+                raise DuplicateToolCallIdError()
+
+            next_tool_call_count = tool_call_count + len(response.tool_calls)
+            if next_tool_call_count > self._max_tool_calls:
+                # 预算同样按整批预检，超限响应中的工具一个也不执行。
+                raise MaxToolCallsExceeded(self._max_tool_calls)
+
             # 先回填 assistant 的结构化调用，再逐个追加对应 Tool Result，Provider Adapter
             # 因而能重建完整协议，而不需要解析 Thought:/Action: 文本。
             messages.append(
@@ -112,6 +139,7 @@ class AgentLoop:
                 )
             )
             for tool_call in response.tool_calls:
+                executed_tool_call_ids.add(tool_call.call_id)
                 result = self._registry.execute(tool_call.name, tool_call.arguments)
                 messages.append(
                     Message.tool_result(
@@ -124,6 +152,7 @@ class AgentLoop:
                         ),
                     )
                 )
+            tool_call_count = next_tool_call_count
             trace.append(
                 RuntimeTraceStep(
                     step_number=step_number,
