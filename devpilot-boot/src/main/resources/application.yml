@@ -12,6 +12,12 @@ spring:
     validate-migration-naming: true
 
 devpilot:
+  agent:
+    grpc:
+      host: ${DEVPILOT_AGENT_GRPC_HOST:localhost}
+      port: ${DEVPILOT_AGENT_GRPC_PORT:50051}
+      deadline: ${DEVPILOT_AGENT_GRPC_DEADLINE:30s}
+      plaintext: ${DEVPILOT_AGENT_GRPC_PLAINTEXT:true}
   observability:
     backlog:
       enabled: true

@@ -14,12 +14,15 @@
 `AgentRuntime` Adapter 调用 Python。Python 需要项目事实或业务动作时，只能调用 Java
 `DevPilotToolGateway`；Gateway 后续再委托 Task/Project/GitHub 的公开 Application Service，不能直连 Mapper。
 
-## v1 草案策略
+## v1 演进策略
 
-当前 `agent_runtime.proto` 只放置 service、RPC 方向与 request identity 占位字段，用来验证 Contract-first
-目录和边界。它不是可联调的最终 schema：没有生成 Stub、兼容性流水线、错误详情、鉴权 metadata、事件 payload、
-Proposal/Confirm 字段或 Tool catalog。后续扩展必须保持字段号稳定，删除字段时使用 `reserved`，并先修改 proto
-再生成两端代码。
+`StartRun` 已形成第一个可联调的同步 Unary 契约：Java 生成 `request_id/run_id` 并提交 `user_input`，Python
+运行 AgentLoop 后返回同一 `run_id`、`final_output` 和稳定 `RunStatus`。Java 与 Python Stub 都从本文件生成，
+generated code 不承载手工业务逻辑，也不作为 Application Core DTO。
+
+`StreamRun`、`CancelRun` 和 `DevPilotToolGateway` 仍只保留方向与占位字段，本章保持 `UNIMPLEMENTED`，没有伪造
+流式事件、取消或业务 Tool。后续扩展必须保持字段号稳定，删除字段时使用 `reserved`，并先修改 proto 再生成两端
+代码。错误详情、鉴权 metadata、AgentEvent payload、Proposal/Confirm 和 Tool catalog 仍待后续设计。
 
 跨服务的 authentication/authorization 不由占位字段替代。Java 始终是 User/RBAC、Workspace/Project、
 GitHub Snapshot、Task、Audit/Notification 和未来 AgentRun 业务投影的权威拥有者；Python 保存的 request

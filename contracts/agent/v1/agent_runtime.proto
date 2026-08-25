@@ -19,10 +19,20 @@ service DevPilotToolGateway {
 
 message StartRunRequest {
   string request_id = 1;
+  string run_id = 2;
+  string user_input = 3;
 }
 
 message StartRunResponse {
   string run_id = 1;
+  string final_output = 2;
+  RunStatus status = 3;
+}
+
+enum RunStatus {
+  RUN_STATUS_UNSPECIFIED = 0;
+  RUN_STATUS_SUCCEEDED = 1;
+  RUN_STATUS_FAILED = 2;
 }
 
 message StreamRunRequest {
