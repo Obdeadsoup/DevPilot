@@ -16,6 +16,7 @@ from devpilot_agent_service.runtime.errors import (
     ToolExecutionError,
     UnknownToolError,
 )
+from devpilot_agent_service.runtime.events import RuntimeEvent, RuntimeEventType
 from devpilot_agent_service.runtime.message import MessageRole
 from devpilot_agent_service.tools.base import JsonValue
 from devpilot_agent_service.tools.echo import EchoTool
@@ -101,6 +102,24 @@ def test_one_tool_call_returns_result_to_model_then_stops() -> None:
     assert second_messages[-1].content == '{"echo": "hello"}'
     assert second_messages[-1].tool_call_id == "call-1"
     assert model.calls[0].tools[0].name == "echo"
+
+
+def test_optional_runtime_event_hook_observes_only_lifecycle_metadata() -> None:
+    events: list[RuntimeEvent] = []
+    model = FakeModel(
+        [tool_response("private-call-id", text="private argument"), ModelResponse.final("done")]
+    )
+
+    AgentLoop(model, echo_registry()).run("hello", on_event=events.append)
+
+    assert events == [
+        RuntimeEvent(RuntimeEventType.MODEL_STEP_STARTED, 1),
+        RuntimeEvent(RuntimeEventType.TOOL_STARTED, 1, "echo"),
+        RuntimeEvent(RuntimeEventType.TOOL_COMPLETED, 1, "echo"),
+        RuntimeEvent(RuntimeEventType.MODEL_STEP_STARTED, 2),
+    ]
+    assert "private-call-id" not in repr(events)
+    assert "private argument" not in repr(events)
 
 
 def test_multiple_tool_rounds_accumulate_results_in_context() -> None:

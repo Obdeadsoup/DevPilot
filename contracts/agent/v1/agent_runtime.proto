@@ -37,10 +37,29 @@ enum RunStatus {
 
 message StreamRunRequest {
   string run_id = 1;
+  string request_id = 2;
+  string user_input = 3;
 }
 
 message AgentEvent {
   string event_id = 1;
+  string run_id = 2;
+  uint64 sequence = 3;
+  AgentEventType type = 4;
+  uint32 step = 5;
+  string tool_name = 6;
+  string final_output = 7;
+  string failure_kind = 8;
+}
+
+enum AgentEventType {
+  AGENT_EVENT_TYPE_UNSPECIFIED = 0;
+  AGENT_EVENT_TYPE_RUN_STARTED = 1;
+  AGENT_EVENT_TYPE_MODEL_STEP_STARTED = 2;
+  AGENT_EVENT_TYPE_TOOL_STARTED = 3;
+  AGENT_EVENT_TYPE_TOOL_COMPLETED = 4;
+  AGENT_EVENT_TYPE_RUN_SUCCEEDED = 5;
+  AGENT_EVENT_TYPE_RUN_FAILED = 6;
 }
 
 message CancelRunRequest {

@@ -1,9 +1,10 @@
 """gRPC Servicer 与 Provider-neutral AgentLoop 之间的轻量应用门面。"""
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from devpilot_agent_service.model.types import ModelResponse
 from devpilot_agent_service.runtime.agent_loop import AgentLoop, RunResult
+from devpilot_agent_service.runtime.events import RuntimeEvent
 from devpilot_agent_service.runtime.message import Message, MessageRole
 from devpilot_agent_service.tools.base import ToolDefinition
 
@@ -14,10 +15,15 @@ class AgentRuntimeApplication:
     def __init__(self, loop: AgentLoop) -> None:
         self._loop = loop
 
-    def start_run(self, user_input: str) -> RunResult:
+    def start_run(
+        self,
+        user_input: str,
+        *,
+        on_event: Callable[[RuntimeEvent], None] | None = None,
+    ) -> RunResult:
         """同步运行一次 Agent；RPC identity 不参与模型提示词或权限推导。"""
 
-        return self._loop.run(user_input)
+        return self._loop.run(user_input, on_event=on_event)
 
 
 class DeterministicFakeModel:

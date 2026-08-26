@@ -9,6 +9,7 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,11 +29,12 @@ public class AgentRunController {
     }
 
     @PostMapping
-    public ApiResponse<AgentRunResponse> start(@PathVariable @Positive long workspaceId,
-                                               @PathVariable @Positive long projectId,
-                                               @Valid @RequestBody StartAgentRunRequest request) {
-        return ApiResponse.success(AgentRunResponse.from(
-                applicationService.start(workspaceId, projectId, request.input())));
+    public ResponseEntity<ApiResponse<AgentRunResponse>> start(
+            @PathVariable @Positive long workspaceId,
+            @PathVariable @Positive long projectId,
+            @Valid @RequestBody StartAgentRunRequest request) {
+        return ResponseEntity.accepted().body(ApiResponse.success(AgentRunResponse.from(
+                applicationService.start(workspaceId, projectId, request.input()))));
     }
 
     @GetMapping("/{runId}")

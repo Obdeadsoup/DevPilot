@@ -3,11 +3,11 @@ package com.obdeadsoup.devpilot.agent;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.obdeadsoup.devpilot.agent.application.AgentRunCommand;
-import com.obdeadsoup.devpilot.agent.application.AgentRunResult;
-import com.obdeadsoup.devpilot.agent.application.AgentRunStatus;
-import com.obdeadsoup.devpilot.agent.application.AgentRuntimePort;
-import com.obdeadsoup.devpilot.agent.infrastructure.grpc.AgentRuntimeClientException;
-import com.obdeadsoup.devpilot.agent.infrastructure.grpc.AgentRuntimeFailureKind;
+import com.obdeadsoup.devpilot.agent.application.AgentRuntimeEventListener;
+import com.obdeadsoup.devpilot.agent.application.AgentRuntimeStreamFailureKind;
+import com.obdeadsoup.devpilot.agent.application.AgentRuntimeStreamingPort;
+import com.obdeadsoup.devpilot.agent.application.AgentStreamEvent;
+import com.obdeadsoup.devpilot.agent.application.AgentStreamEventType;
 import com.obdeadsoup.devpilot.identity.domain.DevPilotUserPrincipal;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,14 +31,17 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doAnswer;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @Testcontainers(disabledWithoutDocker = true)
@@ -70,7 +73,7 @@ class AgentRunHttpIntegrationTest {
     @Autowired private JdbcTemplate jdbcTemplate;
     @Autowired private MockMvc mockMvc;
     @Autowired private ObjectMapper objectMapper;
-    @MockitoBean private AgentRuntimePort runtimePort;
+    @MockitoBean private AgentRuntimeStreamingPort streamingPort;
 
     @BeforeEach
     void setUp() {
@@ -99,118 +102,166 @@ class AgentRunHttpIntegrationTest {
     }
 
     @Test
-    void flywayV14CreatesScopedStateProjectionAndIndexes() {
+    void flywayV14RemainsTheOnlyAgentRunDatabaseProjection() {
         Integer applied = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*) FROM flyway_schema_history WHERE version='14' AND success=1
                 """, Integer.class);
-        Integer indexes = jdbcTemplate.queryForObject("""
-                SELECT COUNT(DISTINCT index_name) FROM information_schema.statistics
-                WHERE table_schema=DATABASE() AND table_name='dp_agent_run'
-                  AND index_name IN ('uk_agent_run_run_id', 'uk_agent_run_request_id',
-                                     'idx_agent_run_scope_time', 'idx_agent_run_scope_status_time')
+        Integer eventTables = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.tables
+                WHERE table_schema=DATABASE() AND table_name='dp_agent_event'
                 """, Integer.class);
-
         assertThat(applied).isEqualTo(1);
-        assertThat(indexes).isEqualTo(4);
+        assertThat(eventTables).isZero();
     }
 
     @Test
-    void developerCanStartAndViewerCanReadWhileRpcRunsOutsideTransaction() throws Exception {
-        AtomicBoolean transactionActiveDuringRpc = new AtomicBoolean(true);
-        when(runtimePort.run(any())).thenAnswer(invocation -> {
-            transactionActiveDuringRpc.set(TransactionSynchronizationManager.isActualTransactionActive());
-            AgentRunCommand command = invocation.getArgument(0);
-            return new AgentRunResult(command.runId(), "review complete", AgentRunStatus.SUCCEEDED);
-        });
-
-        MvcResult start = mockMvc.perform(post(path())
-                        .with(authentication(authToken(DEVELOPER_ID, "developer")))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsBytes(Map.of("input", "review this project"))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("COMMON_0000"))
-                .andExpect(jsonPath("$.data.status").value("SUCCEEDED"))
-                .andExpect(jsonPath("$.data.finalOutput").value("review complete"))
-                .andExpect(jsonPath("$.data.version").value(1))
-                .andReturn();
-        String runId = body(start).path("data").path("runId").asText();
-
-        assertThat(transactionActiveDuringRpc).isFalse();
-        mockMvc.perform(get(path() + "/" + runId)
-                        .with(authentication(authToken(VIEWER_ID, "viewer"))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.runId").value(runId))
-                .andExpect(jsonPath("$.data.status").value("SUCCEEDED"));
-    }
-
-    @Test
-    void viewerCannotStartAndOutsiderCannotRead() throws Exception {
-        mockMvc.perform(post(path())
-                        .with(authentication(authToken(VIEWER_ID, "viewer")))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"input\":\"hello\"}"))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("IDENTITY_0404"));
-
-        when(runtimePort.run(any())).thenAnswer(invocation -> {
-            AgentRunCommand command = invocation.getArgument(0);
-            return new AgentRunResult(command.runId(), "answer", AgentRunStatus.SUCCEEDED);
-        });
-        MvcResult start = startAs(DEVELOPER_ID, "developer");
-        String runId = body(start).path("data").path("runId").asText();
-
-        mockMvc.perform(get(path() + "/" + runId)
-                        .with(authentication(authToken(OUTSIDER_ID, "outsider"))))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("IDENTITY_0404"));
-    }
-
-    @Test
-    void scopedLookupDoesNotExposeRunThroughAnotherProject() throws Exception {
-        when(runtimePort.run(any())).thenAnswer(invocation -> {
-            AgentRunCommand command = invocation.getArgument(0);
-            return new AgentRunResult(command.runId(), "answer", AgentRunStatus.SUCCEEDED);
-        });
-        String runId = body(startAs(DEVELOPER_ID, "developer")).path("data").path("runId").asText();
-
-        mockMvc.perform(get(path(OTHER_PROJECT_ID) + "/" + runId)
-                        .with(authentication(authToken(OWNER_ID, "owner"))))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("AGENT_0401"));
-    }
-
-    @Test
-    void sanitizedRpcFailureBecomesFailedRunAndRemainsQueryable() throws Exception {
-        when(runtimePort.run(any())).thenThrow(new AgentRuntimeClientException(
-                AgentRuntimeFailureKind.DEADLINE_EXCEEDED,
-                new IllegalStateException("private provider response")));
+    void postReturnsAcceptedRunningBeforeAsyncTerminalAndRpcIsOutsideTransaction() throws Exception {
+        AtomicBoolean transactionActive = new AtomicBoolean(true);
+        AtomicReference<AgentRuntimeEventListener> listener = captureStream(transactionActive);
 
         MvcResult start = startAs(DEVELOPER_ID, "developer");
         JsonNode response = body(start);
         String runId = response.path("data").path("runId").asText();
 
-        assertThat(response.path("data").path("status").asText()).isEqualTo("FAILED");
-        assertThat(response.path("data").path("failureKind").asText()).isEqualTo("DEADLINE_EXCEEDED");
-        assertThat(response.path("data").path("finalOutput").isNull()).isTrue();
+        assertThat(response.path("data").path("status").asText()).isEqualTo("RUNNING");
+        assertThat(response.path("data").path("version").asInt()).isZero();
+        assertThat(transactionActive).isFalse();
+        assertThat(listener.get()).isNotNull();
+
+        listener.get().onEvent(event(runId, 1, AgentStreamEventType.RUN_STARTED, 0, "", "", ""));
+        listener.get().onEvent(event(runId, 2, AgentStreamEventType.RUN_SUCCEEDED,
+                0, "", "review complete", ""));
+        listener.get().onCompleted();
+
+        mockMvc.perform(get(path() + "/" + runId)
+                        .with(authentication(authToken(VIEWER_ID, "viewer"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("SUCCEEDED"))
+                .andExpect(jsonPath("$.data.finalOutput").value("review complete"))
+                .andExpect(jsonPath("$.data.version").value(1));
+    }
+
+    @Test
+    void sseCarriesIdNameAndDtoThenTerminalMatchesAuthoritativeGet() throws Exception {
+        AtomicReference<AgentRuntimeEventListener> listener = captureStream(new AtomicBoolean());
+        String runId = body(startAs(DEVELOPER_ID, "developer")).path("data").path("runId").asText();
+
+        MvcResult stream = mockMvc.perform(get(path() + "/" + runId + "/stream")
+                        .with(authentication(authToken(VIEWER_ID, "viewer")))
+                        .accept(MediaType.TEXT_EVENT_STREAM))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        listener.get().onEvent(event(runId, 1, AgentStreamEventType.RUN_STARTED, 0, "", "", ""));
+        listener.get().onEvent(event(runId, 2, AgentStreamEventType.MODEL_STEP_STARTED,
+                1, "", "", ""));
+        listener.get().onEvent(event(runId, 3, AgentStreamEventType.RUN_SUCCEEDED,
+                0, "", "answer", ""));
+        listener.get().onCompleted();
+
+        MvcResult completed = mockMvc.perform(asyncDispatch(stream))
+                .andExpect(status().isOk())
+                .andReturn();
+        String body = completed.getResponse().getContentAsString();
+        assertThat(body).contains("id:" + runId + ":1", "event:run-started",
+                "event:model-step-started", "event:run-succeeded", "\"runId\":\"" + runId + "\"");
+
+        mockMvc.perform(get(path() + "/" + runId)
+                        .with(authentication(authToken(VIEWER_ID, "viewer"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("SUCCEEDED"));
+    }
+
+    @Test
+    void lastEventIdReplaysOnlyNewerEventsAndTerminalCanBeReplayed() throws Exception {
+        AtomicReference<AgentRuntimeEventListener> listener = captureStream(new AtomicBoolean());
+        String runId = body(startAs(DEVELOPER_ID, "developer")).path("data").path("runId").asText();
+        listener.get().onEvent(event(runId, 1, AgentStreamEventType.RUN_STARTED, 0, "", "", ""));
+        listener.get().onEvent(event(runId, 2, AgentStreamEventType.MODEL_STEP_STARTED,
+                1, "", "", ""));
+
+        MvcResult stream = mockMvc.perform(get(path() + "/" + runId + "/stream")
+                        .with(authentication(authToken(VIEWER_ID, "viewer")))
+                        .header("Last-Event-ID", runId + ":1")
+                        .accept(MediaType.TEXT_EVENT_STREAM))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+        listener.get().onEvent(event(runId, 3, AgentStreamEventType.RUN_SUCCEEDED,
+                0, "", "answer", ""));
+
+        String replay = mockMvc.perform(asyncDispatch(stream)).andReturn()
+                .getResponse().getContentAsString();
+        assertThat(replay).doesNotContain("id:" + runId + ":1")
+                .contains("id:" + runId + ":2", "id:" + runId + ":3");
+
+        MvcResult terminalReplay = mockMvc.perform(get(path() + "/" + runId + "/stream")
+                        .with(authentication(authToken(VIEWER_ID, "viewer")))
+                        .header("Last-Event-ID", runId + ":2")
+                        .accept(MediaType.TEXT_EVENT_STREAM))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+        assertThat(mockMvc.perform(asyncDispatch(terminalReplay)).andReturn()
+                .getResponse().getContentAsString()).contains("event:run-succeeded");
+    }
+
+    @Test
+    void sseEnforcesAuthenticationPermissionScopeAndLastEventId() throws Exception {
+        captureStream(new AtomicBoolean());
+        String runId = body(startAs(DEVELOPER_ID, "developer")).path("data").path("runId").asText();
+
+        mockMvc.perform(get(path() + "/" + runId + "/stream"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get(path() + "/" + runId + "/stream")
+                        .with(authentication(authToken(OUTSIDER_ID, "outsider"))))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get(path(OTHER_PROJECT_ID) + "/" + runId + "/stream")
+                        .with(authentication(authToken(OWNER_ID, "owner"))))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get(path() + "/" + runId + "/stream")
+                        .with(authentication(authToken(VIEWER_ID, "viewer")))
+                        .header("Last-Event-ID", "other-run:1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("AGENT_0601"));
+    }
+
+    @Test
+    void grpcFailureProjectsFailedAndPublishesStableKind() throws Exception {
+        AtomicReference<AgentRuntimeEventListener> listener = captureStream(new AtomicBoolean());
+        String runId = body(startAs(DEVELOPER_ID, "developer")).path("data").path("runId").asText();
+
+        listener.get().onError(AgentRuntimeStreamFailureKind.DEADLINE_EXCEEDED);
+
         Map<String, Object> stored = jdbcTemplate.queryForMap(
                 "SELECT status, failure_kind, final_output FROM dp_agent_run WHERE run_id=?", runId);
         assertThat(stored.get("status")).isEqualTo("FAILED");
         assertThat(stored.get("failure_kind")).isEqualTo("DEADLINE_EXCEEDED");
         assertThat(stored.get("final_output")).isNull();
+    }
 
-        mockMvc.perform(get(path() + "/" + runId)
-                        .with(authentication(authToken(VIEWER_ID, "viewer"))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.failureKind").value("DEADLINE_EXCEEDED"));
+    private AtomicReference<AgentRuntimeEventListener> captureStream(AtomicBoolean transactionActive) {
+        AtomicReference<AgentRuntimeEventListener> listener = new AtomicReference<>();
+        doAnswer(invocation -> {
+            transactionActive.set(TransactionSynchronizationManager.isActualTransactionActive());
+            listener.set(invocation.getArgument(1));
+            return null;
+        }).when(streamingPort).stream(any(AgentRunCommand.class), any(AgentRuntimeEventListener.class));
+        return listener;
     }
 
     private MvcResult startAs(long userId, String username) throws Exception {
         return mockMvc.perform(post(path())
                         .with(authentication(authToken(userId, username)))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"input\":\"hello agent\"}"))
-                .andExpect(status().isOk())
+                        .content(objectMapper.writeValueAsBytes(Map.of("input", "hello agent"))))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.data.status").value("RUNNING"))
                 .andReturn();
+    }
+
+    private AgentStreamEvent event(String runId, long sequence, AgentStreamEventType type,
+                                   int step, String toolName, String output, String failureKind) {
+        return new AgentStreamEvent(runId + ":" + sequence, runId, sequence, type,
+                step, toolName, output, failureKind);
     }
 
     private UsernamePasswordAuthenticationToken authToken(long userId, String username) {

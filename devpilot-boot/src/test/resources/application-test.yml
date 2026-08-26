@@ -21,6 +21,9 @@ management:
           include: readinessState
 
 devpilot:
+  agent:
+    sse:
+      enabled: false
   observability:
     backlog:
       enabled: false

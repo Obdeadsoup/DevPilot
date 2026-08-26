@@ -1,6 +1,7 @@
 package com.obdeadsoup.devpilot.agent.infrastructure.grpc;
 
 import com.obdeadsoup.devpilot.agent.application.AgentRuntimePort;
+import com.obdeadsoup.devpilot.agent.application.AgentRuntimeStreamingPort;
 import com.obdeadsoup.devpilot.agent.contract.v1.AgentRuntimeGrpc;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -26,10 +27,23 @@ public class AgentGrpcConfiguration {
     }
 
     @Bean
+    AgentRuntimeGrpc.AgentRuntimeStub agentRuntimeAsyncStub(AgentGrpcChannel channel) {
+        return AgentRuntimeGrpc.newStub(channel.channel());
+    }
+
+    @Bean
     AgentRuntimePort agentRuntimePort(
             AgentRuntimeGrpc.AgentRuntimeBlockingStub stub,
             AgentGrpcProperties properties
     ) {
         return new GrpcAgentRuntimeClient(stub, properties.deadline());
+    }
+
+    @Bean
+    AgentRuntimeStreamingPort agentRuntimeStreamingPort(
+            AgentRuntimeGrpc.AgentRuntimeStub stub,
+            AgentGrpcProperties properties
+    ) {
+        return new GrpcAgentRuntimeStreamingClient(stub, properties.streamDeadline());
     }
 }

@@ -3,7 +3,7 @@ package com.obdeadsoup.devpilot.agent.application;
 import java.util.Objects;
 
 /**
- * Java Application Core 发起同步 Agent Run 的内部命令。
+ * Java Application Core 发起 Agent Run 的内部命令，可供 Unary smoke 与正式 Streaming 复用。
  *
  * <p>它不依赖 protobuf；requestId/runId 由 Java 边界生成，userInput 才会进入 Python Runtime。</p>
  */

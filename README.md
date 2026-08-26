@@ -315,15 +315,20 @@ PR current-head Review 超时扫描，以及 MySQL Transactional Outbox 驱动�
 Outbox 支持 PENDING/PROCESSING/RETRY_WAIT/PROCESSED/DEAD、version claim、有限重试和 stale 恢复。
 数据库 Notification 是可靠来源；单实例 SSE 支持多连接和 Heartbeat，断线后由 REST 查询补偿。
 
-Agent 当前提供同步 Unary 纵切：Java 先在 MySQL 提交 scoped `RUNNING` 投影，事务外通过 gRPC 调用独立 Python
-Runtime，再以短事务写入 `SUCCEEDED/FAILED`。POST 需要 `AGENT_PROPOSE`，GET 需要 `AGENT_READ`：
+Agent 当前提供生命周期 Streaming 纵切：Java 先在 MySQL 提交 scoped `RUNNING` 投影，再用 async gRPC Stub
+订阅独立 Python Runtime 的 Server Streaming；POST 立即返回 `202 + RUNNING/runId`，terminal callback 以另一短事务
+写入 `SUCCEEDED/FAILED`。POST 需要 `AGENT_PROPOSE`，GET/SSE 需要 `AGENT_READ`：
 
 ```text
 POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/agent-runs
 GET  /api/v1/workspaces/{workspaceId}/projects/{projectId}/agent-runs/{runId}
+GET  /api/v1/workspaces/{workspaceId}/projects/{projectId}/agent-runs/{runId}/stream
 ```
 
-当前没有 Agent 列表、Streaming/SSE、Cancel、业务 Tool、写 Proposal 或人工确认；RPC Deadline 失败不会自动 Retry。
+SSE 只传 run/model-step/tool/terminal 生命周期，不传 LLM token、reasoning、Prompt、Tool 参数/结果或 Provider body。
+单 JVM Hub 支持 Heartbeat、每 run 有界 replay 与 `Last-Event-ID`；出现 replay gap 或 Java 重启时，客户端必须用 GET
+读取权威 AgentRun。浏览器断开只移除 emitter，不会 Cancel Python Run。Unary `StartRun` 仍保留用于 smoke；当前没有
+Agent 列表、Cancel、业务 Tool、写 Proposal、人工确认、跨实例 SSE 或自动 Retry。
 
 Notification API（接收人只来自当前 Principal，不接受客户端 userId）：
 

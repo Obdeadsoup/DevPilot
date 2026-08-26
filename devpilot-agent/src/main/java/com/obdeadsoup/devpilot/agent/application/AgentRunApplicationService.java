@@ -1,7 +1,6 @@
 package com.obdeadsoup.devpilot.agent.application;
 
 import com.obdeadsoup.devpilot.agent.error.AgentRunErrorCode;
-import com.obdeadsoup.devpilot.agent.infrastructure.grpc.AgentRuntimeClientException;
 import com.obdeadsoup.devpilot.framework.error.BusinessException;
 import com.obdeadsoup.devpilot.identity.application.CurrentUserProvider;
 import com.obdeadsoup.devpilot.project.application.ProjectAuthorizationService;
@@ -9,8 +8,7 @@ import com.obdeadsoup.devpilot.project.domain.ProjectPermission;
 import org.springframework.stereotype.Service;
 
 /**
- * AgentRun 真实调用链编排：校验当前用户与 Project 权限，提交 RUNNING，事务外调用 Runtime，
- * 再提交 SUCCEEDED/FAILED。该服务故意不加事务，避免数据库连接跨越网络等待。
+ * AgentRun HTTP 编排：校验权限、提交 RUNNING，再在事务外启动异步 Streaming。
  */
 @Service
 public class AgentRunApplicationService {
@@ -19,57 +17,38 @@ public class AgentRunApplicationService {
     private final CurrentUserProvider currentUserProvider;
     private final ProjectAuthorizationService authorizationService;
     private final AgentRunPersistenceService persistenceService;
-    private final AgentRuntimePort runtimePort;
+    private final AgentRunStreamCoordinator streamCoordinator;
     private final AgentRunIdentityFactory identityFactory;
     private final AgentRunTimeProvider timeProvider;
 
     public AgentRunApplicationService(CurrentUserProvider currentUserProvider,
                                       ProjectAuthorizationService authorizationService,
                                       AgentRunPersistenceService persistenceService,
-                                      AgentRuntimePort runtimePort,
+                                      AgentRunStreamCoordinator streamCoordinator,
                                       AgentRunIdentityFactory identityFactory,
                                       AgentRunTimeProvider timeProvider) {
         this.currentUserProvider = currentUserProvider;
         this.authorizationService = authorizationService;
         this.persistenceService = persistenceService;
-        this.runtimePort = runtimePort;
+        this.streamCoordinator = streamCoordinator;
         this.identityFactory = identityFactory;
         this.timeProvider = timeProvider;
     }
 
     /**
-     * 同步启动一次 Agent Run。已分类的 RPC 失败会作为 FAILED 投影正常返回，调用者可用 runId 再查询；
-     * Deadline 只表示 Java 停止等待，不能据此断言 Python 没有继续执行。
+     * 提交 RUNNING 后启动异步流并立即返回初态；终态由 Coordinator callback 的另一短事务写入。
      */
     public AgentRunView start(long workspaceId, long projectId, String input) {
         long userId = currentUserProvider.requireUserId();
         authorizationService.requirePermission(userId, workspaceId, projectId, ProjectPermission.AGENT_PROPOSE);
         String normalizedInput = normalizeInput(input);
         AgentRunIdentity identity = identityFactory.create();
-        persistenceService.createRunning(identity.requestId(), identity.runId(), workspaceId, projectId,
+        AgentRunView running = persistenceService.createRunning(
+                identity.requestId(), identity.runId(), workspaceId, projectId,
                 userId, normalizedInput, timeProvider.now());
-
-        try {
-            AgentRunResult result = runtimePort.run(
-                    new AgentRunCommand(identity.requestId(), identity.runId(), normalizedInput));
-            if (result.status() == AgentRunStatus.SUCCEEDED) {
-                return persistenceService.markSucceeded(workspaceId, projectId, identity.runId(),
-                        result.finalOutput(), timeProvider.now());
-            }
-            return persistenceService.markFailed(workspaceId, projectId, identity.runId(),
-                    AgentRunFailureKind.REMOTE_FAILED, timeProvider.now());
-        } catch (AgentRuntimeClientException exception) {
-            return persistenceService.markFailed(workspaceId, projectId, identity.runId(),
-                    AgentRunFailureKind.fromRuntime(exception.kind()), timeProvider.now());
-        } catch (RuntimeException exception) {
-            try {
-                persistenceService.markFailed(workspaceId, projectId, identity.runId(),
-                        AgentRunFailureKind.UNKNOWN, timeProvider.now());
-            } catch (RuntimeException projectionFailure) {
-                exception.addSuppressed(projectionFailure);
-            }
-            throw exception;
-        }
+        streamCoordinator.start(workspaceId, projectId,
+                new AgentRunCommand(identity.requestId(), identity.runId(), normalizedInput));
+        return running;
     }
 
     /** 查询始终携带 workspace/project scope，并复用 AGENT_READ 权限。 */

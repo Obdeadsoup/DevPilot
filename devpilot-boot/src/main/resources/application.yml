@@ -17,7 +17,15 @@ devpilot:
       host: ${DEVPILOT_AGENT_GRPC_HOST:localhost}
       port: ${DEVPILOT_AGENT_GRPC_PORT:50051}
       deadline: ${DEVPILOT_AGENT_GRPC_DEADLINE:30s}
+      stream-deadline: ${DEVPILOT_AGENT_GRPC_STREAM_DEADLINE:10m}
       plaintext: ${DEVPILOT_AGENT_GRPC_PLAINTEXT:true}
+    sse:
+      enabled: true
+      timeout: 30m
+      heartbeat-interval: 20s
+      max-connections-per-run: 5
+      replay-capacity: 64
+      terminal-retention: 10m
   observability:
     backlog:
       enabled: true

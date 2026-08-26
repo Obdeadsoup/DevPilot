@@ -10,18 +10,20 @@ import org.springframework.validation.annotation.Validated;
 
 import java.time.Duration;
 
-/** Python Agent Runtime endpoint、传输模式和每次 Unary RPC 的 Deadline 配置。 */
+/** Python Agent Runtime endpoint、传输模式及 Unary/Streaming 独立 Deadline 配置。 */
 @Validated
 @ConfigurationProperties("devpilot.agent.grpc")
 public record AgentGrpcProperties(
         @NotBlank String host,
         @Min(1) @Max(65535) int port,
         @NotNull Duration deadline,
+        @NotNull Duration streamDeadline,
         boolean plaintext
 ) {
 
     @AssertTrue(message = "deadline must be at least 1ms")
     public boolean isDeadlineValid() {
-        return deadline != null && deadline.compareTo(Duration.ofMillis(1)) >= 0;
+        return deadline != null && deadline.compareTo(Duration.ofMillis(1)) >= 0
+                && streamDeadline != null && streamDeadline.compareTo(Duration.ofMillis(1)) >= 0;
     }
 }

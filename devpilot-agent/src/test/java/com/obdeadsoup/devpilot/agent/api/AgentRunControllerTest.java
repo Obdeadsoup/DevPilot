@@ -1,6 +1,5 @@
 package com.obdeadsoup.devpilot.agent.api;
 
-import com.obdeadsoup.devpilot.agent.api.dto.AgentRunResponse;
 import com.obdeadsoup.devpilot.agent.api.dto.StartAgentRunRequest;
 import com.obdeadsoup.devpilot.agent.application.AgentRunApplicationService;
 import com.obdeadsoup.devpilot.agent.application.AgentRunStatus;
@@ -35,14 +34,16 @@ class AgentRunControllerTest {
     void wrapsApplicationProjectionInStandardApiResponse() {
         LocalDateTime now = LocalDateTime.of(2026, 8, 25, 12, 0);
         AgentRunView view = new AgentRunView("run-1", "request-1", 1, 2, 7,
-                AgentRunStatus.SUCCEEDED, "hello", "answer", null,
-                now, now.plusSeconds(1), now, now.plusSeconds(1), 1);
+                AgentRunStatus.RUNNING, "hello", null, null,
+                now, null, now, now, 0);
         when(service.start(1, 2, "hello")).thenReturn(view);
 
         var response = controller.start(1, 2, new StartAgentRunRequest("hello"));
 
-        assertThat(response.code()).isEqualTo("COMMON_0000");
-        assertThat(response.data()).isEqualTo(AgentRunResponse.from(view));
+        assertThat(response.getStatusCode().value()).isEqualTo(202);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().code()).isEqualTo("COMMON_0000");
+        assertThat(response.getBody().data().status()).isEqualTo(AgentRunStatus.RUNNING);
         verify(service).start(1, 2, "hello");
     }
 

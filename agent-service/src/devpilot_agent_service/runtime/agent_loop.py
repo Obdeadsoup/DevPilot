@@ -1,7 +1,7 @@
 """同步、单 Agent、结构化 ToolCall 的最小运行循环。"""
 
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from devpilot_agent_service.model.base import Model
@@ -15,6 +15,7 @@ from devpilot_agent_service.runtime.errors import (
     ModelInvocationError,
     StopReason,
 )
+from devpilot_agent_service.runtime.events import RuntimeEvent, RuntimeEventType
 from devpilot_agent_service.runtime.message import Message
 from devpilot_agent_service.tools.registry import ToolRegistry
 
@@ -70,13 +71,16 @@ class AgentLoop:
         user_input: str,
         *,
         history: Sequence[Message] = (),
+        on_event: Callable[[RuntimeEvent], None] | None = None,
     ) -> RunResult:
-        """从用户消息推进到 Final；模型轮数、工具总数和重复调用均受 run 级硬约束。"""
+        """推进到 Final；可选 hook 只观察公开生命周期，不改变 Provider-neutral 编排。"""
 
         if not isinstance(user_input, str):
             raise TypeError("user_input 必须是字符串")
         if any(not isinstance(message, Message) for message in history):
             raise TypeError("history 只能包含 Message")
+        if on_event is not None and not callable(on_event):
+            raise TypeError("on_event 必须可调用或为 None")
 
         messages: list[Message] = []
         if self._system_prompt is not None:
@@ -89,6 +93,7 @@ class AgentLoop:
 
         # 有界 for-loop 是运行时硬停止线；模型持续请求工具也不能形成无限循环。
         for step_number in range(1, self._max_steps + 1):
+            _emit(on_event, RuntimeEvent(RuntimeEventType.MODEL_STEP_STARTED, step_number))
             try:
                 response = self._model.generate(
                     tuple(messages),
@@ -140,7 +145,15 @@ class AgentLoop:
             )
             for tool_call in response.tool_calls:
                 executed_tool_call_ids.add(tool_call.call_id)
+                _emit(
+                    on_event,
+                    RuntimeEvent(RuntimeEventType.TOOL_STARTED, step_number, tool_call.name),
+                )
                 result = self._registry.execute(tool_call.name, tool_call.arguments)
+                _emit(
+                    on_event,
+                    RuntimeEvent(RuntimeEventType.TOOL_COMPLETED, step_number, tool_call.name),
+                )
                 messages.append(
                     Message.tool_result(
                         tool_call,
@@ -162,3 +175,12 @@ class AgentLoop:
             )
 
         raise MaxStepsExceeded(self._max_steps)
+
+
+def _emit(
+    on_event: Callable[[RuntimeEvent], None] | None,
+    event: RuntimeEvent,
+) -> None:
+    # Hook 由 RPC Queue bridge 提供；AgentLoop 本身不认识 runId、protobuf 或 gRPC。
+    if on_event is not None:
+        on_event(event)

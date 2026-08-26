@@ -7,14 +7,16 @@ EchoTool，以及带 `max_steps`、`max_tool_calls` 和重复 `tool_call_id` 防
 Adapter 使用 OpenAI-compatible Chat Completions 协议，默认连接 DeepSeek；自动化测试使用 FakeModel/Fake Client，
 不访问网络、不需要 API Key，也不消耗 Token。
 
-P0-04 已加入由共享 proto 生成的 Python Stub 和真正可启动的同步 gRPC Server。`StartRun` 会校验请求、委托
-AgentLoop，并返回 Final；`StreamRun`、`CancelRun` 和反向 `DevPilotToolGateway` 仍保持 `UNIMPLEMENTED`。
+P0-06 在保留 Unary `StartRun` 的同时实现 `StreamRun` Server Streaming。同步 AgentLoop 通过可选
+Provider-neutral `RuntimeEvent` hook 产生 model/tool 生命周期，Servicer 用容量 64 的 Queue 和受 Server worker
+上限约束的 worker thread 桥接为严格递增的 protobuf `AgentEvent`。`CancelRun` 和反向
+`DevPilotToolGateway` 仍保持 `UNIMPLEMENTED`。
 
 它未来还会负责执行期 step/checkpoint、Conversation runtime context、工具调用编排与流式事件产生。
 它不属于 Maven reactor，不嵌入 `devpilot-agent` Java 模块，也不得直接连接或修改 DevPilot 的 `dp_*` 业务表。
 
-跨进程通信只能基于 `../contracts/agent/v1` 中的 `.proto` 契约：Java 当前可通过 generated Stub 调用 Python
-`AgentRuntime.StartRun`。Python→Java `DevPilotToolGateway` 尚未实现。当前仍没有 LangGraph、RAG、Memory 或
+跨进程通信只能基于 `../contracts/agent/v1` 中的 `.proto` 契约：Java 可通过 BlockingStub 调用 Unary
+`StartRun`，正式 Browser 链路通过 async Stub 调用 `StreamRun`。Python→Java `DevPilotToolGateway` 尚未实现。当前仍没有 LangGraph、RAG、Memory 或
 DevPilot 业务 Tool；`EchoTool` 只用于教学和测试，不代表 Tool Gateway 已实现。
 
 核心代码：
@@ -27,8 +29,9 @@ model/providers/      OpenAI-compatible 配置、消息映射与响应归一化
 tools/base.py         Tool Protocol / ToolDefinition
 tools/registry.py     注册、查找与错误边界
 runtime/agent_loop.py 有界运行循环与轻量 Trace
+runtime/events.py     不含 protobuf/runId 的公开 Runtime 生命周期事件
 rpc/application.py   gRPC 与 AgentLoop 之间的轻量门面
-rpc/servicer.py      StartRun 校验、调用与 Status 边界
+rpc/servicer.py      Unary 与有界 Queue Server Streaming 边界
 rpc/server.py        Server 配置、模型模式和进程入口
 rpc/generated/       由共享 proto 生成，不手工修改
 ```
