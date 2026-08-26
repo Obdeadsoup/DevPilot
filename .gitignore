@@ -1,5 +1,6 @@
 # Maven
 target/
+bin/
 *.log
 
 # Python
@@ -37,10 +38,12 @@ docs/*
 docs/agent/*
 !docs/agent/03-provider-and-reliable-loop.md
 !docs/agent/04-java-python-grpc.md
+!docs/agent/05-agent-run-business-projection.md
 !docs/changes/
 docs/changes/*
 !docs/changes/agent-03-provider-reliable-loop-file-map.md
 !docs/changes/agent-04-grpc-file-map.md
+!docs/changes/agent-05-agent-run-file-map.md
 
 # Local performance results
 performance/jmeter/results/

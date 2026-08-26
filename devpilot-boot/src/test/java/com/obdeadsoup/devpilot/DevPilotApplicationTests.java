@@ -1,5 +1,6 @@
 package com.obdeadsoup.devpilot;
 
+import com.obdeadsoup.devpilot.agent.application.AgentRunApplicationService;
 import com.obdeadsoup.devpilot.audit.application.AuditQueryService;
 import com.obdeadsoup.devpilot.audit.application.OutboxReplayApplicationService;
 import com.obdeadsoup.devpilot.github.application.GitHubBacklogSnapshotService;
@@ -27,6 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest
 @Import(IsolatedPersistenceTestConfiguration.class)
 class DevPilotApplicationTests {
+    @Autowired private AgentRunApplicationService agentRunApplicationService;
     @Autowired private TaskApplicationService taskApplicationService;
     @Autowired private TaskWorkflowService taskWorkflowService;
     @Autowired private TaskGitHubLinkService taskGitHubLinkService;
@@ -46,6 +48,7 @@ class DevPilotApplicationTests {
 
     @Test
     void contextLoads() {
+        assertThat(agentRunApplicationService).isNotNull();
         assertThat(taskApplicationService).isNotNull();
         assertThat(taskWorkflowService).isNotNull();
         assertThat(taskGitHubLinkService).isNotNull();

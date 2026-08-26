@@ -2,6 +2,7 @@ package com.obdeadsoup.devpilot;
 
 import com.obdeadsoup.devpilot.audit.persistence.mapper.AuditLogMapper;
 import com.obdeadsoup.devpilot.audit.persistence.mapper.DeadLetterMapper;
+import com.obdeadsoup.devpilot.agent.persistence.mapper.AgentRunMapper;
 import com.obdeadsoup.devpilot.github.persistence.mapper.GitHubDeliveryMapper;
 import com.obdeadsoup.devpilot.github.persistence.mapper.GitHubCommitMapper;
 import com.obdeadsoup.devpilot.github.persistence.mapper.GitHubIssueMapper;
@@ -30,6 +31,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 
 @TestConfiguration(proxyBeanMethods = false)
 class IsolatedPersistenceTestConfiguration {
+    @Bean AgentRunMapper agentRunMapper() { return Mockito.mock(AgentRunMapper.class); }
     @Bean AuditLogMapper auditLogMapper() { return Mockito.mock(AuditLogMapper.class); }
     @Bean DeadLetterMapper deadLetterMapper() { return Mockito.mock(DeadLetterMapper.class); }
     @Bean OutboxEventMapper outboxEventMapper() { return Mockito.mock(OutboxEventMapper.class); }

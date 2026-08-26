@@ -307,13 +307,23 @@ ACTIVE Workspace Member 可见 INTERNAL 项目，PRIVATE 项目还要求 ACTIVE 
 Membership。所有单项目查询都同时携带 `workspaceId + projectId`。
 
 本阶段已开放 GitHub Repository 绑定生命周期、工程化读取 Client、Commit/Issue/PR/Review 快照同步和
-数据库 Run/Checkpoint 状态机，但仍未实现 GitHub App JWT / Installation Token、跨实例 Credential 并发协调或 Agent。
+数据库 Run/Checkpoint 状态机，但仍未实现 GitHub App JWT / Installation Token 或跨实例 Credential 并发协调。
 Task 已提供本地 BACKLOG/TODO/IN_PROGRESS/IN_REVIEW/DONE/CANCELED
 状态机、版本条件更新、History、Project Activity 与显式 GitHub Issue/PR Snapshot 关联；PR MERGED 和
 Issue CLOSED 不会自动完成 Task。当前已实现数据库站内 Notification、Task 到期/逾期/Review 与
 PR current-head Review 超时扫描，以及 MySQL Transactional Outbox 驱动的六类 Task 即时通知。
 Outbox 支持 PENDING/PROCESSING/RETRY_WAIT/PROCESSED/DEAD、version claim、有限重试和 stale 恢复。
 数据库 Notification 是可靠来源；单实例 SSE 支持多连接和 Heartbeat，断线后由 REST 查询补偿。
+
+Agent 当前提供同步 Unary 纵切：Java 先在 MySQL 提交 scoped `RUNNING` 投影，事务外通过 gRPC 调用独立 Python
+Runtime，再以短事务写入 `SUCCEEDED/FAILED`。POST 需要 `AGENT_PROPOSE`，GET 需要 `AGENT_READ`：
+
+```text
+POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/agent-runs
+GET  /api/v1/workspaces/{workspaceId}/projects/{projectId}/agent-runs/{runId}
+```
+
+当前没有 Agent 列表、Streaming/SSE、Cancel、业务 Tool、写 Proposal 或人工确认；RPC Deadline 失败不会自动 Retry。
 
 Notification API（接收人只来自当前 Principal，不接受客户端 userId）：
 
