@@ -13,7 +13,12 @@ public class CorrelationIdPolicy {
     private static final Pattern SAFE_VALUE = Pattern.compile("[A-Za-z0-9._-]{8,64}");
 
     public String resolve(String candidate) {
-        return candidate != null && SAFE_VALUE.matcher(candidate).matches() ? candidate : generate();
+        return isValid(candidate) ? candidate : generate();
+    }
+
+    /** 判断外部请求标识是否可安全进入响应头、下游请求和日志上下文。 */
+    public boolean isValid(String candidate) {
+        return candidate != null && SAFE_VALUE.matcher(candidate).matches();
     }
 
     public String generate() {

@@ -41,6 +41,9 @@ docs/agent/*
 !docs/agent/05-agent-run-business-projection.md
 !docs/agent/06-grpc-streaming-sse.md
 !docs/agent/07-read-only-tool-gateway.md
+!docs/cloud/
+docs/cloud/*
+!docs/cloud/08-spring-cloud-gateway-nacos.md
 !docs/changes/
 docs/changes/*
 !docs/changes/agent-03-provider-reliable-loop-file-map.md
@@ -48,6 +51,7 @@ docs/changes/*
 !docs/changes/agent-05-agent-run-file-map.md
 !docs/changes/agent-06-streaming-sse-file-map.md
 !docs/changes/agent-07-tool-gateway-file-map.md
+!docs/changes/cloud-08-gateway-nacos-file-map.md
 
 # Local performance results
 performance/jmeter/results/

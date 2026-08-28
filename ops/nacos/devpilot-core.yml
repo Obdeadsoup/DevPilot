@@ -1,0 +1,13 @@
+# 仅存放可公开的运行参数；数据库、Redis、GitHub、Agent service key 等凭据必须由环境注入。
+info:
+  devpilot:
+    config-source: nacos
+
+devpilot:
+  github:
+    connect-timeout: 2s
+    read-timeout: 5s
+  agent:
+    grpc:
+      deadline: 30s
+      stream-deadline: 10m

@@ -1,0 +1,18 @@
+spring:
+  config:
+    # cloud Profile 要求 Nacos 配置存在；当前阶段禁用动态刷新，修改后通过重启生效。
+    import: nacos:devpilot-gateway.yml?group=${DEVPILOT_NACOS_GROUP:DEVPILOT}&refreshEnabled=false
+  cloud:
+    nacos:
+      config:
+        enabled: true
+      discovery:
+        enabled: true
+        fail-fast: true
+
+management:
+  health:
+    nacos-config:
+      enabled: true
+    nacos-discovery:
+      enabled: true

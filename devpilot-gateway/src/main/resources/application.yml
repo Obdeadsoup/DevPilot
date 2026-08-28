@@ -1,0 +1,73 @@
+server:
+  port: ${DEVPILOT_GATEWAY_PORT:8081}
+
+spring:
+  application:
+    name: devpilot-gateway
+  config:
+    import: optional:nacos:devpilot-gateway.yml?group=${DEVPILOT_NACOS_GROUP:DEVPILOT}&refreshEnabled=false
+  cloud:
+    nacos:
+      config:
+        enabled: ${DEVPILOT_NACOS_CONFIG_ENABLED:false}
+        server-addr: ${DEVPILOT_NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${DEVPILOT_NACOS_NAMESPACE:}
+        group: ${DEVPILOT_NACOS_GROUP:DEVPILOT}
+      discovery:
+        enabled: ${DEVPILOT_NACOS_DISCOVERY_ENABLED:false}
+        server-addr: ${DEVPILOT_NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${DEVPILOT_NACOS_NAMESPACE:}
+        group: ${DEVPILOT_NACOS_GROUP:DEVPILOT}
+    gateway:
+      server:
+        webflux:
+          discovery:
+            locator:
+              enabled: false
+          httpclient:
+            connect-timeout: 2000
+            response-timeout: 10s
+          routes:
+            - id: devpilot-core-sse
+              uri: lb://devpilot-core
+              order: -10
+              predicates:
+                - Path=/api/v1/notifications/stream,/api/v1/workspaces/*/projects/*/agent-runs/*/stream
+              metadata:
+                # SSE 长连接不能继承普通 REST 的短 response timeout。
+                response-timeout: -1
+            - id: devpilot-core-api
+              uri: lb://devpilot-core
+              order: 0
+              predicates:
+                - Path=/api/**
+
+devpilot:
+  gateway:
+    cors:
+      allowed-origins: ${DEVPILOT_GATEWAY_ALLOWED_ORIGINS:http://localhost:5173}
+      max-age: 1h
+
+management:
+  health:
+    nacos-config:
+      enabled: false
+    nacos-discovery:
+      enabled: false
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+  info:
+    env:
+      enabled: true
+
+info:
+  devpilot:
+    service: gateway
+    config-source: local-defaults

@@ -1,6 +1,20 @@
 spring:
   application:
-    name: devpilot
+    name: devpilot-core
+  config:
+    import: optional:nacos:devpilot-core.yml?group=${DEVPILOT_NACOS_GROUP:DEVPILOT}&refreshEnabled=false
+  cloud:
+    nacos:
+      config:
+        enabled: ${DEVPILOT_NACOS_CONFIG_ENABLED:false}
+        server-addr: ${DEVPILOT_NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${DEVPILOT_NACOS_NAMESPACE:}
+        group: ${DEVPILOT_NACOS_GROUP:DEVPILOT}
+      discovery:
+        enabled: ${DEVPILOT_NACOS_DISCOVERY_ENABLED:false}
+        server-addr: ${DEVPILOT_NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${DEVPILOT_NACOS_NAMESPACE:}
+        group: ${DEVPILOT_NACOS_GROUP:DEVPILOT}
   data:
     redis:
       repositories:
@@ -104,6 +118,11 @@ devpilot:
       retry-max-delay: 30m
 
 management:
+  health:
+    nacos-config:
+      enabled: false
+    nacos-discovery:
+      enabled: false
   endpoints:
     web:
       exposure:

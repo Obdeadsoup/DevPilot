@@ -1,0 +1,18 @@
+spring:
+  config:
+    # cloud Profile 下配置中心不可用时必须启动失败，避免带着不完整配置提供服务。
+    import: nacos:devpilot-core.yml?group=${DEVPILOT_NACOS_GROUP:DEVPILOT}&refreshEnabled=false
+  cloud:
+    nacos:
+      config:
+        enabled: true
+      discovery:
+        enabled: true
+        fail-fast: true
+
+management:
+  health:
+    nacos-config:
+      enabled: true
+    nacos-discovery:
+      enabled: true

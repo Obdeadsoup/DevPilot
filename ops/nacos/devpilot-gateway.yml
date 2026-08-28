@@ -1,0 +1,11 @@
+# Gateway 配置中心样例只包含非敏感边缘参数；修改后重启 Gateway 生效。
+info:
+  devpilot:
+    config-source: nacos
+
+devpilot:
+  gateway:
+    cors:
+      allowed-origins:
+        - http://localhost:5173
+      max-age: 1h

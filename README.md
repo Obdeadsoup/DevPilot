@@ -21,11 +21,38 @@ DevPilot 不复刻 GitHub，而是建立一个面向小团队的“项目上下�
 
 ## 系统架构图
 
+```text
+Browser : HTTP/SSE
+  → devpilot-gateway :8081
+  → lb://devpilot-core
+  → Nacos Discovery
+  → devpilot-core :8080（Java 模块化单体）
+      → Python AgentRuntime gRPC :50051
+      ← Python Read-only Tool 调用 gRPC :50052
+
+Nacos Config
+  → spring.config.import
+  → devpilot-gateway / devpilot-core 的非敏感配置
+```
+
+当前只有三个独立运行边界：Java Core、Java Gateway、Python Agent。`identity/project/task/github/notification/audit/agent`
+仍是 Core 进程内的 Maven 业务模块，不是微服务。Gateway 是浏览器 HTTP/SSE Edge Service，不承担登录、RBAC、
+业务规则或数据库访问；双向 Agent gRPC 不经过 Gateway。
 
 
 ## 技术栈
 
+Java 21、Spring Boot 3.5.16、Spring Cloud 2025.0.0、Spring Cloud Alibaba 2025.0.0.0、Spring Cloud Gateway
+Server WebFlux、Nacos 3、Spring MVC、Spring Security、MyBatis-Plus、MySQL 8、Redis 7、Flyway、Actuator、JUnit 5
+与 Testcontainers。Core 保持 Spring MVC，只有独立 Gateway 使用 WebFlux。
+
 ## 模块结构
+
+- `devpilot-gateway`：可独立部署的 HTTP/SSE 边缘服务，通过 Nacos 和 LoadBalancer 路由到 Core。
+- `devpilot-boot`：可独立部署的 Java Core 组合根，运行所有 Java 业务模块。
+- `devpilot-framework`：Core/Gateway 可复用的中立基础能力。
+- `devpilot-identity/project/task/github/notification/outbox/audit/agent`：Core 进程内模块。
+- `agent-service`：可独立部署的 Python AgentRuntime。
 
 ## 核心业务链路
 
@@ -98,6 +125,13 @@ docker compose ps
 
 Compose 使用 MySQL 8 和 Redis 7。为避开宿主机已占用的端口，MySQL 默认映射为 `3307:3306`，Redis 默认映射为 `6380:6379`；Redis 容器名为 `devpilot-redis8`。端口可以在 `.env` 中调整。
 
+Nacos 3 是可选的 `cloud` Compose profile，不会影响原基础开发流程。需要验证 Gateway/Discovery/Config 时：
+
+```powershell
+docker compose --profile cloud up -d nacos
+.\ops\nacos\Publish-DevPilotNacosConfig.ps1
+```
+
 ### 构建与启动
 
 #### 后端
@@ -127,6 +161,20 @@ Testcontainers；这是 CI，不包含自动部署。JMeter 基线保存在 `per
 `health,metrics,prometheus`；这一匿名 scrape 策略仅用于本机/受控运维网络，不是互联网生产安全方案。
 请求使用安全格式的 `X-Correlation-ID` 关联同步日志；GitHub/Outbox 后台任务只传播有限 MDC 或创建新的处理 ID，
 它不是 OpenTelemetry Trace，也不参与鉴权和业务幂等。
+
+默认/local/test 不要求 Nacos。完成 Nacos 配置发布并启动 MySQL、Redis 后，分别以 `cloud` Profile 启动 Core 和 Gateway：
+
+```powershell
+mvn -pl devpilot-boot,devpilot-gateway -am package -DskipTests
+java -jar .\devpilot-boot\target\devpilot-boot-0.0.1-SNAPSHOT.jar --spring.profiles.active=local,cloud
+java -jar .\devpilot-gateway\target\devpilot-gateway-0.0.1-SNAPSHOT.jar --spring.profiles.active=cloud
+.\ops\nacos\Test-DevPilotCloudSmoke.ps1
+```
+
+浏览器 API 基地址此时改为 `http://localhost:8081`。Gateway 保留合法 `X-Request-Id`，否则生成 UUID，并把同值写入
+Core 已有的 `X-Correlation-ID`。`Authorization` 透明转发，认证和 Workspace/Project RBAC 仍由 Core 执行。
+Nacos Config 当前明确关闭动态刷新，配置修改后重启对应服务；它只管理非敏感配置，不替代 Secret Manager。
+详细边界、配置约定与验收步骤见 `docs/cloud/08-spring-cloud-gateway-nacos.md`。
 
 当前 Delivery、GitHub Sync 与 Outbox 提供处理耗时、ready backlog、oldest ready age、stale processing 和
 open DEAD 指标；Notification 提供创建/去重、Handler、SSE connection/send 指标。原 DEAD 历史仍保留，

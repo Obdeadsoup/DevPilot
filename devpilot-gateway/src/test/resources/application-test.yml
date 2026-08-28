@@ -1,0 +1,14 @@
+spring:
+  cloud:
+    nacos:
+      config:
+        enabled: false
+      discovery:
+        enabled: false
+
+management:
+  health:
+    nacos-config:
+      enabled: false
+    nacos-discovery:
+      enabled: false
