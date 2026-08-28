@@ -33,3 +33,20 @@ def test_generated_stream_contract_contains_identity_sequence_and_typed_event() 
     assert request.user_input == "hello"
     assert event.sequence == 1
     assert event.type == agent_runtime_pb2.AGENT_EVENT_TYPE_RUN_STARTED
+
+
+def test_generated_tool_contract_uses_struct_and_preserves_correlation() -> None:
+    request = agent_runtime_pb2.ExecuteToolRequest(
+        request_id="request-1",
+        run_id="run-1",
+        tool_call_id="call-1",
+        tool_name="task.list_open",
+        arguments={"fields": {}},
+    )
+
+    assert request.run_id == "run-1"
+    assert request.tool_call_id == "call-1"
+    assert request.tool_name == "task.list_open"
+    assert request.HasField("arguments")
+    assert hasattr(agent_runtime_pb2_grpc, "DevPilotToolGatewayStub")
+    assert agent_runtime_pb2.TOOL_EXECUTION_STATUS_SUCCEEDED > 0

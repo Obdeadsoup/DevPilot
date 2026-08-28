@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Protocol, TypeAlias
 
+from devpilot_agent_service.runtime.context import RunContext
+
 JsonScalar: TypeAlias = str | int | float | bool | None
 JsonValue: TypeAlias = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
 
@@ -43,8 +45,14 @@ class Tool(Protocol):
     @property
     def parameter_schema(self) -> Mapping[str, object]: ...
 
-    def execute(self, arguments: Mapping[str, object]) -> JsonValue:
-        """执行已选择的本地能力；参数校验失败应抛出稳定的参数错误。"""
+    def execute(
+        self,
+        arguments: Mapping[str, object],
+        *,
+        run_context: RunContext | None = None,
+        tool_call_id: str | None = None,
+    ) -> JsonValue:
+        """执行能力；remote Tool 使用 run context/call id，本地测试 Tool 可安全忽略。"""
 
 
 def definition_of(tool: Tool) -> ToolDefinition:

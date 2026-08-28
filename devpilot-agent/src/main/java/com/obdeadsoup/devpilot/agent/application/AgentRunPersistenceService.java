@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
  * 调用方必须在两个方法之间、事务之外执行 Python RPC。
  */
 @Service
-public class AgentRunPersistenceService {
+public class AgentRunPersistenceService implements AgentRunExecutionContextQuery {
     private final AgentRunMapper mapper;
 
     public AgentRunPersistenceService(AgentRunMapper mapper) {
@@ -68,6 +68,13 @@ public class AgentRunPersistenceService {
     @Transactional(readOnly = true)
     public AgentRunView get(long workspaceId, long projectId, String runId) {
         return requireByScope(workspaceId, projectId, runId);
+    }
+
+    /** Tool Gateway 只按不可猜测的 runId 恢复 Java 权威 actor/scope，不把用户身份交给 Python 声明。 */
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.Optional<AgentRunExecutionContext> findByRunIdForRuntime(String runId) {
+        return mapper.findByRunId(runId).map(AgentRunExecutionContext::from);
     }
 
     private AgentRunView requireByScope(long workspaceId, long projectId, String runId) {

@@ -36,6 +36,9 @@ public interface AgentRunMapper {
                                          @Param("projectId") long projectId,
                                          @Param("runId") String runId);
 
+    @Select("SELECT " + COLUMNS + " FROM dp_agent_run WHERE run_id=#{runId} AND deleted=0")
+    Optional<AgentRunEntity> findByRunId(@Param("runId") String runId);
+
     @Update("""
             UPDATE dp_agent_run SET status='SUCCEEDED', final_output=#{finalOutput}, failure_kind=NULL,
                 finished_at=#{finishedAt}, version=version+1

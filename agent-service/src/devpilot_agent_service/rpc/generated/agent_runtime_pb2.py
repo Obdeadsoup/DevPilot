@@ -22,9 +22,10 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
+from google.protobuf import struct_pb2 as google_dot_protobuf_dot_struct__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x13\x61gent_runtime.proto\x12\x11\x64\x65vpilot.agent.v1\"I\n\x0fStartRunRequest\x12\x12\n\nrequest_id\x18\x01 \x01(\t\x12\x0e\n\x06run_id\x18\x02 \x01(\t\x12\x12\n\nuser_input\x18\x03 \x01(\t\"f\n\x10StartRunResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x14\n\x0c\x66inal_output\x18\x02 \x01(\t\x12,\n\x06status\x18\x03 \x01(\x0e\x32\x1c.devpilot.agent.v1.RunStatus\"J\n\x10StreamRunRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x12\n\nrequest_id\x18\x02 \x01(\t\x12\x12\n\nuser_input\x18\x03 \x01(\t\"\xbe\x01\n\nAgentEvent\x12\x10\n\x08\x65vent_id\x18\x01 \x01(\t\x12\x0e\n\x06run_id\x18\x02 \x01(\t\x12\x10\n\x08sequence\x18\x03 \x01(\x04\x12/\n\x04type\x18\x04 \x01(\x0e\x32!.devpilot.agent.v1.AgentEventType\x12\x0c\n\x04step\x18\x05 \x01(\r\x12\x11\n\ttool_name\x18\x06 \x01(\t\x12\x14\n\x0c\x66inal_output\x18\x07 \x01(\t\x12\x14\n\x0c\x66\x61ilure_kind\x18\x08 \x01(\t\"\"\n\x10\x43\x61ncelRunRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"%\n\x11\x43\x61ncelRunResponse\x12\x10\n\x08\x61\x63\x63\x65pted\x18\x01 \x01(\x08\"(\n\x12\x45xecuteToolRequest\x12\x12\n\nrequest_id\x18\x01 \x01(\t\"(\n\x13\x45xecuteToolResponse\x12\x11\n\tresult_id\x18\x01 \x01(\t*X\n\tRunStatus\x12\x1a\n\x16RUN_STATUS_UNSPECIFIED\x10\x00\x12\x18\n\x14RUN_STATUS_SUCCEEDED\x10\x01\x12\x15\n\x11RUN_STATUS_FAILED\x10\x02*\x8a\x02\n\x0e\x41gentEventType\x12 \n\x1c\x41GENT_EVENT_TYPE_UNSPECIFIED\x10\x00\x12 \n\x1c\x41GENT_EVENT_TYPE_RUN_STARTED\x10\x01\x12\'\n#AGENT_EVENT_TYPE_MODEL_STEP_STARTED\x10\x02\x12!\n\x1d\x41GENT_EVENT_TYPE_TOOL_STARTED\x10\x03\x12#\n\x1f\x41GENT_EVENT_TYPE_TOOL_COMPLETED\x10\x04\x12\"\n\x1e\x41GENT_EVENT_TYPE_RUN_SUCCEEDED\x10\x05\x12\x1f\n\x1b\x41GENT_EVENT_TYPE_RUN_FAILED\x10\x06\x32\x8e\x02\n\x0c\x41gentRuntime\x12S\n\x08StartRun\x12\".devpilot.agent.v1.StartRunRequest\x1a#.devpilot.agent.v1.StartRunResponse\x12Q\n\tStreamRun\x12#.devpilot.agent.v1.StreamRunRequest\x1a\x1d.devpilot.agent.v1.AgentEvent0\x01\x12V\n\tCancelRun\x12#.devpilot.agent.v1.CancelRunRequest\x1a$.devpilot.agent.v1.CancelRunResponse2s\n\x13\x44\x65vPilotToolGateway\x12\\\n\x0b\x45xecuteTool\x12%.devpilot.agent.v1.ExecuteToolRequest\x1a&.devpilot.agent.v1.ExecuteToolResponseB-\n)com.obdeadsoup.devpilot.agent.contract.v1P\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x13\x61gent_runtime.proto\x12\x11\x64\x65vpilot.agent.v1\x1a\x1cgoogle/protobuf/struct.proto\"I\n\x0fStartRunRequest\x12\x12\n\nrequest_id\x18\x01 \x01(\t\x12\x0e\n\x06run_id\x18\x02 \x01(\t\x12\x12\n\nuser_input\x18\x03 \x01(\t\"f\n\x10StartRunResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x14\n\x0c\x66inal_output\x18\x02 \x01(\t\x12,\n\x06status\x18\x03 \x01(\x0e\x32\x1c.devpilot.agent.v1.RunStatus\"J\n\x10StreamRunRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x12\n\nrequest_id\x18\x02 \x01(\t\x12\x12\n\nuser_input\x18\x03 \x01(\t\"\xbe\x01\n\nAgentEvent\x12\x10\n\x08\x65vent_id\x18\x01 \x01(\t\x12\x0e\n\x06run_id\x18\x02 \x01(\t\x12\x10\n\x08sequence\x18\x03 \x01(\x04\x12/\n\x04type\x18\x04 \x01(\x0e\x32!.devpilot.agent.v1.AgentEventType\x12\x0c\n\x04step\x18\x05 \x01(\r\x12\x11\n\ttool_name\x18\x06 \x01(\t\x12\x14\n\x0c\x66inal_output\x18\x07 \x01(\t\x12\x14\n\x0c\x66\x61ilure_kind\x18\x08 \x01(\t\"\"\n\x10\x43\x61ncelRunRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"%\n\x11\x43\x61ncelRunResponse\x12\x10\n\x08\x61\x63\x63\x65pted\x18\x01 \x01(\x08\"\x8d\x01\n\x12\x45xecuteToolRequest\x12\x12\n\nrequest_id\x18\x01 \x01(\t\x12\x0e\n\x06run_id\x18\x02 \x01(\t\x12\x14\n\x0ctool_call_id\x18\x03 \x01(\t\x12\x11\n\ttool_name\x18\x04 \x01(\t\x12*\n\targuments\x18\x05 \x01(\x0b\x32\x17.google.protobuf.Struct\"\xb3\x01\n\x13\x45xecuteToolResponse\x12\x11\n\tresult_id\x18\x01 \x01(\t\x12\x14\n\x0ctool_call_id\x18\x02 \x01(\t\x12\x36\n\x06status\x18\x03 \x01(\x0e\x32&.devpilot.agent.v1.ToolExecutionStatus\x12\'\n\x06result\x18\x04 \x01(\x0b\x32\x17.google.protobuf.Struct\x12\x12\n\nerror_kind\x18\x05 \x01(\t*X\n\tRunStatus\x12\x1a\n\x16RUN_STATUS_UNSPECIFIED\x10\x00\x12\x18\n\x14RUN_STATUS_SUCCEEDED\x10\x01\x12\x15\n\x11RUN_STATUS_FAILED\x10\x02*\x8a\x02\n\x0e\x41gentEventType\x12 \n\x1c\x41GENT_EVENT_TYPE_UNSPECIFIED\x10\x00\x12 \n\x1c\x41GENT_EVENT_TYPE_RUN_STARTED\x10\x01\x12\'\n#AGENT_EVENT_TYPE_MODEL_STEP_STARTED\x10\x02\x12!\n\x1d\x41GENT_EVENT_TYPE_TOOL_STARTED\x10\x03\x12#\n\x1f\x41GENT_EVENT_TYPE_TOOL_COMPLETED\x10\x04\x12\"\n\x1e\x41GENT_EVENT_TYPE_RUN_SUCCEEDED\x10\x05\x12\x1f\n\x1b\x41GENT_EVENT_TYPE_RUN_FAILED\x10\x06*\x83\x01\n\x13ToolExecutionStatus\x12%\n!TOOL_EXECUTION_STATUS_UNSPECIFIED\x10\x00\x12#\n\x1fTOOL_EXECUTION_STATUS_SUCCEEDED\x10\x01\x12 \n\x1cTOOL_EXECUTION_STATUS_FAILED\x10\x02\x32\x8e\x02\n\x0c\x41gentRuntime\x12S\n\x08StartRun\x12\".devpilot.agent.v1.StartRunRequest\x1a#.devpilot.agent.v1.StartRunResponse\x12Q\n\tStreamRun\x12#.devpilot.agent.v1.StreamRunRequest\x1a\x1d.devpilot.agent.v1.AgentEvent0\x01\x12V\n\tCancelRun\x12#.devpilot.agent.v1.CancelRunRequest\x1a$.devpilot.agent.v1.CancelRunResponse2s\n\x13\x44\x65vPilotToolGateway\x12\\\n\x0b\x45xecuteTool\x12%.devpilot.agent.v1.ExecuteToolRequest\x1a&.devpilot.agent.v1.ExecuteToolResponseB-\n)com.obdeadsoup.devpilot.agent.contract.v1P\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -32,28 +33,30 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'agent_runtime_pb2', _global
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'\n)com.obdeadsoup.devpilot.agent.contract.v1P\001'
-  _globals['_RUNSTATUS']._serialized_start=649
-  _globals['_RUNSTATUS']._serialized_end=737
-  _globals['_AGENTEVENTTYPE']._serialized_start=740
-  _globals['_AGENTEVENTTYPE']._serialized_end=1006
-  _globals['_STARTRUNREQUEST']._serialized_start=42
-  _globals['_STARTRUNREQUEST']._serialized_end=115
-  _globals['_STARTRUNRESPONSE']._serialized_start=117
-  _globals['_STARTRUNRESPONSE']._serialized_end=219
-  _globals['_STREAMRUNREQUEST']._serialized_start=221
-  _globals['_STREAMRUNREQUEST']._serialized_end=295
-  _globals['_AGENTEVENT']._serialized_start=298
-  _globals['_AGENTEVENT']._serialized_end=488
-  _globals['_CANCELRUNREQUEST']._serialized_start=490
-  _globals['_CANCELRUNREQUEST']._serialized_end=524
-  _globals['_CANCELRUNRESPONSE']._serialized_start=526
-  _globals['_CANCELRUNRESPONSE']._serialized_end=563
-  _globals['_EXECUTETOOLREQUEST']._serialized_start=565
-  _globals['_EXECUTETOOLREQUEST']._serialized_end=605
-  _globals['_EXECUTETOOLRESPONSE']._serialized_start=607
-  _globals['_EXECUTETOOLRESPONSE']._serialized_end=647
-  _globals['_AGENTRUNTIME']._serialized_start=1009
-  _globals['_AGENTRUNTIME']._serialized_end=1279
-  _globals['_DEVPILOTTOOLGATEWAY']._serialized_start=1281
-  _globals['_DEVPILOTTOOLGATEWAY']._serialized_end=1396
+  _globals['_RUNSTATUS']._serialized_start=921
+  _globals['_RUNSTATUS']._serialized_end=1009
+  _globals['_AGENTEVENTTYPE']._serialized_start=1012
+  _globals['_AGENTEVENTTYPE']._serialized_end=1278
+  _globals['_TOOLEXECUTIONSTATUS']._serialized_start=1281
+  _globals['_TOOLEXECUTIONSTATUS']._serialized_end=1412
+  _globals['_STARTRUNREQUEST']._serialized_start=72
+  _globals['_STARTRUNREQUEST']._serialized_end=145
+  _globals['_STARTRUNRESPONSE']._serialized_start=147
+  _globals['_STARTRUNRESPONSE']._serialized_end=249
+  _globals['_STREAMRUNREQUEST']._serialized_start=251
+  _globals['_STREAMRUNREQUEST']._serialized_end=325
+  _globals['_AGENTEVENT']._serialized_start=328
+  _globals['_AGENTEVENT']._serialized_end=518
+  _globals['_CANCELRUNREQUEST']._serialized_start=520
+  _globals['_CANCELRUNREQUEST']._serialized_end=554
+  _globals['_CANCELRUNRESPONSE']._serialized_start=556
+  _globals['_CANCELRUNRESPONSE']._serialized_end=593
+  _globals['_EXECUTETOOLREQUEST']._serialized_start=596
+  _globals['_EXECUTETOOLREQUEST']._serialized_end=737
+  _globals['_EXECUTETOOLRESPONSE']._serialized_start=740
+  _globals['_EXECUTETOOLRESPONSE']._serialized_end=919
+  _globals['_AGENTRUNTIME']._serialized_start=1415
+  _globals['_AGENTRUNTIME']._serialized_end=1685
+  _globals['_DEVPILOTTOOLGATEWAY']._serialized_start=1687
+  _globals['_DEVPILOTTOOLGATEWAY']._serialized_end=1802
 # @@protoc_insertion_point(module_scope)

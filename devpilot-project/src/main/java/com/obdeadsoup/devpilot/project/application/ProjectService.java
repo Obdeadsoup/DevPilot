@@ -104,9 +104,16 @@ public class ProjectService {
 
     @Transactional(readOnly = true)
     public ProjectResponse getProject(long workspaceId, long projectId) {
-        long userId = currentUserProvider.requireUserId();
+        return getProjectForActor(currentUserProvider.requireUserId(), workspaceId, projectId);
+    }
+
+    /**
+     * 使用明确 actor 执行 Project 读取，供经过服务身份校验的委托调用复用；权限仍在能力执行点实时判断。
+     */
+    @Transactional(readOnly = true)
+    public ProjectResponse getProjectForActor(long actorUserId, long workspaceId, long projectId) {
         projectAuthorizationService.requirePermission(
-                userId, workspaceId, projectId, ProjectPermission.PROJECT_READ
+                actorUserId, workspaceId, projectId, ProjectPermission.PROJECT_READ
         );
         return ProjectResponse.from(requireProject(workspaceId, projectId));
     }

@@ -1,11 +1,13 @@
 package com.obdeadsoup.devpilot.project.application;
 
 import com.obdeadsoup.devpilot.framework.error.BusinessException;
+import com.obdeadsoup.devpilot.identity.application.CurrentUserProvider;
 import com.obdeadsoup.devpilot.project.api.dto.ProjectActivityPageResponse;
 import com.obdeadsoup.devpilot.project.api.dto.ProjectActivityResponse;
 import com.obdeadsoup.devpilot.project.application.command.RecordProjectActivityCommand;
 import com.obdeadsoup.devpilot.project.application.command.RecordTaskProjectActivityCommand;
 import com.obdeadsoup.devpilot.project.domain.ProjectActivitySourceType;
+import com.obdeadsoup.devpilot.project.domain.ProjectPermission;
 import com.obdeadsoup.devpilot.project.error.ProjectErrorCode;
 import com.obdeadsoup.devpilot.project.persistence.mapper.ProjectActivityMapper;
 import com.obdeadsoup.devpilot.project.persistence.mapper.ProjectMapper;
@@ -20,10 +22,17 @@ public class ProjectActivityService {
 
     private final ProjectMapper projectMapper;
     private final ProjectActivityMapper activityMapper;
+    private final ProjectAuthorizationService authorizationService;
+    private final CurrentUserProvider currentUserProvider;
 
-    public ProjectActivityService(ProjectMapper projectMapper, ProjectActivityMapper activityMapper) {
+    public ProjectActivityService(ProjectMapper projectMapper,
+                                  ProjectActivityMapper activityMapper,
+                                  ProjectAuthorizationService authorizationService,
+                                  CurrentUserProvider currentUserProvider) {
         this.projectMapper = projectMapper;
         this.activityMapper = activityMapper;
+        this.authorizationService = authorizationService;
+        this.currentUserProvider = currentUserProvider;
     }
 
     @Transactional
@@ -54,6 +63,15 @@ public class ProjectActivityService {
     )
     @Transactional(readOnly = true)
     public ProjectActivityPageResponse queryTimeline(long workspaceId, long projectId, int page, int size) {
+        return queryTimelineForActor(currentUserProvider.requireUserId(), workspaceId, projectId, page, size);
+    }
+
+    /** gRPC 委托查询显式携带 actor，并在读取 Activity 前重新验证 PROJECT_ACTIVITY_READ。 */
+    @Transactional(readOnly = true)
+    public ProjectActivityPageResponse queryTimelineForActor(long actorUserId, long workspaceId,
+                                                              long projectId, int page, int size) {
+        authorizationService.requirePermission(
+                actorUserId, workspaceId, projectId, ProjectPermission.PROJECT_ACTIVITY_READ);
         requireProjectInActiveWorkspace(workspaceId, projectId);
         long total = activityMapper.countTimeline(workspaceId, projectId);
         long offset = (long) (page - 1) * size;

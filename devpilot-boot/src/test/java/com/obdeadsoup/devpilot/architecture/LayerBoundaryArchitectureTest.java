@@ -48,4 +48,14 @@ class LayerBoundaryArchitectureTest {
                 .because("持久化实现不能反向绑定 HTTP Controller 或 Response DTO")
                 .check(CLASSES);
     }
+
+    @Test
+    @DisplayName("Agent Tool Gateway 与 Handler 不得直接访问 Mapper")
+    void agentToolGatewayMustUseApplicationQueries() {
+        noClasses().that().resideInAnyPackage(
+                        "..agent.application.tool..", "..agent.infrastructure.toolgrpc..")
+                .should().dependOnClassesThat().resideInAPackage("..persistence.mapper..")
+                .because("Tool 是受控业务能力，不是 DAO 或反射式 Mapper 入口")
+                .check(CLASSES);
+    }
 }

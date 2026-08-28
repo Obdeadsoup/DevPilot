@@ -10,6 +10,7 @@ import grpc
 
 from devpilot_agent_service.rpc.application import AgentRuntimeApplication
 from devpilot_agent_service.rpc.generated import agent_runtime_pb2, agent_runtime_pb2_grpc
+from devpilot_agent_service.runtime.context import RunContext
 from devpilot_agent_service.runtime.errors import AgentRuntimeError
 from devpilot_agent_service.runtime.events import RuntimeEvent, RuntimeEventType
 
@@ -42,7 +43,10 @@ class AgentRuntimeServicer(agent_runtime_pb2_grpc.AgentRuntimeServicer):
         _require_non_blank(request.user_input, "user_input", context)
 
         try:
-            result = self._application.start_run(request.user_input)
+            result = self._application.start_run(
+                request.user_input,
+                run_context=RunContext(request.run_id, request.request_id),
+            )
         except AgentRuntimeError as error:
             LOGGER.warning(
                 "Agent runtime failed failureType=%s stopReason=%s",
@@ -87,7 +91,11 @@ class AgentRuntimeServicer(agent_runtime_pb2_grpc.AgentRuntimeServicer):
 
         def run_worker() -> None:
             try:
-                result = self._application.start_run(request.user_input, on_event=enqueue)
+                result = self._application.start_run(
+                    request.user_input,
+                    run_context=RunContext(request.run_id, request.request_id),
+                    on_event=enqueue,
+                )
                 enqueue(_StreamOutcome(final_output=result.final_answer))
             except AgentRuntimeError as error:
                 LOGGER.warning(

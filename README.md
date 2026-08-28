@@ -315,7 +315,7 @@ PR current-head Review 超时扫描，以及 MySQL Transactional Outbox 驱动�
 Outbox 支持 PENDING/PROCESSING/RETRY_WAIT/PROCESSED/DEAD、version claim、有限重试和 stale 恢复。
 数据库 Notification 是可靠来源；单实例 SSE 支持多连接和 Heartbeat，断线后由 REST 查询补偿。
 
-Agent 当前提供生命周期 Streaming 纵切：Java 先在 MySQL 提交 scoped `RUNNING` 投影，再用 async gRPC Stub
+Agent 当前提供生命周期 Streaming 与只读 Tool Gateway 纵切：Java 先在 MySQL 提交 scoped `RUNNING` 投影，再用 async gRPC Stub
 订阅独立 Python Runtime 的 Server Streaming；POST 立即返回 `202 + RUNNING/runId`，terminal callback 以另一短事务
 写入 `SUCCEEDED/FAILED`。POST 需要 `AGENT_PROPOSE`，GET/SSE 需要 `AGENT_READ`：
 
@@ -328,7 +328,14 @@ GET  /api/v1/workspaces/{workspaceId}/projects/{projectId}/agent-runs/{runId}/st
 SSE 只传 run/model-step/tool/terminal 生命周期，不传 LLM token、reasoning、Prompt、Tool 参数/结果或 Provider body。
 单 JVM Hub 支持 Heartbeat、每 run 有界 replay 与 `Last-Event-ID`；出现 replay gap 或 Java 重启时，客户端必须用 GET
 读取权威 AgentRun。浏览器断开只移除 emitter，不会 Cancel Python Run。Unary `StartRun` 仍保留用于 smoke；当前没有
-Agent 列表、Cancel、业务 Tool、写 Proposal、人工确认、跨实例 SSE 或自动 Retry。
+Agent 列表、Cancel、写 Proposal、人工确认、跨实例 SSE 或自动 Retry。
+
+Python Runtime 现在可以通过独立 Java gRPC 端口（默认 `127.0.0.1:50052`）调用三个真实只读 Tool：
+`project.get_summary`、`task.list_open`、`project.list_recent_activity`。请求只携带 runId/callId/name/Struct args；
+Java 使用共享 service key 验证 Python 服务身份，再从 AgentRun 恢复 createdBy 与 scope，并在每次执行点重新 RBAC。
+Browser Bearer Token 不会转发给 Python。Tool result 有 1..20 列表限制、64 KiB 双端大小防线和 untrusted 标记；
+Gateway/Handler 只调用 Project/Task Application Query，不访问 Mapper。详见
+`docs/agent/07-read-only-tool-gateway.md`。
 
 Notification API（接收人只来自当前 Principal，不接受客户端 userId）：
 

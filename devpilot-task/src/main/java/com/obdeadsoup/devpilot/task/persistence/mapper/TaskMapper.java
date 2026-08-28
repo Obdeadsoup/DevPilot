@@ -86,6 +86,18 @@ public interface TaskMapper {
                               @Param("dueBefore") LocalDateTime dueBefore, @Param("offset") long offset,
                               @Param("size") int size);
 
+    /** Agent 只读 Tool 的有界开放任务查询，终态在 SQL 层排除，避免先截断后过滤。 */
+    @Select("SELECT " + COLUMNS + """
+            FROM dp_task
+            WHERE workspace_id=#{workspaceId} AND project_id=#{projectId} AND deleted=0
+              AND status NOT IN ('DONE','CANCELED')
+            ORDER BY updated_at DESC, id DESC
+            LIMIT #{limit}
+            """)
+    List<TaskEntity> findOpenByScope(@Param("workspaceId") long workspaceId,
+                                     @Param("projectId") long projectId,
+                                     @Param("limit") int limit);
+
     @Update("""
             UPDATE dp_task SET title=#{title}, description=#{description}, priority=#{priority}, due_at=#{dueAt}, version=version+1
             WHERE id=#{taskId} AND workspace_id=#{workspaceId} AND project_id=#{projectId} AND version=#{expectedVersion}

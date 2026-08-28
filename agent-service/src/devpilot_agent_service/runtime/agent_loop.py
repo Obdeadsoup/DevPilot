@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from devpilot_agent_service.model.base import Model
 from devpilot_agent_service.model.errors import ProviderError, ProviderErrorKind
 from devpilot_agent_service.model.types import ModelResponse, ModelResponseKind
+from devpilot_agent_service.runtime.context import RunContext
 from devpilot_agent_service.runtime.errors import (
     DuplicateToolCallIdError,
     InvalidModelResponseError,
@@ -71,6 +72,7 @@ class AgentLoop:
         user_input: str,
         *,
         history: Sequence[Message] = (),
+        run_context: RunContext | None = None,
         on_event: Callable[[RuntimeEvent], None] | None = None,
     ) -> RunResult:
         """推进到 Final；可选 hook 只观察公开生命周期，不改变 Provider-neutral 编排。"""
@@ -79,6 +81,8 @@ class AgentLoop:
             raise TypeError("user_input 必须是字符串")
         if any(not isinstance(message, Message) for message in history):
             raise TypeError("history 只能包含 Message")
+        if run_context is not None and not isinstance(run_context, RunContext):
+            raise TypeError("run_context 必须是 RunContext 或 None")
         if on_event is not None and not callable(on_event):
             raise TypeError("on_event 必须可调用或为 None")
 
@@ -149,7 +153,12 @@ class AgentLoop:
                     on_event,
                     RuntimeEvent(RuntimeEventType.TOOL_STARTED, step_number, tool_call.name),
                 )
-                result = self._registry.execute(tool_call.name, tool_call.arguments)
+                result = self._registry.execute(
+                    tool_call.name,
+                    tool_call.arguments,
+                    run_context=run_context,
+                    tool_call_id=tool_call.call_id,
+                )
                 _emit(
                     on_event,
                     RuntimeEvent(RuntimeEventType.TOOL_COMPLETED, step_number, tool_call.name),

@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 
+from devpilot_agent_service.runtime.context import RunContext
 from devpilot_agent_service.runtime.errors import InvalidToolArguments
 from devpilot_agent_service.tools.base import JsonValue
 
@@ -26,7 +27,14 @@ class EchoTool:
             "additionalProperties": False,
         }
 
-    def execute(self, arguments: Mapping[str, object]) -> JsonValue:
+    def execute(
+        self,
+        arguments: Mapping[str, object],
+        *,
+        run_context: RunContext | None = None,
+        tool_call_id: str | None = None,
+    ) -> JsonValue:
+        del run_context, tool_call_id
         if set(arguments) != {"text"}:
             raise InvalidToolArguments(self.name, "exactly one 'text' argument is required")
         text = arguments["text"]

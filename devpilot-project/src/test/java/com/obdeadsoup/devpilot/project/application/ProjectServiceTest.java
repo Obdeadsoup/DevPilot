@@ -5,6 +5,7 @@ import com.obdeadsoup.devpilot.identity.application.CurrentUserProvider;
 import com.obdeadsoup.devpilot.identity.application.UserAccountService;
 import com.obdeadsoup.devpilot.project.api.dto.ProjectResponse;
 import com.obdeadsoup.devpilot.project.domain.ProjectVisibility;
+import com.obdeadsoup.devpilot.project.domain.ProjectPermission;
 import com.obdeadsoup.devpilot.project.error.ProjectErrorCode;
 import com.obdeadsoup.devpilot.project.persistence.entity.ProjectEntity;
 import com.obdeadsoup.devpilot.project.persistence.mapper.ProjectMapper;
@@ -87,6 +88,17 @@ class ProjectServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode())
                                 .isEqualTo(ProjectErrorCode.INVALID_PROJECT_STATUS_TRANSITION));
+    }
+
+    @Test
+    void explicitActorReadReauthorizesAtCapabilityExecutionPoint() {
+        when(projectMapper.findByScope(WORKSPACE_ID, PROJECT_ID))
+                .thenReturn(Optional.of(project("ACTIVE", 1)));
+
+        service.getProjectForActor(99L, WORKSPACE_ID, PROJECT_ID);
+
+        verify(authorizationService).requirePermission(
+                99L, WORKSPACE_ID, PROJECT_ID, ProjectPermission.PROJECT_READ);
     }
 
     @Test

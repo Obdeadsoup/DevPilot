@@ -1,5 +1,6 @@
 """从仓库根契约生成 Python Protobuf/gRPC 代码。"""
 
+from importlib.resources import files
 from pathlib import Path
 
 from grpc_tools import protoc
@@ -8,6 +9,7 @@ AGENT_SERVICE_ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = AGENT_SERVICE_ROOT.parent
 PROTO_ROOT = REPOSITORY_ROOT / "contracts" / "agent" / "v1"
 PROTO_FILE = PROTO_ROOT / "agent_runtime.proto"
+WELL_KNOWN_PROTO_ROOT = files("grpc_tools").joinpath("_proto")
 OUTPUT_ROOT = (
     AGENT_SERVICE_ROOT / "src" / "devpilot_agent_service" / "rpc" / "generated"
 )
@@ -23,6 +25,7 @@ def main() -> int:
         [
             "grpc_tools.protoc",
             f"--proto_path={PROTO_ROOT}",
+            f"--proto_path={WELL_KNOWN_PROTO_ROOT}",
             f"--python_out={OUTPUT_ROOT}",
             f"--grpc_python_out={OUTPUT_ROOT}",
             str(PROTO_FILE),

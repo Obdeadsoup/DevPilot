@@ -19,6 +19,16 @@ devpilot:
       deadline: ${DEVPILOT_AGENT_GRPC_DEADLINE:30s}
       stream-deadline: ${DEVPILOT_AGENT_GRPC_STREAM_DEADLINE:10m}
       plaintext: ${DEVPILOT_AGENT_GRPC_PLAINTEXT:true}
+    tool-grpc:
+      enabled: ${DEVPILOT_AGENT_TOOL_GRPC_ENABLED:false}
+      host: ${DEVPILOT_AGENT_TOOL_GRPC_HOST:127.0.0.1}
+      port: ${DEVPILOT_AGENT_TOOL_GRPC_PORT:50052}
+      service-key: ${DEVPILOT_AGENT_TOOL_SERVICE_KEY:}
+      max-inbound-message-size: 65536
+      max-result-bytes: 65536
+      worker-threads: 4
+      queue-capacity: 64
+      shutdown-grace: 5s
     sse:
       enabled: true
       timeout: 30m

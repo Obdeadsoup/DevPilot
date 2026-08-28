@@ -22,6 +22,8 @@ management:
 
 devpilot:
   agent:
+    tool-grpc:
+      enabled: false
     sse:
       enabled: false
   observability:

@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package devpilot.agent.v1;
 
+import "google/protobuf/struct.proto";
+
 option java_multiple_files = true;
 option java_package = "com.obdeadsoup.devpilot.agent.contract.v1";
 
@@ -72,8 +74,22 @@ message CancelRunResponse {
 
 message ExecuteToolRequest {
   string request_id = 1;
+  string run_id = 2;
+  string tool_call_id = 3;
+  string tool_name = 4;
+  google.protobuf.Struct arguments = 5;
 }
 
 message ExecuteToolResponse {
   string result_id = 1;
+  string tool_call_id = 2;
+  ToolExecutionStatus status = 3;
+  google.protobuf.Struct result = 4;
+  string error_kind = 5;
+}
+
+enum ToolExecutionStatus {
+  TOOL_EXECUTION_STATUS_UNSPECIFIED = 0;
+  TOOL_EXECUTION_STATUS_SUCCEEDED = 1;
+  TOOL_EXECUTION_STATUS_FAILED = 2;
 }

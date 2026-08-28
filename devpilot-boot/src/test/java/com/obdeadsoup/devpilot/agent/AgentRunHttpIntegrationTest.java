@@ -8,6 +8,10 @@ import com.obdeadsoup.devpilot.agent.application.AgentRuntimeStreamFailureKind;
 import com.obdeadsoup.devpilot.agent.application.AgentRuntimeStreamingPort;
 import com.obdeadsoup.devpilot.agent.application.AgentStreamEvent;
 import com.obdeadsoup.devpilot.agent.application.AgentStreamEventType;
+import com.obdeadsoup.devpilot.agent.application.tool.AgentToolApplicationService;
+import com.obdeadsoup.devpilot.agent.application.tool.AgentToolCommand;
+import com.obdeadsoup.devpilot.agent.application.tool.AgentToolResult;
+import com.obdeadsoup.devpilot.framework.error.BusinessException;
 import com.obdeadsoup.devpilot.identity.domain.DevPilotUserPrincipal;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -73,6 +77,7 @@ class AgentRunHttpIntegrationTest {
     @Autowired private JdbcTemplate jdbcTemplate;
     @Autowired private MockMvc mockMvc;
     @Autowired private ObjectMapper objectMapper;
+    @Autowired private AgentToolApplicationService agentToolApplicationService;
     @MockitoBean private AgentRuntimeStreamingPort streamingPort;
 
     @BeforeEach
@@ -238,6 +243,48 @@ class AgentRunHttpIntegrationTest {
         assertThat(stored.get("final_output")).isNull();
     }
 
+    @Test
+    void readOnlyToolsUsePersistedRunScopeRealDataAndFreshRbac() throws Exception {
+        captureStream(new AtomicBoolean());
+        JsonNode run = body(startAs(DEVELOPER_ID, "developer")).path("data");
+        String runId = run.path("runId").asText();
+        String requestId = run.path("requestId").asText();
+        jdbcTemplate.update("""
+                INSERT INTO dp_task (
+                    id, workspace_id, project_id, title, status, priority,
+                    reporter_user_id, completed_at
+                ) VALUES (300, ?, ?, 'Open integration task', 'TODO', 'HIGH', ?, NULL),
+                         (301, ?, ?, 'Closed integration task', 'DONE', 'LOW', ?, CURRENT_TIMESTAMP(6))
+                """, WORKSPACE_ID, PROJECT_ID, DEVELOPER_ID,
+                WORKSPACE_ID, PROJECT_ID, DEVELOPER_ID);
+        jdbcTemplate.update("""
+                INSERT INTO dp_project_activity (
+                    workspace_id, project_id, source_type, activity_type,
+                    source_delivery_id, title, summary, occurred_at
+                ) VALUES (?, ?, 'GITHUB', 'GITHUB_WEBHOOK_PING',
+                          'agent-tool-integration', 'Recent integration activity',
+                          'External project text', CURRENT_TIMESTAMP(6))
+                """, WORKSPACE_ID, PROJECT_ID);
+
+        var summary = executeTool(requestId, runId, "summary-call", "project.get_summary", Map.of());
+        var tasks = executeTool(requestId, runId, "task-call", "task.list_open", Map.of("limit", 20));
+        var activities = executeTool(requestId, runId, "activity-call",
+                "project.list_recent_activity", Map.of("limit", 20));
+
+        assertThat(summary.data()).containsEntry("projectKey", "AGENT")
+                .containsEntry("external_untrusted_content", true);
+        assertThat((List<?>) tasks.data().get("items")).hasSize(1);
+        assertThat((List<?>) activities.data().get("items")).hasSize(1);
+
+        jdbcTemplate.update("""
+                UPDATE dp_project_member SET status='REMOVED'
+                WHERE workspace_id=? AND project_id=? AND user_id=?
+                """, WORKSPACE_ID, PROJECT_ID, DEVELOPER_ID);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> executeTool(
+                        requestId, runId, "after-revoke", "project.get_summary", Map.of()))
+                .isInstanceOf(BusinessException.class);
+    }
+
     private AtomicReference<AgentRuntimeEventListener> captureStream(AtomicBoolean transactionActive) {
         AtomicReference<AgentRuntimeEventListener> listener = new AtomicReference<>();
         doAnswer(invocation -> {
@@ -264,6 +311,13 @@ class AgentRunHttpIntegrationTest {
                 step, toolName, output, failureKind);
     }
 
+    private AgentToolResult executeTool(
+            String requestId, String runId, String callId, String toolName,
+            Map<String, Object> arguments) {
+        return agentToolApplicationService.execute(
+                new AgentToolCommand(requestId, runId, callId, toolName, arguments));
+    }
+
     private UsernamePasswordAuthenticationToken authToken(long userId, String username) {
         DevPilotUserPrincipal principal = new DevPilotUserPrincipal(
                 userId, username, username + "@example.com", username);
@@ -284,6 +338,8 @@ class AgentRunHttpIntegrationTest {
 
     private void clearData() {
         jdbcTemplate.update("DELETE FROM dp_agent_run");
+        jdbcTemplate.update("DELETE FROM dp_project_activity");
+        jdbcTemplate.update("DELETE FROM dp_task");
         jdbcTemplate.update("DELETE FROM dp_project_member");
         jdbcTemplate.update("DELETE FROM dp_workspace_member");
         jdbcTemplate.update("DELETE FROM dp_project");

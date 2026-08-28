@@ -3,6 +3,7 @@
 import json
 from collections.abc import Mapping
 
+from devpilot_agent_service.runtime.context import RunContext
 from devpilot_agent_service.runtime.errors import (
     DuplicateToolError,
     InvalidToolArguments,
@@ -33,7 +34,14 @@ class ToolRegistry:
     def definitions(self) -> tuple[ToolDefinition, ...]:
         return tuple(definition_of(tool) for tool in self._tools.values())
 
-    def execute(self, name: str, arguments: Mapping[str, object]) -> JsonValue:
+    def execute(
+        self,
+        name: str,
+        arguments: Mapping[str, object],
+        *,
+        run_context: RunContext | None = None,
+        tool_call_id: str | None = None,
+    ) -> JsonValue:
         tool = self.get(name)
         if not isinstance(arguments, Mapping):
             raise InvalidToolArguments(name, "arguments must be a mapping")
@@ -41,7 +49,15 @@ class ToolRegistry:
             raise InvalidToolArguments(name, "argument keys must be strings")
 
         try:
-            result = tool.execute(dict(arguments))
+            if run_context is None:
+                # 第 2 章本地 Tool/Fake 保持兼容；真实 remote Tool 总会获得 run context。
+                result = tool.execute(dict(arguments))
+            else:
+                result = tool.execute(
+                    dict(arguments),
+                    run_context=run_context,
+                    tool_call_id=tool_call_id,
+                )
         except InvalidToolArguments:
             raise
         except Exception as error:
