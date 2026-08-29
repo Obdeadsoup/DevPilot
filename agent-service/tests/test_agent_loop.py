@@ -6,12 +6,14 @@ from fakes.fake_model import FakeModel
 from devpilot_agent_service.model.errors import ProviderError, ProviderErrorKind
 from devpilot_agent_service.model.types import ModelResponse, ToolCall
 from devpilot_agent_service.runtime.agent_loop import AgentLoop
+from devpilot_agent_service.runtime.cancellation import CancellationToken
 from devpilot_agent_service.runtime.errors import (
     DuplicateToolCallIdError,
     InvalidToolArguments,
     MaxStepsExceeded,
     MaxToolCallsExceeded,
     ModelInvocationError,
+    RunCancelled,
     StopReason,
     ToolExecutionError,
     UnknownToolError,
@@ -59,6 +61,68 @@ def echo_registry() -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(EchoTool())
     return registry
+
+
+def test_cancellation_is_checked_before_and_after_model_call() -> None:
+    before = CancellationToken()
+    before.cancel()
+    model = FakeModel([ModelResponse.final("must-not-run")])
+    with pytest.raises(RunCancelled):
+        AgentLoop(model, ToolRegistry()).run("hello", cancellation_token=before)
+    assert model.calls == []
+
+    after = CancellationToken()
+
+    class CancellingModel:
+        def generate(self, messages: object, tools: object) -> ModelResponse:
+            after.cancel()
+            return ModelResponse.final("must-not-return")
+
+    with pytest.raises(RunCancelled):
+        AgentLoop(CancellingModel(), ToolRegistry()).run(
+            "hello", cancellation_token=after
+        )
+
+
+def test_cancellation_after_model_prevents_tool_execution() -> None:
+    token = CancellationToken()
+    tool = CountingTool()
+
+    class CancellingModel:
+        def generate(self, messages: object, tools: object) -> ModelResponse:
+            token.cancel()
+            return tool_response("call-1", name="count")
+
+    with pytest.raises(RunCancelled):
+        AgentLoop(CancellingModel(), counting_registry(tool)).run(
+            "hello", cancellation_token=token
+        )
+
+    assert tool.calls == []
+
+
+def test_cancellation_after_tool_prevents_next_model_step() -> None:
+    token = CancellationToken()
+
+    class CancellingTool(CountingTool):
+        def execute(self, arguments: Mapping[str, object]) -> JsonValue:
+            result = super().execute(arguments)
+            token.cancel()
+            return result
+
+    tool = CancellingTool()
+    model = FakeModel(
+        [
+            tool_response("call-1", name="count"),
+            ModelResponse.final("must-not-run"),
+        ]
+    )
+
+    with pytest.raises(RunCancelled):
+        AgentLoop(model, counting_registry(tool)).run("hello", cancellation_token=token)
+
+    assert tool.calls == [{}]
+    assert len(model.calls) == 1
 
 
 def counting_registry(tool: CountingTool) -> ToolRegistry:

@@ -44,6 +44,7 @@ docs/agent/*
 !docs/cloud/
 docs/cloud/*
 !docs/cloud/08-spring-cloud-gateway-nacos.md
+!docs/cloud/09-agent-resilience-failure-model.md
 !docs/changes/
 docs/changes/*
 !docs/changes/agent-03-provider-reliable-loop-file-map.md
@@ -52,6 +53,7 @@ docs/changes/*
 !docs/changes/agent-06-streaming-sse-file-map.md
 !docs/changes/agent-07-tool-gateway-file-map.md
 !docs/changes/cloud-08-gateway-nacos-file-map.md
+!docs/changes/cloud-09-agent-resilience-file-map.md
 
 # Local performance results
 performance/jmeter/results/

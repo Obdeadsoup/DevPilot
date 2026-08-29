@@ -32,7 +32,15 @@ devpilot:
       port: ${DEVPILOT_AGENT_GRPC_PORT:50051}
       deadline: ${DEVPILOT_AGENT_GRPC_DEADLINE:30s}
       stream-deadline: ${DEVPILOT_AGENT_GRPC_STREAM_DEADLINE:10m}
+      cancel-deadline: ${DEVPILOT_AGENT_GRPC_CANCEL_DEADLINE:3s}
       plaintext: ${DEVPILOT_AGENT_GRPC_PLAINTEXT:true}
+    resilience:
+      max-active-runs: ${DEVPILOT_AGENT_MAX_ACTIVE_RUNS:20}
+      sliding-window-size: ${DEVPILOT_AGENT_CIRCUIT_WINDOW_SIZE:10}
+      minimum-calls: ${DEVPILOT_AGENT_CIRCUIT_MINIMUM_CALLS:5}
+      failure-rate-threshold: ${DEVPILOT_AGENT_CIRCUIT_FAILURE_RATE:50}
+      open-state-duration: ${DEVPILOT_AGENT_CIRCUIT_OPEN_DURATION:10s}
+      half-open-permitted-calls: ${DEVPILOT_AGENT_CIRCUIT_HALF_OPEN_CALLS:2}
     tool-grpc:
       enabled: ${DEVPILOT_AGENT_TOOL_GRPC_ENABLED:false}
       host: ${DEVPILOT_AGENT_TOOL_GRPC_HOST:127.0.0.1}

@@ -12,12 +12,22 @@ class StopReason(StrEnum):
     TOOL_ERROR = "tool_error"
     INVALID_TOOL_CALL = "invalid_tool_call"
     MAX_TOOL_CALLS = "max_tool_calls"
+    CANCELLED = "cancelled"
 
 
 class AgentRuntimeError(Exception):
     """所有运行期失败的基类；调用方可通过 stop_reason 稳定分类。"""
 
     stop_reason: StopReason
+
+
+class RunCancelled(AgentRuntimeError):
+    """显式 CancelRun 设置的协作式停止信号，不属于运行失败。"""
+
+    stop_reason = StopReason.CANCELLED
+
+    def __init__(self) -> None:
+        super().__init__("agent run cancelled")
 
 
 class ModelInvocationError(AgentRuntimeError):

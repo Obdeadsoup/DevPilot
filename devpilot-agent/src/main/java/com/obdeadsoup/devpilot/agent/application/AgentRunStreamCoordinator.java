@@ -4,30 +4,35 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 异步流的业务仲裁点：校验 run/sequence/eventId/唯一终态，先投影数据库终态，再发布 SSE。
- * gRPC callback 不处于 HTTP 线程或创建 RUNNING 的事务中。
+ * 异步流的业务仲裁点：校验协议、持有可取消句柄，并用 RUNNING/version 条件更新裁决唯一终态。
+ * gRPC callback 与 HTTP Cancel 可能并发，数据库更新结果决定唯一对外事实。
  */
 @Service
 public class AgentRunStreamCoordinator {
     private static final Logger log = LoggerFactory.getLogger(AgentRunStreamCoordinator.class);
     private static final Set<String> REMOTE_FAILURE_KINDS = Set.of(
-            "MAX_STEPS", "MODEL_ERROR", "TOOL_ERROR", "INVALID_TOOL_CALL",
-            "MAX_TOOL_CALLS", "INTERNAL");
+            "MAX_STEPS", "MODEL_ERROR", "TOOL_ERROR", "INVALID_TOOL_CALL", "MAX_TOOL_CALLS", "INTERNAL");
 
     private final AgentRuntimeStreamingPort streamingPort;
+    private final AgentRuntimeCancellationPort cancellationPort;
     private final AgentRunPersistenceService persistenceService;
     private final AgentRunTimeProvider timeProvider;
     private final AgentRunEventPublisher eventPublisher;
+    private final Map<String, ActiveRun> activeRuns = new ConcurrentHashMap<>();
 
     public AgentRunStreamCoordinator(AgentRuntimeStreamingPort streamingPort,
+                                     AgentRuntimeCancellationPort cancellationPort,
                                      AgentRunPersistenceService persistenceService,
                                      AgentRunTimeProvider timeProvider,
                                      AgentRunEventPublisher eventPublisher) {
         this.streamingPort = streamingPort;
+        this.cancellationPort = cancellationPort;
         this.persistenceService = persistenceService;
         this.timeProvider = timeProvider;
         this.eventPublisher = eventPublisher;
@@ -38,12 +43,52 @@ public class AgentRunStreamCoordinator {
         Objects.requireNonNull(command, "command must not be null");
         eventPublisher.initialize(command.runId());
         RunListener listener = new RunListener(workspaceId, projectId, command.runId());
+        ActiveRun active = new ActiveRun(listener);
+        activeRuns.put(command.runId(), active);
         try {
-            streamingPort.stream(command, listener);
+            AgentRuntimeStreamHandle handle = streamingPort.stream(command, listener);
+            active.handle = handle;
+            if (activeRuns.get(command.runId()) != active) {
+                // callback/cancel 可能在 stream(...) 返回句柄前完成；补取消避免孤儿流。
+                handle.cancel();
+            }
         } catch (RuntimeException exception) {
-            // 极少数同步建流失败也必须把已提交 RUNNING 收敛为稳定失败。
             listener.onError(AgentRuntimeStreamFailureKind.UNKNOWN);
         }
+    }
+
+    /** Python 接受取消后才竞争本地 CANCELLED；若远端 terminal 已先落库，则返回该权威终态。 */
+    public AgentRunView cancel(long workspaceId, long projectId, AgentRunView current) {
+        AgentRuntimeCancelStatus status = cancellationPort.cancel(
+                new AgentRuntimeCancelCommand(current.runId(), current.requestId()));
+        if (status != AgentRuntimeCancelStatus.ACCEPTED) {
+            throw new AgentRuntimeCancellationException();
+        }
+        ActiveRun active = activeRuns.get(current.runId());
+        if (active != null) {
+            return active.listener.cancelAccepted();
+        }
+        return cancelWithoutLocalStream(workspaceId, projectId, current.runId());
+    }
+
+    private AgentRunView cancelWithoutLocalStream(long workspaceId, long projectId, String runId) {
+        return persistenceService.tryMarkCancelled(workspaceId, projectId, runId, timeProvider.now())
+                .map(view -> {
+                    eventPublisher.publish(new AgentStreamEvent(runId + ":1", runId, 1,
+                            AgentStreamEventType.RUN_CANCELLED, 0, "", "", ""));
+                    return view;
+                })
+                .orElseGet(() -> persistenceService.get(workspaceId, projectId, runId));
+    }
+
+    private AgentRunFailureKind remoteFailure(String failureKind) {
+        return switch (failureKind) {
+            case "MODEL_ERROR" -> AgentRunFailureKind.MODEL_ERROR;
+            case "TOOL_ERROR" -> AgentRunFailureKind.TOOL_ERROR;
+            case "MAX_STEPS" -> AgentRunFailureKind.MAX_STEPS;
+            case "INTERNAL" -> AgentRunFailureKind.INTERNAL;
+            default -> AgentRunFailureKind.PROTOCOL;
+        };
     }
 
     private final class RunListener implements AgentRuntimeEventListener {
@@ -73,17 +118,28 @@ public class AgentRunStreamCoordinator {
                 failBeforeTerminal(AgentRuntimeStreamFailureKind.PROTOCOL);
                 return;
             }
+            boolean publish = true;
             if (event.type() == AgentStreamEventType.RUN_SUCCEEDED) {
-                persistenceService.markSucceeded(workspaceId, projectId, runId,
-                        event.finalOutput(), timeProvider.now());
+                publish = persistenceService.tryMarkSucceeded(workspaceId, projectId, runId,
+                        event.finalOutput(), timeProvider.now()).isPresent();
                 terminalSeen = true;
             } else if (event.type() == AgentStreamEventType.RUN_FAILED) {
-                persistenceService.markFailed(workspaceId, projectId, runId,
-                        AgentRunFailureKind.REMOTE_FAILED, timeProvider.now());
+                publish = persistenceService.tryMarkFailed(workspaceId, projectId, runId,
+                        remoteFailure(event.failureKind()), timeProvider.now()).isPresent();
+                terminalSeen = true;
+            } else if (event.type() == AgentStreamEventType.RUN_CANCELLED) {
+                publish = persistenceService.tryMarkCancelled(
+                        workspaceId, projectId, runId, timeProvider.now()).isPresent();
                 terminalSeen = true;
             }
-            eventPublisher.publish(event);
+            if (publish) {
+                eventPublisher.publish(event);
+            }
             expectedSequence++;
+            if (event.type().isTerminal()) {
+                streamFinished = true;
+                activeRuns.remove(runId);
+            }
         }
 
         @Override
@@ -92,9 +148,9 @@ public class AgentRunStreamCoordinator {
             if (streamFinished) {
                 return;
             }
-            if (terminalSeen) {
-                // terminal 已经以 version=0 条件提交；后到 transport error 不能覆盖业务事实。
+            if (terminalSeen || failureKind == AgentRuntimeStreamFailureKind.USER_CANCELLED) {
                 streamFinished = true;
+                activeRuns.remove(runId);
                 return;
             }
             failBeforeTerminal(failureKind);
@@ -110,6 +166,28 @@ public class AgentRunStreamCoordinator {
                 return;
             }
             streamFinished = true;
+            activeRuns.remove(runId);
+        }
+
+        private synchronized AgentRunView cancelAccepted() {
+            AgentRunView result = persistenceService.tryMarkCancelled(
+                            workspaceId, projectId, runId, timeProvider.now())
+                    .map(view -> {
+                        AgentStreamEvent event = new AgentStreamEvent(runId + ":" + expectedSequence,
+                                runId, expectedSequence, AgentStreamEventType.RUN_CANCELLED,
+                                0, "", "", "");
+                        terminalSeen = true;
+                        streamFinished = true;
+                        eventPublisher.publish(event);
+                        expectedSequence++;
+                        return view;
+                    })
+                    .orElseGet(() -> persistenceService.get(workspaceId, projectId, runId));
+            ActiveRun active = activeRuns.remove(runId);
+            if (active != null) {
+                active.handle.cancel();
+            }
+            return result;
         }
 
         private boolean validEnvelope(AgentStreamEvent event) {
@@ -135,35 +213,42 @@ public class AgentRunStreamCoordinator {
                         && event.finalOutput() != null && event.finalOutput().length() <= 65_535;
                 case RUN_FAILED -> event.step() == 0 && noTool && noOutput
                         && REMOTE_FAILURE_KINDS.contains(event.failureKind());
+                case RUN_CANCELLED -> event.step() == 0 && noTool && noOutput && noFailure;
             };
         }
 
         private void failBeforeTerminal(AgentRuntimeStreamFailureKind failureKind) {
             AgentRunFailureKind persisted = AgentRunFailureKind.valueOf(failureKind.name());
-            persistenceService.markFailed(workspaceId, projectId, runId, persisted, timeProvider.now());
-            AgentStreamEvent synthetic = new AgentStreamEvent(
-                    runId + ":" + expectedSequence,
-                    runId,
-                    expectedSequence,
-                    AgentStreamEventType.RUN_FAILED,
-                    0,
-                    "",
-                    "",
-                    failureKind.name());
+            boolean won = persistenceService.tryMarkFailed(
+                    workspaceId, projectId, runId, persisted, timeProvider.now()).isPresent();
+            if (won) {
+                eventPublisher.publish(new AgentStreamEvent(runId + ":" + expectedSequence,
+                        runId, expectedSequence, AgentStreamEventType.RUN_FAILED,
+                        0, "", "", failureKind.name()));
+            }
             terminalSeen = true;
             streamFinished = true;
-            eventPublisher.publish(synthetic);
+            activeRuns.remove(runId);
             expectedSequence++;
         }
 
         private void protocolAfterTerminal(String reason) {
-            // 数据库终态不可回退；只记录低敏协议类别，绝不写远端 payload。
             log.warn("Agent stream protocol violation runId={} kind={}", runId, reason);
             streamFinished = true;
+            activeRuns.remove(runId);
         }
 
         private boolean blank(String value) {
             return value == null || value.isBlank();
+        }
+    }
+
+    private static final class ActiveRun {
+        private final RunListener listener;
+        private volatile AgentRuntimeStreamHandle handle = AgentRuntimeStreamHandle.NOOP;
+
+        private ActiveRun(RunListener listener) {
+            this.listener = listener;
         }
     }
 }

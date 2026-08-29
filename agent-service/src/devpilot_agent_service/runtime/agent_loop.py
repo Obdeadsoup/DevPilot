@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from devpilot_agent_service.model.base import Model
 from devpilot_agent_service.model.errors import ProviderError, ProviderErrorKind
 from devpilot_agent_service.model.types import ModelResponse, ModelResponseKind
+from devpilot_agent_service.runtime.cancellation import CancellationToken
 from devpilot_agent_service.runtime.context import RunContext
 from devpilot_agent_service.runtime.errors import (
     DuplicateToolCallIdError,
@@ -74,6 +75,7 @@ class AgentLoop:
         history: Sequence[Message] = (),
         run_context: RunContext | None = None,
         on_event: Callable[[RuntimeEvent], None] | None = None,
+        cancellation_token: CancellationToken | None = None,
     ) -> RunResult:
         """推进到 Final；可选 hook 只观察公开生命周期，不改变 Provider-neutral 编排。"""
 
@@ -94,9 +96,11 @@ class AgentLoop:
         trace: list[RuntimeTraceStep] = []
         executed_tool_call_ids: set[str] = set()
         tool_call_count = 0
+        token = cancellation_token or CancellationToken()
 
         # 有界 for-loop 是运行时硬停止线；模型持续请求工具也不能形成无限循环。
         for step_number in range(1, self._max_steps + 1):
+            token.raise_if_cancelled()
             _emit(on_event, RuntimeEvent(RuntimeEventType.MODEL_STEP_STARTED, step_number))
             try:
                 response = self._model.generate(
@@ -107,6 +111,7 @@ class AgentLoop:
                 raise ModelInvocationError(step_number, error.kind) from error
             except Exception as error:
                 raise ModelInvocationError(step_number, ProviderErrorKind.UNKNOWN) from error
+            token.raise_if_cancelled()
 
             if not isinstance(response, ModelResponse):
                 raise InvalidModelResponseError(step_number)
@@ -148,6 +153,7 @@ class AgentLoop:
                 )
             )
             for tool_call in response.tool_calls:
+                token.raise_if_cancelled()
                 executed_tool_call_ids.add(tool_call.call_id)
                 _emit(
                     on_event,
@@ -159,6 +165,7 @@ class AgentLoop:
                     run_context=run_context,
                     tool_call_id=tool_call.call_id,
                 )
+                token.raise_if_cancelled()
                 _emit(
                     on_event,
                     RuntimeEvent(RuntimeEventType.TOOL_COMPLETED, step_number, tool_call.name),
@@ -182,6 +189,7 @@ class AgentLoop:
                     tool_names=tuple(call.name for call in response.tool_calls),
                 )
             )
+            token.raise_if_cancelled()
 
         raise MaxStepsExceeded(self._max_steps)
 

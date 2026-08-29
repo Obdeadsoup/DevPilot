@@ -34,6 +34,7 @@ class CrossLanguageGrpcSmokeTest {
                 port,
                 Duration.ofSeconds(10),
                 Duration.ofSeconds(30),
+                Duration.ofSeconds(3),
                 true
         );
 

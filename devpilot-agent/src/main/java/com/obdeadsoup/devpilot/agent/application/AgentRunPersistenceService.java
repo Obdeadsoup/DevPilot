@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 /**
  * AgentRun 的短事务边界。创建 RUNNING 与写入终态由不同 public 方法提交，
@@ -63,6 +64,36 @@ public class AgentRunPersistenceService implements AgentRunExecutionContextQuery
             throw new BusinessException(AgentRunErrorCode.AGENT_RUN_STATE_CONFLICT);
         }
         return requireByScope(workspaceId, projectId, runId);
+    }
+
+    /** terminal/cancel 并发时不抛冲突：返回 empty 表示另一个终态已先提交。 */
+    @Transactional
+    public Optional<AgentRunView> tryMarkSucceeded(long workspaceId, long projectId, String runId,
+                                                   String finalOutput, LocalDateTime finishedAt) {
+        if (mapper.markSucceeded(workspaceId, projectId, runId, finalOutput, finishedAt, 0) != 1) {
+            return Optional.empty();
+        }
+        return Optional.of(requireByScope(workspaceId, projectId, runId));
+    }
+
+    /** terminal/cancel 并发时只允许一个 RUNNING(version=0) 更新获胜。 */
+    @Transactional
+    public Optional<AgentRunView> tryMarkFailed(long workspaceId, long projectId, String runId,
+                                                AgentRunFailureKind failureKind, LocalDateTime finishedAt) {
+        if (mapper.markFailed(workspaceId, projectId, runId, failureKind.name(), finishedAt, 0) != 1) {
+            return Optional.empty();
+        }
+        return Optional.of(requireByScope(workspaceId, projectId, runId));
+    }
+
+    /** 取消不写 failure_kind；条件更新保证它不会覆盖已完成终态。 */
+    @Transactional
+    public Optional<AgentRunView> tryMarkCancelled(long workspaceId, long projectId, String runId,
+                                                   LocalDateTime finishedAt) {
+        if (mapper.markCancelled(workspaceId, projectId, runId, finishedAt, 0) != 1) {
+            return Optional.empty();
+        }
+        return Optional.of(requireByScope(workspaceId, projectId, runId));
     }
 
     @Transactional(readOnly = true)

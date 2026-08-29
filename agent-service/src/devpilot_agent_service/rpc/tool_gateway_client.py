@@ -10,6 +10,10 @@ import grpc
 from google.protobuf.json_format import MessageToDict
 from google.protobuf.struct_pb2 import Struct
 
+from devpilot_agent_service.rpc.circuit_breaker import (
+    CircuitOpenError,
+    ConsecutiveFailureCircuitBreaker,
+)
 from devpilot_agent_service.rpc.generated import agent_runtime_pb2, agent_runtime_pb2_grpc
 from devpilot_agent_service.runtime.context import RunContext
 from devpilot_agent_service.tools.base import JsonValue
@@ -30,6 +34,7 @@ class JavaToolGatewayFailureKind(StrEnum):
     RUN_NOT_FOUND = "RUN_NOT_FOUND"
     RUN_NOT_ACTIVE = "RUN_NOT_ACTIVE"
     NOT_FOUND = "NOT_FOUND"
+    CIRCUIT_OPEN = "CIRCUIT_OPEN"
 
 
 class JavaToolGatewayError(RuntimeError):
@@ -49,6 +54,8 @@ class JavaToolGatewayConfig:
     deadline_seconds: float = 3.0
     max_message_bytes: int = 65_536
     max_result_bytes: int = 65_536
+    circuit_failure_threshold: int = 3
+    circuit_open_seconds: float = 10.0
 
     def __post_init__(self) -> None:
         if not isinstance(self.target, str) or not self.target.strip():
@@ -59,6 +66,8 @@ class JavaToolGatewayConfig:
             raise ValueError("tool gateway deadline must be positive")
         if self.max_message_bytes < 1 or self.max_result_bytes < 1:
             raise ValueError("tool gateway message limits must be positive")
+        if self.circuit_failure_threshold < 1 or self.circuit_open_seconds <= 0:
+            raise ValueError("tool gateway circuit configuration must be positive")
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> Self:
@@ -67,6 +76,10 @@ class JavaToolGatewayConfig:
             deadline = float(source.get("DEVPILOT_JAVA_TOOL_GRPC_DEADLINE_SECONDS", "3"))
             max_message = int(source.get("DEVPILOT_JAVA_TOOL_GRPC_MAX_MESSAGE_BYTES", "65536"))
             max_result = int(source.get("DEVPILOT_JAVA_TOOL_GRPC_MAX_RESULT_BYTES", "65536"))
+            circuit_threshold = int(
+                source.get("DEVPILOT_JAVA_TOOL_CIRCUIT_FAILURE_THRESHOLD", "3")
+            )
+            circuit_open = float(source.get("DEVPILOT_JAVA_TOOL_CIRCUIT_OPEN_SECONDS", "10"))
         except ValueError as error:
             raise ValueError("tool gateway numeric configuration is invalid") from error
         return cls(
@@ -75,6 +88,8 @@ class JavaToolGatewayConfig:
             deadline_seconds=deadline,
             max_message_bytes=max_message,
             max_result_bytes=max_result,
+            circuit_failure_threshold=circuit_threshold,
+            circuit_open_seconds=circuit_open,
         )
 
 
@@ -86,6 +101,7 @@ class JavaToolGatewayClient:
         config: JavaToolGatewayConfig,
         *,
         channel: grpc.Channel | None = None,
+        circuit_breaker: ConsecutiveFailureCircuitBreaker | None = None,
     ) -> None:
         self._config = config
         self._owns_channel = channel is None
@@ -97,6 +113,10 @@ class JavaToolGatewayClient:
             ),
         )
         self._stub = agent_runtime_pb2_grpc.DevPilotToolGatewayStub(self._channel)
+        self._circuit_breaker = circuit_breaker or ConsecutiveFailureCircuitBreaker(
+            config.circuit_failure_threshold,
+            config.circuit_open_seconds,
+        )
 
     def execute(
         self,
@@ -110,6 +130,10 @@ class JavaToolGatewayClient:
             argument_struct.update(dict(arguments))
         except (TypeError, ValueError) as error:
             raise JavaToolGatewayError(JavaToolGatewayFailureKind.INVALID_ARGUMENT) from error
+        try:
+            self._circuit_breaker.before_call()
+        except CircuitOpenError as error:
+            raise JavaToolGatewayError(JavaToolGatewayFailureKind.CIRCUIT_OPEN) from error
         request = agent_runtime_pb2.ExecuteToolRequest(
             request_id=run_context.request_id,
             run_id=run_context.run_id,
@@ -124,7 +148,21 @@ class JavaToolGatewayClient:
                 metadata=((SERVICE_KEY_HEADER, self._config.service_key),),
             )
         except grpc.RpcError as error:
-            raise JavaToolGatewayError(_map_rpc_code(error.code())) from error
+            kind = _map_rpc_code(error.code())
+            if kind in {
+                JavaToolGatewayFailureKind.DEADLINE,
+                JavaToolGatewayFailureKind.UNAVAILABLE,
+            }:
+                self._circuit_breaker.record_failure()
+            else:
+                self._circuit_breaker.record_success()
+            raise JavaToolGatewayError(kind) from error
+        except Exception as error:
+            self._circuit_breaker.record_success()
+            raise JavaToolGatewayError(JavaToolGatewayFailureKind.INTERNAL) from error
+
+        # 收到合法 gRPC response 即证明依赖可达；业务/协议分类不能把依赖熔断。
+        self._circuit_breaker.record_success()
 
         if response.tool_call_id != tool_call_id:
             raise JavaToolGatewayError(JavaToolGatewayFailureKind.PROTOCOL)

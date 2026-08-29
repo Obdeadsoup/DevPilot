@@ -55,4 +55,18 @@ class AgentRunControllerTest {
         assertThatThrownBy(() -> controller.start(1, 2, new StartAgentRunRequest("hello")))
                 .isSameAs(denied);
     }
+
+    @Test
+    void cancelReturnsCancelledProjection() {
+        LocalDateTime now = LocalDateTime.of(2026, 8, 25, 12, 0);
+        AgentRunView view = new AgentRunView("run-1", "request-1", 1, 2, 7,
+                AgentRunStatus.CANCELLED, "hello", null, null,
+                now, now, now, now, 1);
+        when(service.cancel(1, 2, "run-1")).thenReturn(view);
+
+        var response = controller.cancel(1, 2, "run-1");
+
+        assertThat(response.data().status()).isEqualTo(AgentRunStatus.CANCELLED);
+        verify(service).cancel(1, 2, "run-1");
+    }
 }

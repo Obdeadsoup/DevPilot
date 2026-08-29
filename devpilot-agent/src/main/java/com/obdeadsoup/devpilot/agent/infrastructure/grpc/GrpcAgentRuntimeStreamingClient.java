@@ -2,6 +2,7 @@ package com.obdeadsoup.devpilot.agent.infrastructure.grpc;
 
 import com.obdeadsoup.devpilot.agent.application.AgentRunCommand;
 import com.obdeadsoup.devpilot.agent.application.AgentRuntimeEventListener;
+import com.obdeadsoup.devpilot.agent.application.AgentRuntimeStreamHandle;
 import com.obdeadsoup.devpilot.agent.application.AgentRuntimeStreamFailureKind;
 import com.obdeadsoup.devpilot.agent.application.AgentRuntimeStreamingPort;
 import com.obdeadsoup.devpilot.agent.application.AgentStreamEvent;
@@ -10,12 +11,14 @@ import com.obdeadsoup.devpilot.agent.contract.v1.AgentEvent;
 import com.obdeadsoup.devpilot.agent.contract.v1.AgentRuntimeGrpc;
 import com.obdeadsoup.devpilot.agent.contract.v1.StreamRunRequest;
 import io.grpc.Status;
-import io.grpc.stub.StreamObserver;
+import io.grpc.stub.ClientCallStreamObserver;
+import io.grpc.stub.ClientResponseObserver;
 
 import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /** async Stub Adapter：立即发起 Server Streaming，并把 StreamObserver callback 映射到 Core listener。 */
 public final class GrpcAgentRuntimeStreamingClient implements AgentRuntimeStreamingPort {
@@ -28,7 +31,7 @@ public final class GrpcAgentRuntimeStreamingClient implements AgentRuntimeStream
     }
 
     @Override
-    public void stream(AgentRunCommand command, AgentRuntimeEventListener listener) {
+    public AgentRuntimeStreamHandle stream(AgentRunCommand command, AgentRuntimeEventListener listener) {
         Objects.requireNonNull(command, "command must not be null");
         Objects.requireNonNull(listener, "listener must not be null");
         StreamRunRequest request = StreamRunRequest.newBuilder()
@@ -37,9 +40,15 @@ public final class GrpcAgentRuntimeStreamingClient implements AgentRuntimeStream
                 .setUserInput(command.userInput())
                 .build();
         AtomicBoolean adapterFailed = new AtomicBoolean();
+        AtomicReference<ClientCallStreamObserver<StreamRunRequest>> call = new AtomicReference<>();
         try {
             stub.withDeadlineAfter(deadline.toMillis(), TimeUnit.MILLISECONDS)
-                    .streamRun(request, new StreamObserver<>() {
+                    .streamRun(request, new ClientResponseObserver<StreamRunRequest, AgentEvent>() {
+                    @Override
+                    public void beforeStart(ClientCallStreamObserver<StreamRunRequest> requestStream) {
+                        call.set(requestStream);
+                    }
+
                     @Override
                     public void onNext(AgentEvent value) {
                         if (adapterFailed.get()) {
@@ -74,6 +83,12 @@ public final class GrpcAgentRuntimeStreamingClient implements AgentRuntimeStream
                 listener.onError(mapStatus(Status.fromThrowable(exception).getCode()));
             }
         }
+        return () -> {
+            ClientCallStreamObserver<StreamRunRequest> activeCall = call.get();
+            if (activeCall != null && adapterFailed.compareAndSet(false, true)) {
+                activeCall.cancel("cancelled by DevPilot Core", null);
+            }
+        };
     }
 
     private AgentStreamEvent toInternal(AgentEvent event) {
@@ -84,6 +99,7 @@ public final class GrpcAgentRuntimeStreamingClient implements AgentRuntimeStream
             case AGENT_EVENT_TYPE_TOOL_COMPLETED -> AgentStreamEventType.TOOL_COMPLETED;
             case AGENT_EVENT_TYPE_RUN_SUCCEEDED -> AgentStreamEventType.RUN_SUCCEEDED;
             case AGENT_EVENT_TYPE_RUN_FAILED -> AgentStreamEventType.RUN_FAILED;
+            case AGENT_EVENT_TYPE_RUN_CANCELLED -> AgentStreamEventType.RUN_CANCELLED;
             case AGENT_EVENT_TYPE_UNSPECIFIED, UNRECOGNIZED ->
                     throw new IllegalArgumentException("unsupported AgentEvent type");
         };
@@ -99,6 +115,7 @@ public final class GrpcAgentRuntimeStreamingClient implements AgentRuntimeStream
             case INVALID_ARGUMENT -> AgentRuntimeStreamFailureKind.INVALID_ARGUMENT;
             case INTERNAL -> AgentRuntimeStreamFailureKind.INTERNAL;
             case UNKNOWN -> AgentRuntimeStreamFailureKind.UNKNOWN;
+            case CANCELLED -> AgentRuntimeStreamFailureKind.USER_CANCELLED;
             default -> AgentRuntimeStreamFailureKind.UNKNOWN;
         };
     }

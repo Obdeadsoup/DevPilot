@@ -18,12 +18,14 @@ public record AgentGrpcProperties(
         @Min(1) @Max(65535) int port,
         @NotNull Duration deadline,
         @NotNull Duration streamDeadline,
+        @NotNull Duration cancelDeadline,
         boolean plaintext
 ) {
 
     @AssertTrue(message = "deadline must be at least 1ms")
     public boolean isDeadlineValid() {
         return deadline != null && deadline.compareTo(Duration.ofMillis(1)) >= 0
-                && streamDeadline != null && streamDeadline.compareTo(Duration.ofMillis(1)) >= 0;
+                && streamDeadline != null && streamDeadline.compareTo(Duration.ofMillis(1)) >= 0
+                && cancelDeadline != null && cancelDeadline.compareTo(Duration.ofMillis(1)) >= 0;
     }
 }

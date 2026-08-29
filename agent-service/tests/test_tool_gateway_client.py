@@ -4,6 +4,10 @@ import grpc
 import pytest
 from google.protobuf.struct_pb2 import Struct
 
+from devpilot_agent_service.rpc.circuit_breaker import (
+    CircuitState,
+    ConsecutiveFailureCircuitBreaker,
+)
 from devpilot_agent_service.rpc.generated import agent_runtime_pb2
 from devpilot_agent_service.rpc.tool_gateway_client import (
     SERVICE_KEY_HEADER,
@@ -54,7 +58,13 @@ def success_response(*, call_id: str = "call-1", payload: dict | None = None):
     )
 
 
-def client_with(monkeypatch: pytest.MonkeyPatch, response: object, *, max_result: int = 65_536):
+def client_with(
+    monkeypatch: pytest.MonkeyPatch,
+    response: object,
+    *,
+    max_result: int = 65_536,
+    circuit_breaker: ConsecutiveFailureCircuitBreaker | None = None,
+):
     stub = FakeStub(response)
     monkeypatch.setattr(
         "devpilot_agent_service.rpc.tool_gateway_client.agent_runtime_pb2_grpc.DevPilotToolGatewayStub",
@@ -66,7 +76,11 @@ def client_with(monkeypatch: pytest.MonkeyPatch, response: object, *, max_result
         deadline_seconds=2.5,
         max_result_bytes=max_result,
     )
-    return JavaToolGatewayClient(config, channel=FakeChannel()), stub, config
+    return JavaToolGatewayClient(
+        config,
+        channel=FakeChannel(),
+        circuit_breaker=circuit_breaker,
+    ), stub, config
 
 
 def test_execute_propagates_context_call_id_struct_deadline_and_service_key(monkeypatch) -> None:
@@ -102,6 +116,49 @@ def test_rpc_status_is_mapped_without_description(monkeypatch, code, kind) -> No
         client.execute(RunContext("run-1", "request-1"), "call-1", "task.list_open", {})
 
     assert captured.value.kind is kind
+
+
+@pytest.mark.parametrize(
+    "code",
+    [grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.DEADLINE_EXCEEDED],
+)
+def test_transport_failure_opens_circuit_and_next_call_fast_fails(monkeypatch, code) -> None:
+    circuit = ConsecutiveFailureCircuitBreaker(1, 10)
+    client, stub, _ = client_with(
+        monkeypatch,
+        FakeRpcError(code),
+        circuit_breaker=circuit,
+    )
+
+    with pytest.raises(JavaToolGatewayError):
+        client.execute(RunContext("run-1", "request-1"), "call-1", "task.list_open", {})
+    with pytest.raises(JavaToolGatewayError) as captured:
+        client.execute(RunContext("run-1", "request-1"), "call-2", "task.list_open", {})
+
+    assert circuit.state is CircuitState.OPEN
+    assert captured.value.kind is JavaToolGatewayFailureKind.CIRCUIT_OPEN
+    assert len(stub.calls) == 1
+
+
+@pytest.mark.parametrize(
+    "code",
+    [grpc.StatusCode.PERMISSION_DENIED, grpc.StatusCode.INVALID_ARGUMENT],
+)
+def test_reachable_business_error_does_not_open_circuit(monkeypatch, code) -> None:
+    circuit = ConsecutiveFailureCircuitBreaker(1, 10)
+    client, stub, _ = client_with(
+        monkeypatch,
+        FakeRpcError(code),
+        circuit_breaker=circuit,
+    )
+
+    with pytest.raises(JavaToolGatewayError):
+        client.execute(RunContext("run-1", "request-1"), "call-1", "task.list_open", {})
+    with pytest.raises(JavaToolGatewayError):
+        client.execute(RunContext("run-1", "request-1"), "call-2", "task.list_open", {})
+
+    assert circuit.state is CircuitState.CLOSED
+    assert len(stub.calls) == 2
 
 
 def test_failed_response_call_mismatch_size_and_missing_untrusted_marker(monkeypatch) -> None:

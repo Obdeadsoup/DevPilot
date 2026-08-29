@@ -10,25 +10,26 @@ class AgentGrpcPropertiesTest {
 
     @Test
     void acceptsPositiveDeadlineAndBothTransportModes() {
-        assertThat(new AgentGrpcProperties("localhost", 50051, Duration.ofMillis(1), Duration.ofMinutes(1), true)
+        assertThat(new AgentGrpcProperties("localhost", 50051, Duration.ofMillis(1), Duration.ofMinutes(1), Duration.ofSeconds(1), true)
                 .isDeadlineValid()).isTrue();
-        assertThat(new AgentGrpcProperties("agent.internal", 443, Duration.ofSeconds(30), Duration.ofMinutes(10), false)
+        assertThat(new AgentGrpcProperties("agent.internal", 443, Duration.ofSeconds(30), Duration.ofMinutes(10), Duration.ofSeconds(1), false)
                 .isDeadlineValid()).isTrue();
     }
 
     @Test
     void rejectsSubMillisecondDeadline() {
-        assertThat(new AgentGrpcProperties("localhost", 50051, Duration.ZERO, Duration.ofMinutes(1), true)
+        assertThat(new AgentGrpcProperties("localhost", 50051, Duration.ZERO, Duration.ofMinutes(1), Duration.ofSeconds(1), true)
                 .isDeadlineValid()).isFalse();
         assertThat(new AgentGrpcProperties(
                 "localhost",
                 50051,
                 Duration.ofNanos(999_999),
                 Duration.ofMinutes(1),
+                Duration.ofSeconds(1),
                 true
         ).isDeadlineValid()).isFalse();
         assertThat(new AgentGrpcProperties(
-                "localhost", 50051, Duration.ofSeconds(1), Duration.ZERO, true
+                "localhost", 50051, Duration.ofSeconds(1), Duration.ZERO, Duration.ofSeconds(1), true
         ).isDeadlineValid()).isFalse();
     }
 }

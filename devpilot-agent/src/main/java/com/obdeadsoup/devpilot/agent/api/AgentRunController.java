@@ -46,4 +46,15 @@ public class AgentRunController {
         return ApiResponse.success(AgentRunResponse.from(
                 applicationService.get(workspaceId, projectId, runId)));
     }
+
+
+    @PostMapping("/{runId}/cancel")
+    public ApiResponse<AgentRunResponse> cancel(@PathVariable @Positive long workspaceId,
+                                                @PathVariable @Positive long projectId,
+                                                @PathVariable
+                                                @Size(max = 64)
+                                                @Pattern(regexp = "[A-Za-z0-9-]+") String runId) {
+        return ApiResponse.success(AgentRunResponse.from(
+                applicationService.cancel(workspaceId, projectId, runId)));
+    }
 }

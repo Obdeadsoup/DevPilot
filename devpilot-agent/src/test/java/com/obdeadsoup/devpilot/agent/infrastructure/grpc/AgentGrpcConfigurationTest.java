@@ -1,7 +1,7 @@
 package com.obdeadsoup.devpilot.agent.infrastructure.grpc;
 
 import com.obdeadsoup.devpilot.agent.application.AgentRuntimePort;
-import com.obdeadsoup.devpilot.agent.application.AgentRuntimeStreamingPort;
+import com.obdeadsoup.devpilot.agent.application.AgentRuntimeCancellationPort;
 import com.obdeadsoup.devpilot.agent.contract.v1.AgentRuntimeGrpc;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -19,6 +19,7 @@ class AgentGrpcConfigurationTest {
                     "devpilot.agent.grpc.port=50051",
                     "devpilot.agent.grpc.deadline=30s",
                     "devpilot.agent.grpc.stream-deadline=10m",
+                    "devpilot.agent.grpc.cancel-deadline=3s",
                     "devpilot.agent.grpc.plaintext=true"
             );
 
@@ -31,7 +32,8 @@ class AgentGrpcConfigurationTest {
             assertThat(context).hasSingleBean(AgentRuntimeGrpc.AgentRuntimeBlockingStub.class);
             assertThat(context).hasSingleBean(AgentRuntimeGrpc.AgentRuntimeStub.class);
             assertThat(context).hasSingleBean(AgentRuntimePort.class);
-            assertThat(context).hasSingleBean(AgentRuntimeStreamingPort.class);
+            assertThat(context).hasSingleBean(GrpcAgentRuntimeStreamingClient.class);
+            assertThat(context).hasSingleBean(AgentRuntimeCancellationPort.class);
             AgentGrpcChannel channel = context.getBean(AgentGrpcChannel.class);
             channelReference.set(channel);
             assertThat(channel.channel().isShutdown()).isFalse();

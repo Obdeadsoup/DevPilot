@@ -4,6 +4,7 @@ import json
 from collections.abc import Mapping, Sequence
 from typing import Protocol
 
+import httpx2
 from openai import (
     APIConnectionError,
     APIError,
@@ -106,6 +107,11 @@ class OpenAICompatibleModel:
                 api_key=config.api_key,
                 base_url=config.base_url,
                 max_retries=0,
+                timeout=httpx2.Timeout(
+                    timeout=config.overall_timeout_seconds,
+                    connect=config.connect_timeout_seconds,
+                    read=config.read_timeout_seconds,
+                ),
             )
         )
 

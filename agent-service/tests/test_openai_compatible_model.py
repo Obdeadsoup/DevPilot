@@ -261,7 +261,11 @@ def test_default_sdk_client_disables_implicit_retries(monkeypatch: pytest.Monkey
         "api_key": "test-secret",
         "base_url": DEFAULT_DEEPSEEK_BASE_URL,
         "max_retries": 0,
+        "timeout": captured["timeout"],
     }
+    timeout = captured["timeout"]
+    assert timeout.connect == 2.0
+    assert timeout.read == 30.0
 
 
 def test_provider_payload_is_json_serializable() -> None:

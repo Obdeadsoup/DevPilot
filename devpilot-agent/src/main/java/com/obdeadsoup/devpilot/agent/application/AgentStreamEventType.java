@@ -7,9 +7,10 @@ public enum AgentStreamEventType {
     TOOL_STARTED,
     TOOL_COMPLETED,
     RUN_SUCCEEDED,
-    RUN_FAILED;
+    RUN_FAILED,
+    RUN_CANCELLED;
 
     public boolean isTerminal() {
-        return this == RUN_SUCCEEDED || this == RUN_FAILED;
+        return this == RUN_SUCCEEDED || this == RUN_FAILED || this == RUN_CANCELLED;
     }
 }

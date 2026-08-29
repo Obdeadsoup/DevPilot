@@ -1,6 +1,7 @@
 package com.obdeadsoup.devpilot.agent.application;
 
 import com.obdeadsoup.devpilot.framework.error.BusinessException;
+import com.obdeadsoup.devpilot.agent.error.AgentRunErrorCode;
 import com.obdeadsoup.devpilot.identity.application.CurrentUserProvider;
 import com.obdeadsoup.devpilot.identity.error.IdentityErrorCode;
 import com.obdeadsoup.devpilot.project.application.ProjectAuthorizationService;
@@ -31,12 +32,13 @@ class AgentRunApplicationServiceTest {
     private final AgentRunStreamCoordinator streamCoordinator = mock(AgentRunStreamCoordinator.class);
     private final AgentRunIdentityFactory identityFactory = mock(AgentRunIdentityFactory.class);
     private final AgentRunTimeProvider timeProvider = mock(AgentRunTimeProvider.class);
+    private final AgentRunCancellationMetrics cancellationMetrics = mock(AgentRunCancellationMetrics.class);
     private AgentRunApplicationService service;
 
     @BeforeEach
     void setUp() {
         service = new AgentRunApplicationService(currentUserProvider, authorizationService, persistenceService,
-                streamCoordinator, identityFactory, timeProvider);
+                streamCoordinator, identityFactory, timeProvider, cancellationMetrics);
         when(currentUserProvider.requireUserId()).thenReturn(7L);
         when(identityFactory.create()).thenReturn(new AgentRunIdentity("request-1", "run-1"));
         when(timeProvider.now()).thenReturn(STARTED_AT);
@@ -94,8 +96,36 @@ class AgentRunApplicationServiceTest {
         verify(persistenceService, never()).createRunning(any(), any(), anyLong(), anyLong(), anyLong(), any(), any());
     }
 
+    @Test
+    void cancelUsesProposePermissionAndDuplicateCancelledIsIdempotent() {
+        AgentRunView cancelled = view(AgentRunStatus.CANCELLED);
+        when(persistenceService.get(1, 2, "run-1")).thenReturn(cancelled);
+
+        assertThat(service.cancel(1, 2, "run-1")).isEqualTo(cancelled);
+
+        verify(authorizationService).requirePermission(7, 1, 2, ProjectPermission.AGENT_PROPOSE);
+        verify(streamCoordinator, never()).cancel(anyLong(), anyLong(), any());
+    }
+
+    @Test
+    void succeededRunCannotBeCancelled() {
+        when(persistenceService.get(1, 2, "run-1")).thenReturn(view(AgentRunStatus.SUCCEEDED));
+
+        assertThatThrownBy(() -> service.cancel(1, 2, "run-1"))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        error -> assertThat(error.errorCode())
+                                .isEqualTo(AgentRunErrorCode.AGENT_RUN_ALREADY_TERMINAL));
+        verify(streamCoordinator, never()).cancel(anyLong(), anyLong(), any());
+    }
+
     private AgentRunView view() {
-        return new AgentRunView("run-1", "request-1", 1, 2, 7, AgentRunStatus.RUNNING,
-                "hello", null, null, STARTED_AT, null, STARTED_AT, STARTED_AT, 0);
+        return view(AgentRunStatus.RUNNING);
+    }
+
+    private AgentRunView view(AgentRunStatus status) {
+        return new AgentRunView("run-1", "request-1", 1, 2, 7, status,
+                "hello", status == AgentRunStatus.SUCCEEDED ? "answer" : null, null,
+                STARTED_AT, status == AgentRunStatus.RUNNING ? null : STARTED_AT,
+                STARTED_AT, STARTED_AT, status == AgentRunStatus.RUNNING ? 0 : 1);
     }
 }

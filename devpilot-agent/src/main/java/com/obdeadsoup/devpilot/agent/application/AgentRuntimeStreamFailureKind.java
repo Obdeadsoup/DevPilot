@@ -7,5 +7,8 @@ public enum AgentRuntimeStreamFailureKind {
     INVALID_ARGUMENT,
     INTERNAL,
     UNKNOWN,
-    PROTOCOL
+    PROTOCOL,
+    CIRCUIT_OPEN,
+    CAPACITY_REJECTED,
+    USER_CANCELLED
 }

@@ -8,6 +8,8 @@ public enum AgentRunErrorCode implements ErrorCode {
     INVALID_AGENT_INPUT("AGENT_0402", "Agent 输入不合法", HttpStatus.BAD_REQUEST),
     AGENT_RUN_STATE_CONFLICT("AGENT_0501", "Agent Run 状态已被其他请求修改", HttpStatus.CONFLICT),
     AGENT_RUN_ID_CONFLICT("AGENT_0502", "Agent Run 标识冲突", HttpStatus.CONFLICT),
+    AGENT_RUN_ALREADY_TERMINAL("AGENT_0503", "已结束的 Agent Run 不能取消", HttpStatus.CONFLICT),
+    AGENT_RUN_CANCEL_FAILED("AGENT_0504", "Agent Run 取消请求未被 Runtime 接受", HttpStatus.SERVICE_UNAVAILABLE),
     INVALID_LAST_EVENT_ID("AGENT_0601", "Last-Event-ID 不合法", HttpStatus.BAD_REQUEST);
 
     private final String code;

@@ -62,14 +62,24 @@ enum AgentEventType {
   AGENT_EVENT_TYPE_TOOL_COMPLETED = 4;
   AGENT_EVENT_TYPE_RUN_SUCCEEDED = 5;
   AGENT_EVENT_TYPE_RUN_FAILED = 6;
+  AGENT_EVENT_TYPE_RUN_CANCELLED = 7;
 }
 
 message CancelRunRequest {
   string run_id = 1;
+  string request_id = 2;
 }
 
 message CancelRunResponse {
   bool accepted = 1;
+  CancelRunStatus status = 2;
+}
+
+enum CancelRunStatus {
+  CANCEL_RUN_STATUS_UNSPECIFIED = 0;
+  CANCEL_RUN_STATUS_ACCEPTED = 1;
+  CANCEL_RUN_STATUS_NOT_FOUND = 2;
+  CANCEL_RUN_STATUS_ALREADY_TERMINAL = 3;
 }
 
 message ExecuteToolRequest {

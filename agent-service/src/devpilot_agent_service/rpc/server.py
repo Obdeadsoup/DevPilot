@@ -22,6 +22,7 @@ from devpilot_agent_service.rpc.tool_gateway_client import (
     JavaToolGatewayConfig,
 )
 from devpilot_agent_service.runtime.agent_loop import AgentLoop
+from devpilot_agent_service.runtime.cancellation import ActiveRunRegistry
 from devpilot_agent_service.tools.devpilot import (
     ListOpenTasksTool,
     ProjectSummaryTool,
@@ -46,6 +47,7 @@ class RpcServerConfig:
     host: str = DEFAULT_GRPC_HOST
     port: int = DEFAULT_GRPC_PORT
     model_mode: str = DEFAULT_MODEL_MODE
+    fake_delay_seconds: float = 0.0
 
     def __post_init__(self) -> None:
         if not isinstance(self.host, str) or not self.host.strip():
@@ -58,6 +60,8 @@ class RpcServerConfig:
             raise ValueError("AGENT_GRPC_PORT must be between 1 and 65535")
         if self.model_mode not in {"deepseek", "fake"}:
             raise ValueError("AGENT_MODEL_MODE must be 'deepseek' or 'fake'")
+        if self.fake_delay_seconds < 0:
+            raise ValueError("AGENT_FAKE_DELAY_SECONDS must not be negative")
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> Self:
@@ -67,10 +71,15 @@ class RpcServerConfig:
             port = int(raw_port)
         except ValueError as error:
             raise ValueError("AGENT_GRPC_PORT must be an integer") from error
+        try:
+            fake_delay = float(source.get("AGENT_FAKE_DELAY_SECONDS", "0"))
+        except ValueError as error:
+            raise ValueError("AGENT_FAKE_DELAY_SECONDS must be numeric") from error
         return cls(
             host=source.get("AGENT_GRPC_HOST", DEFAULT_GRPC_HOST).strip(),
             port=port,
             model_mode=source.get("AGENT_MODEL_MODE", DEFAULT_MODEL_MODE).strip().lower(),
+            fake_delay_seconds=fake_delay,
         )
 
     @property
@@ -83,7 +92,9 @@ def create_application(config: RpcServerConfig) -> AgentRuntimeApplication:
     """按显式模式组装 Model；fake 永不访问网络，deepseek 继续只读既有环境变量。"""
 
     if config.model_mode == "fake":
-        return AgentRuntimeApplication(AgentLoop(DeterministicFakeModel(), ToolRegistry()))
+        return AgentRuntimeApplication(
+            AgentLoop(DeterministicFakeModel(config.fake_delay_seconds), ToolRegistry())
+        )
 
     model = OpenAICompatibleModel(OpenAICompatibleConfig.from_deepseek_env())
     client = JavaToolGatewayClient(JavaToolGatewayConfig.from_env())
@@ -106,7 +117,8 @@ def create_server(
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=8))
     agent_runtime_pb2_grpc.add_AgentRuntimeServicer_to_server(
         AgentRuntimeServicer(
-            application if application is not None else create_application(config)
+            application if application is not None else create_application(config),
+            ActiveRunRegistry(),
         ),
         server,
     )

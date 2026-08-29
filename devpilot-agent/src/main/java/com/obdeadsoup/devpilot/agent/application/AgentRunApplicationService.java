@@ -20,19 +20,22 @@ public class AgentRunApplicationService {
     private final AgentRunStreamCoordinator streamCoordinator;
     private final AgentRunIdentityFactory identityFactory;
     private final AgentRunTimeProvider timeProvider;
+    private final AgentRunCancellationMetrics cancellationMetrics;
 
     public AgentRunApplicationService(CurrentUserProvider currentUserProvider,
                                       ProjectAuthorizationService authorizationService,
                                       AgentRunPersistenceService persistenceService,
                                       AgentRunStreamCoordinator streamCoordinator,
                                       AgentRunIdentityFactory identityFactory,
-                                      AgentRunTimeProvider timeProvider) {
+                                      AgentRunTimeProvider timeProvider,
+                                      AgentRunCancellationMetrics cancellationMetrics) {
         this.currentUserProvider = currentUserProvider;
         this.authorizationService = authorizationService;
         this.persistenceService = persistenceService;
         this.streamCoordinator = streamCoordinator;
         this.identityFactory = identityFactory;
         this.timeProvider = timeProvider;
+        this.cancellationMetrics = cancellationMetrics;
     }
 
     /**
@@ -56,6 +59,31 @@ public class AgentRunApplicationService {
         long userId = currentUserProvider.requireUserId();
         authorizationService.requirePermission(userId, workspaceId, projectId, ProjectPermission.AGENT_READ);
         return persistenceService.get(workspaceId, projectId, runId);
+    }
+
+    /**
+     * 先确认本地 RUNNING，再请求 Python 协作取消。重复取消直接返回 CANCELLED；
+     * 已成功或失败的 run 不允许倒退，Runtime 不可达时也不伪造 CANCELLED。
+     */
+    public AgentRunView cancel(long workspaceId, long projectId, String runId) {
+        long userId = currentUserProvider.requireUserId();
+        authorizationService.requirePermission(userId, workspaceId, projectId, ProjectPermission.AGENT_PROPOSE);
+        AgentRunView current = persistenceService.get(workspaceId, projectId, runId);
+        if (current.status() == AgentRunStatus.CANCELLED) {
+            return current;
+        }
+        if (current.status() != AgentRunStatus.RUNNING) {
+            throw new BusinessException(AgentRunErrorCode.AGENT_RUN_ALREADY_TERMINAL);
+        }
+        cancellationMetrics.requested();
+        try {
+            AgentRunView cancelled = streamCoordinator.cancel(workspaceId, projectId, current);
+            cancellationMetrics.accepted();
+            return cancelled;
+        } catch (AgentRuntimeCancellationException exception) {
+            cancellationMetrics.failed();
+            throw new BusinessException(AgentRunErrorCode.AGENT_RUN_CANCEL_FAILED);
+        }
     }
 
     private String normalizeInput(String input) {

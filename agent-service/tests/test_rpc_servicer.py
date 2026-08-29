@@ -164,6 +164,54 @@ def test_stream_run_business_failure_is_single_last_terminal() -> None:
     ) == 1
 
 
+def test_active_run_rejects_duplicate_and_cancel_emits_exactly_one_terminal() -> None:
+    release_model = threading.Event()
+
+    class BlockingModel:
+        def generate(self, messages: object, tools: object) -> ModelResponse:
+            assert release_model.wait(timeout=2)
+            return ModelResponse.final("must-not-succeed")
+
+    servicer = AgentRuntimeServicer(
+        AgentRuntimeApplication(AgentLoop(BlockingModel(), ToolRegistry()))
+    )
+    context = FakeServicerContext()
+    stream = servicer.StreamRun(valid_stream_request(), context)  # type: ignore[arg-type]
+    first = next(stream)
+    assert first.type == agent_runtime_pb2.AGENT_EVENT_TYPE_RUN_STARTED
+
+    duplicate = servicer.StreamRun(
+        valid_stream_request(), FakeServicerContext()  # type: ignore[arg-type]
+    )
+    with pytest.raises(RpcAbort) as captured:
+        next(duplicate)
+    assert captured.value.code is grpc.StatusCode.ALREADY_EXISTS
+
+    cancel_request = agent_runtime_pb2.CancelRunRequest(
+        run_id="run-1", request_id="request-1"
+    )
+    assert servicer.CancelRun(cancel_request, context).status == (
+        agent_runtime_pb2.CANCEL_RUN_STATUS_ACCEPTED
+    )
+    assert servicer.CancelRun(cancel_request, context).status == (
+        agent_runtime_pb2.CANCEL_RUN_STATUS_ACCEPTED
+    )
+    release_model.set()
+    events = [first, *list(stream)]
+
+    terminal_types = {
+        agent_runtime_pb2.AGENT_EVENT_TYPE_RUN_SUCCEEDED,
+        agent_runtime_pb2.AGENT_EVENT_TYPE_RUN_FAILED,
+        agent_runtime_pb2.AGENT_EVENT_TYPE_RUN_CANCELLED,
+    }
+    assert [event.type for event in events if event.type in terminal_types] == [
+        agent_runtime_pb2.AGENT_EVENT_TYPE_RUN_CANCELLED
+    ]
+    assert servicer.CancelRun(cancel_request, context).status == (
+        agent_runtime_pb2.CANCEL_RUN_STATUS_ALREADY_TERMINAL
+    )
+
+
 def test_cancelled_context_releases_producer_blocked_by_bounded_queue(monkeypatch) -> None:
     import devpilot_agent_service.rpc.servicer as servicer_module
 

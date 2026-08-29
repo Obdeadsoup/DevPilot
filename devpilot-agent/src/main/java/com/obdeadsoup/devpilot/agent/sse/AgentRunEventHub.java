@@ -240,6 +240,7 @@ public class AgentRunEventHub implements AgentRunEventPublisher {
             case TOOL_COMPLETED -> "tool-completed";
             case RUN_SUCCEEDED -> "run-succeeded";
             case RUN_FAILED -> "run-failed";
+            case RUN_CANCELLED -> "run-cancelled";
         };
     }
 

@@ -4,5 +4,6 @@ package com.obdeadsoup.devpilot.agent.application;
 public enum AgentRunStatus {
     RUNNING,
     SUCCEEDED,
-    FAILED
+    FAILED,
+    CANCELLED
 }

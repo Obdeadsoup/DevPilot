@@ -68,7 +68,7 @@ def test_server_bootstrap_registers_real_tcp_server() -> None:
         server.stop(grace=0).wait()
 
 
-def test_stream_run_uses_real_tcp_and_cancel_remains_unimplemented() -> None:
+def test_stream_run_uses_real_tcp_and_cancel_reports_not_found() -> None:
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
@@ -83,9 +83,12 @@ def test_stream_run_uses_real_tcp_and_cancel_remains_unimplemented() -> None:
     tool_gateway = agent_runtime_pb2_grpc.DevPilotToolGatewayStub(channel)
     try:
         grpc.channel_ready_future(channel).result(timeout=5)
-        with pytest.raises(grpc.RpcError) as cancel_error:
-            stub.CancelRun(agent_runtime_pb2.CancelRunRequest(run_id="run-1"), timeout=1)
-        assert cancel_error.value.code() == grpc.StatusCode.UNIMPLEMENTED
+        cancel = stub.CancelRun(
+            agent_runtime_pb2.CancelRunRequest(run_id="run-1", request_id="request-1"),
+            timeout=1,
+        )
+        assert cancel.accepted is False
+        assert cancel.status == agent_runtime_pb2.CANCEL_RUN_STATUS_NOT_FOUND
 
         stream_events = list(
             stub.StreamRun(

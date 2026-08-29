@@ -18,6 +18,9 @@ class OpenAICompatibleConfig:
     api_key: str = field(repr=False)
     base_url: str = DEFAULT_DEEPSEEK_BASE_URL
     model: str = DEFAULT_DEEPSEEK_MODEL
+    connect_timeout_seconds: float = 2.0
+    read_timeout_seconds: float = 30.0
+    overall_timeout_seconds: float = 30.0
 
     def __post_init__(self) -> None:
         if not isinstance(self.api_key, str) or not self.api_key.strip():
@@ -26,14 +29,29 @@ class OpenAICompatibleConfig:
             raise ProviderConfigurationError("DEEPSEEK_BASE_URL must not be blank")
         if not isinstance(self.model, str) or not self.model.strip():
             raise ProviderConfigurationError("DEEPSEEK_MODEL must not be blank")
+        if min(
+            self.connect_timeout_seconds,
+            self.read_timeout_seconds,
+            self.overall_timeout_seconds,
+        ) <= 0:
+            raise ProviderConfigurationError("Provider timeouts must be positive")
 
     @classmethod
     def from_deepseek_env(cls, environ: Mapping[str, str] | None = None) -> Self:
         """只读取约定环境变量，不从文件、日志或命令行拼接 Secret。"""
 
         source = os.environ if environ is None else environ
+        try:
+            connect_timeout = float(source.get("DEEPSEEK_CONNECT_TIMEOUT_SECONDS", "2"))
+            read_timeout = float(source.get("DEEPSEEK_READ_TIMEOUT_SECONDS", "30"))
+            overall_timeout = float(source.get("DEEPSEEK_OVERALL_TIMEOUT_SECONDS", "30"))
+        except ValueError as error:
+            raise ProviderConfigurationError("Provider timeout configuration is invalid") from error
         return cls(
             api_key=source.get("DEEPSEEK_API_KEY", ""),
             base_url=source.get("DEEPSEEK_BASE_URL", DEFAULT_DEEPSEEK_BASE_URL),
             model=source.get("DEEPSEEK_MODEL", DEFAULT_DEEPSEEK_MODEL),
+            connect_timeout_seconds=connect_timeout,
+            read_timeout_seconds=read_timeout,
+            overall_timeout_seconds=overall_timeout,
         )
