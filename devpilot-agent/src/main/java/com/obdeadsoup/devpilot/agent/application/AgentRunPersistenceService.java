@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.List;
 
 /**
  * AgentRun 的短事务边界。创建 RUNNING 与写入终态由不同 public 方法提交，
@@ -99,6 +100,20 @@ public class AgentRunPersistenceService implements AgentRunExecutionContextQuery
     @Transactional(readOnly = true)
     public AgentRunView get(long workspaceId, long projectId, String runId) {
         return requireByScope(workspaceId, projectId, runId);
+    }
+
+    /** 历史查询始终受 workspace/project scope 限制，分页参数已由上层完成边界校验。 */
+    @Transactional(readOnly = true)
+    public List<AgentRunHistoryItem> listHistory(long workspaceId, long projectId,
+                                                  AgentRunStatus status, int page, int size) {
+        int offset = Math.multiplyExact(page, size);
+        return mapper.findHistory(workspaceId, projectId, status == null ? null : status.name(), offset, size)
+                .stream().map(AgentRunView::from).map(AgentRunHistoryItem::from).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public long countHistory(long workspaceId, long projectId, AgentRunStatus status) {
+        return mapper.countHistory(workspaceId, projectId, status == null ? null : status.name());
     }
 
     /** Tool Gateway 只按不可猜测的 runId 恢复 Java 权威 actor/scope，不把用户身份交给 Python 声明。 */

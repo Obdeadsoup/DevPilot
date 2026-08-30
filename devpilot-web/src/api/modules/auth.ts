@@ -1,5 +1,17 @@
 import { request } from '../client'
-import type { LoginRequest, LoginResponse, User, ApiResult } from '@/types/api'
+import type { LoginRequest, LoginResponse, RegisterRequest, User, ApiResult } from '@/types/api'
+
+export function registerApi(data: RegisterRequest): Promise<ApiResult<User>> {
+  return request<User>({
+    url: '/api/v1/auth/register',
+    method: 'POST',
+    data,
+  })
+}
+
+export function sendEmailVerificationCodeApi(email: string): Promise<ApiResult<null>> {
+  return request<null>({ url: '/api/v1/auth/verification/email', method: 'POST', data: { email } })
+}
 
 export function loginApi(data: LoginRequest): Promise<ApiResult<LoginResponse>> {
   return request<LoginResponse>({

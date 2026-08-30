@@ -8,6 +8,7 @@ import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 import java.util.Optional;
+import java.util.List;
 
 @Mapper
 public interface WorkspaceMemberMapper {
@@ -29,6 +30,15 @@ public interface WorkspaceMemberMapper {
             @Param("workspaceId") long workspaceId,
             @Param("userId") long userId
     );
+
+    @Select("""
+            SELECT id, workspace_id AS workspaceId, user_id AS userId, role, status,
+                   invited_by AS invitedBy, joined_at AS joinedAt, version
+            FROM dp_workspace_member
+            WHERE workspace_id = #{workspaceId}
+            ORDER BY id
+            """)
+    List<WorkspaceMemberEntity> findByWorkspace(@Param("workspaceId") long workspaceId);
 
     @Insert("""
             INSERT INTO dp_workspace_member (
@@ -59,6 +69,15 @@ public interface WorkspaceMemberMapper {
             @Param("userId") long userId,
             @Param("expectedVersion") long expectedVersion
     );
+
+    @Update("""
+            UPDATE dp_workspace_member
+            SET status = 'REJECTED', version = version + 1
+            WHERE workspace_id = #{workspaceId} AND user_id = #{userId}
+              AND status = 'INVITED' AND version = #{expectedVersion}
+            """)
+    int reject(@Param("workspaceId") long workspaceId, @Param("userId") long userId,
+               @Param("expectedVersion") long expectedVersion);
 
     @Update("""
             UPDATE dp_workspace_member

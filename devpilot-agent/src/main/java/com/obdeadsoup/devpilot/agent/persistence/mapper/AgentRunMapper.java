@@ -9,6 +9,7 @@ import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 /** AgentRun scoped SQL；终态更新必须同时命中 scope、RUNNING 和 version。 */
@@ -38,6 +39,33 @@ public interface AgentRunMapper {
 
     @Select("SELECT " + COLUMNS + " FROM dp_agent_run WHERE run_id=#{runId} AND deleted=0")
     Optional<AgentRunEntity> findByRunId(@Param("runId") String runId);
+
+    @Select("""
+            <script>
+            SELECT """ + COLUMNS + """
+            FROM dp_agent_run
+            WHERE workspace_id=#{workspaceId} AND project_id=#{projectId} AND deleted=0
+            <if test='status != null'>AND status=#{status}</if>
+            ORDER BY started_at DESC, id DESC
+            LIMIT #{size} OFFSET #{offset}
+            </script>
+            """)
+    List<AgentRunEntity> findHistory(@Param("workspaceId") long workspaceId,
+                                     @Param("projectId") long projectId,
+                                     @Param("status") String status,
+                                     @Param("offset") int offset,
+                                     @Param("size") int size);
+
+    @Select("""
+            <script>
+            SELECT COUNT(*) FROM dp_agent_run
+            WHERE workspace_id=#{workspaceId} AND project_id=#{projectId} AND deleted=0
+            <if test='status != null'>AND status=#{status}</if>
+            </script>
+            """)
+    long countHistory(@Param("workspaceId") long workspaceId,
+                      @Param("projectId") long projectId,
+                      @Param("status") String status);
 
     @Update("""
             UPDATE dp_agent_run SET status='SUCCEEDED', final_output=#{finalOutput}, failure_kind=NULL,

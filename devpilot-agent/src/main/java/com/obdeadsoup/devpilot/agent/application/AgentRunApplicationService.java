@@ -5,6 +5,7 @@ import com.obdeadsoup.devpilot.framework.error.BusinessException;
 import com.obdeadsoup.devpilot.identity.application.CurrentUserProvider;
 import com.obdeadsoup.devpilot.project.application.ProjectAuthorizationService;
 import com.obdeadsoup.devpilot.project.domain.ProjectPermission;
+import com.obdeadsoup.devpilot.project.api.dto.PageResponse;
 import org.springframework.stereotype.Service;
 
 /**
@@ -59,6 +60,16 @@ public class AgentRunApplicationService {
         long userId = currentUserProvider.requireUserId();
         authorizationService.requirePermission(userId, workspaceId, projectId, ProjectPermission.AGENT_READ);
         return persistenceService.get(workspaceId, projectId, runId);
+    }
+
+    /** 运行历史复用 AGENT_READ；列表与详情使用相同 Project scope，避免跨项目 runId 枚举。 */
+    public PageResponse<AgentRunHistoryItem> listHistory(long workspaceId, long projectId,
+                                                          AgentRunStatus status, int page, int size) {
+        long userId = currentUserProvider.requireUserId();
+        authorizationService.requirePermission(userId, workspaceId, projectId, ProjectPermission.AGENT_READ);
+        return new PageResponse<>(page, size,
+                persistenceService.countHistory(workspaceId, projectId, status),
+                persistenceService.listHistory(workspaceId, projectId, status, page, size));
     }
 
     /**

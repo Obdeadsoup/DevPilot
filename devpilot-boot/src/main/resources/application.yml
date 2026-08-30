@@ -1,6 +1,15 @@
 spring:
   application:
     name: devpilot-core
+  mail:
+    host: ${MAIL_HOST:smtp.qq.com}
+    port: ${MAIL_PORT:465}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.ssl.enable: ${MAIL_SSL_ENABLED:true}
+      mail.smtp.starttls.enable: ${MAIL_STARTTLS_ENABLED:false}
   config:
     import: optional:nacos:devpilot-core.yml?group=${DEVPILOT_NACOS_GROUP:DEVPILOT}&refreshEnabled=false
   cloud:
@@ -90,6 +99,13 @@ devpilot:
       max-connections-per-user: 5
   identity:
     access-token-ttl: 2h
+    verification:
+      email:
+        code-ttl: 5m
+        cooldown: 60s
+        ip-cooldown: 60s
+        failure-ttl: 5m
+        max-failures: 5
   github:
     base-url: https://api.github.com
     api-version: 2022-11-28

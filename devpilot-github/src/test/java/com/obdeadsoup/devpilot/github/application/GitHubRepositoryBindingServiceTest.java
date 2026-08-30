@@ -7,6 +7,7 @@ import com.obdeadsoup.devpilot.github.application.client.GitHubConditionalReques
 import com.obdeadsoup.devpilot.github.application.client.GitHubPageCursor;
 import com.obdeadsoup.devpilot.github.application.client.GitHubRateLimitSnapshot;
 import com.obdeadsoup.devpilot.github.application.client.GitHubRepositoryMetadataClient;
+import com.obdeadsoup.devpilot.github.application.client.GitHubBranchClient;
 import com.obdeadsoup.devpilot.github.application.client.VerifiedGitHubRepository;
 import com.obdeadsoup.devpilot.github.application.secret.WebhookSecretResolver;
 import com.obdeadsoup.devpilot.github.error.GitHubRepositoryErrorCode;
@@ -47,6 +48,7 @@ class GitHubRepositoryBindingServiceTest {
     private GitHubRepositoryMapper repositoryMapper;
     private WebhookSecretResolver webhookSecretResolver;
     private GitHubRepositoryMetadataClient metadataClient;
+    private GitHubBranchClient branchClient;
     private GitHubRepositoryBindingService service;
 
     @BeforeEach
@@ -56,6 +58,7 @@ class GitHubRepositoryBindingServiceTest {
         repositoryMapper = mock(GitHubRepositoryMapper.class);
         webhookSecretResolver = mock(WebhookSecretResolver.class);
         metadataClient = mock(GitHubRepositoryMetadataClient.class);
+        branchClient = mock(GitHubBranchClient.class);
         when(currentUserProvider.requireUserId()).thenReturn(USER_ID);
         service = new GitHubRepositoryBindingService(
                 currentUserProvider,
@@ -63,6 +66,7 @@ class GitHubRepositoryBindingServiceTest {
                 repositoryMapper,
                 webhookSecretResolver,
                 metadataClient,
+                branchClient,
                 Clock.fixed(Instant.parse("2026-07-31T12:00:00Z"), ZoneOffset.UTC)
         );
     }

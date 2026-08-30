@@ -34,6 +34,9 @@ Thumbs.db
 
 # AI & AGENTS
 docs/*
+!docs/full-stack-testing-finalization-report.md
+!docs/email-verification-finalization-report.md
+!docs/usability-collaboration-finalization-report.md
 !docs/agent/
 docs/agent/*
 !docs/agent/03-provider-and-reliable-loop.md

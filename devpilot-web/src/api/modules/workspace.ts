@@ -5,6 +5,7 @@ import type {
   UpdateWorkspaceRequest,
   PageResponse,
   ApiResult,
+  WorkspaceMember,
 } from '@/types/api'
 
 export function listWorkspacesApi(page = 1, size = 20): Promise<ApiResult<PageResponse<Workspace>>> {
@@ -13,6 +14,14 @@ export function listWorkspacesApi(page = 1, size = 20): Promise<ApiResult<PageRe
     method: 'GET',
     params: { page, size },
   })
+}
+
+export function listWorkspaceMembersApi(workspaceId: number): Promise<ApiResult<WorkspaceMember[]>> {
+  return request<WorkspaceMember[]>({ url: `/api/v1/workspaces/${workspaceId}/members`, method: 'GET' })
+}
+
+export function inviteWorkspaceMemberApi(workspaceId: number, email: string, role: WorkspaceMember['role']): Promise<ApiResult<null>> {
+  return request<null>({ url: `/api/v1/workspaces/${workspaceId}/members/invitations`, method: 'POST', data: { email, role } })
 }
 
 export function createWorkspaceApi(data: CreateWorkspaceRequest): Promise<ApiResult<Workspace>> {

@@ -75,6 +75,19 @@
             </template>
           </div>
 
+          <el-divider content-position="left">协作成员</el-divider>
+          <el-form inline :model="inviteForm">
+            <el-form-item label="已注册邮箱"><el-input v-model="inviteForm.email" placeholder="member@example.com" /></el-form-item>
+            <el-form-item label="角色"><el-select v-model="inviteForm.role" style="width: 120px"><el-option label="成员" value="MEMBER" /><el-option label="管理员" value="ADMIN" /><el-option label="只读" value="VIEWER" /></el-select></el-form-item>
+            <el-form-item><el-button type="primary" :loading="inviting" :disabled="!inviteForm.email" @click="inviteMember">发送邀请</el-button></el-form-item>
+          </el-form>
+          <el-table v-loading="membersLoading" :data="members" empty-text="暂无可显示的成员或您没有查看权限">
+            <el-table-column prop="userId" label="用户 ID" width="120" />
+            <el-table-column prop="role" label="角色" width="130" />
+            <el-table-column prop="status" label="状态" width="130" />
+            <el-table-column prop="joinedAt" label="加入时间" min-width="180"><template #default="scope">{{ scope.row.joinedAt || '等待接受' }}</template></el-table-column>
+          </el-table>
+
           <RawJsonPanel :data="rawJson" title="GET /api/v1/workspaces/{id} 原始响应" />
         </template>
       </PageState>
@@ -93,9 +106,11 @@ import {
   updateWorkspaceApi,
   disableWorkspaceApi,
   reactivateWorkspaceApi,
+  inviteWorkspaceMemberApi,
+  listWorkspaceMembersApi,
 } from '@/api/modules/workspace'
 import { useScopeStore } from '@/stores/scope'
-import type { Workspace } from '@/types/api'
+import type { Workspace, WorkspaceMember } from '@/types/api'
 import StatusBadge from '@/components/StatusBadge.vue'
 import PageState from '@/components/PageState.vue'
 import RawJsonPanel from '@/components/RawJsonPanel.vue'
@@ -113,6 +128,10 @@ const hasError = ref(false)
 const errorMsg = ref('')
 const workspace = ref<Workspace | null>(null)
 const rawJson = ref<any>(null)
+const members = ref<WorkspaceMember[]>([])
+const membersLoading = ref(false)
+const inviting = ref(false)
+const inviteForm = reactive<{ email: string; role: WorkspaceMember['role'] }>({ email: '', role: 'MEMBER' })
 
 const conflictDialogRef = ref()
 
@@ -137,6 +156,7 @@ async function fetchDetail() {
       editForm.expectedVersion = res.data.version
 
       scopeStore.setWorkspace(res.data.id, res.data.name)
+      void loadMembers()
     } else {
       hasError.value = true
       errorMsg.value = res.message || 'Workspace 不存在或无权限访问'
@@ -146,6 +166,30 @@ async function fetchDetail() {
     errorMsg.value = err.message || '网络连接失败'
   } finally {
     loading.value = false
+  }
+}
+
+async function loadMembers() {
+  membersLoading.value = true
+  try {
+    const res = await listWorkspaceMembersApi(workspaceId)
+    if (res.success && res.data) members.value = res.data
+  } finally {
+    membersLoading.value = false
+  }
+}
+
+async function inviteMember() {
+  inviting.value = true
+  try {
+    const res = await inviteWorkspaceMemberApi(workspaceId, inviteForm.email.trim(), inviteForm.role)
+    if (res.success) {
+      ElMessage.success('邀请已创建，等待对方接受')
+      inviteForm.email = ''
+      await loadMembers()
+    } else ElMessage.error(res.message || '邀请失败')
+  } finally {
+    inviting.value = false
   }
 }
 

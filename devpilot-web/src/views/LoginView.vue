@@ -9,15 +9,6 @@
       </template>
 
       <el-alert
-        title="账号说明"
-        type="info"
-        description="后端没有开放公开注册接口。请使用本地数据库初始化好的 ACTIVE 用户登录（支持用户名或邮箱）。"
-        show-icon
-        :closable="false"
-        style="margin-bottom: 20px;"
-      />
-
-      <el-alert
         v-if="errorMessage"
         type="error"
         show-icon
@@ -66,7 +57,8 @@
       </el-form>
 
       <div class="footer-note">
-        <span>默认后端: <code>http://127.0.0.1:8080</code></span>
+        <span>还没有账号？</span>
+        <router-link to="/register">注册本地账号</router-link>
         <span> | </span>
         <router-link to="/health">查看后端 Health 状态</router-link>
       </div>

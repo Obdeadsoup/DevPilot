@@ -5,5 +5,6 @@ public enum WorkspaceMemberStatus {
     INVITED,
     ACTIVE,
     SUSPENDED,
+    REJECTED,
     REMOVED
 }

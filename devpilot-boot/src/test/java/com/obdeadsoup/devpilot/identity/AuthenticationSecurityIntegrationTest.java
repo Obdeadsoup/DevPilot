@@ -178,6 +178,47 @@ class AuthenticationSecurityIntegrationTest {
     }
 
     @Test
+    void registerCreatesActiveUserWithBcryptHashAndSupportsSubsequentLogin() throws Exception {
+        MvcResult registration = register("New.User", "New.User@example.com", "secure-password-42")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.username").value("new.user"))
+                .andExpect(jsonPath("$.data.email").value("new.user@example.com"))
+                .andExpect(result -> assertThat(result.getResponse().getContentAsString())
+                        .doesNotContain("password", "passwordHash", "$2a$"))
+                .andReturn();
+
+        Long userId = objectMapper.readTree(registration.getResponse().getContentAsByteArray())
+                .path("data").path("id").asLong();
+        String storedHash = jdbcTemplate.queryForObject(
+                "SELECT password_hash FROM dp_user WHERE id = ?", String.class, userId);
+        assertThat(storedHash).startsWith("{bcrypt}");
+        assertThat(passwordEncoder.matches("secure-password-42", storedHash)).isTrue();
+        login("new.user@example.com", "secure-password-42")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.accessToken").isNotEmpty());
+    }
+
+    @Test
+    void registrationRejectsDuplicateUsernameAndEmailWithoutExposingPassword() throws Exception {
+        register("alice", "new@example.com", "secure-password-42")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("IDENTITY_0409"));
+        register("new-user", "alice@example.com", "secure-password-42")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("IDENTITY_0410"));
+    }
+
+    @Test
+    void registrationRejectsBadEmailAndWeakPassword() throws Exception {
+        register("new-user", "not-an-email", "secure-password-42")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COMMON_0400"));
+        register("new-user", "new@example.com", "short7a")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COMMON_0400"));
+    }
+
+    @Test
     void wrongPasswordAndUnknownUserHaveIdenticalExternalResponse() throws Exception {
         MvcResult wrongPassword = login(TEST_USERNAME, "wrong-password")
                 .andExpect(status().isUnauthorized())
@@ -337,6 +378,23 @@ class AuthenticationSecurityIntegrationTest {
                 .content(objectMapper.writeValueAsBytes(Map.of(
                         "login", login,
                         "password", password
+                ))));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions register(
+            String username, String email, String password
+    ) throws Exception {
+        redisTemplate.opsForValue().set(
+                "devpilot:auth:verification:email:code:" + email.strip().toLowerCase(java.util.Locale.ROOT),
+                "000421", Duration.ofMinutes(5)
+        );
+        return mockMvc.perform(post("/api/v1/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsBytes(Map.of(
+                        "username", username,
+                        "email", email,
+                        "password", password,
+                        "verificationCode", "000421"
                 ))));
     }
 

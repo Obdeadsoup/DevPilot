@@ -194,11 +194,8 @@ npm run dev
 
 ### 本地登录与 Bearer Token
 
-当前实现用户名或邮箱加密码登录，但不提供公开注册，也不会在 Flyway 中写入固定账号或密码。
-首次本地运行时，需要由本地管理员在 `dp_user` 中准备一个账号：`username` 和 `email`
-必须使用小写，`password_hash` 必须由
-`PasswordEncoderFactories.createDelegatingPasswordEncoder()` 动态生成，格式类似
-`{bcrypt}$2a$...`。不要把原始密码或生成的 Hash 提交到仓库。
+当前支持“邮箱验证码 → 注册 → 登录”。注册创建的 `dp_user` 使用既有
+`PasswordEncoderFactories.createDelegatingPasswordEncoder()` 生成 `{bcrypt}$2a$...` Hash；不要提交原始密码或 Hash。
 
 认证接口为：
 
@@ -232,6 +229,16 @@ Access Token 是至少 256 bit 的随机不透明值，默认有效期 2 小时�
 `devpilot.identity.access-token-ttl` 调整，配置上限为 24 小时。Redis Key 只包含原始
 Token 的 SHA-256，原始 Token 只返回客户端，不写入数据库和日志。退出登录会删除当前
 Token 对应的 Redis 会话；当前没有 Refresh Token、JWT 或 Cookie Session。
+
+### Email Verification
+
+注册先调用 `POST /api/v1/auth/verification/email`，再以 `username`、`email`、`password` 和六位
+`verificationCode` 调用 `POST /api/v1/auth/register`。验证码保存在 Redis 5 分钟，邮箱/IP 冷却默认 60 秒，
+连续五次错误会使该验证码失效；正确验证码通过 Redis Lua 原子消费，不能复用。
+
+本地 `local/dev/test` Profile 使用不出网的 Logging Sender（不会记录 code）。真实 SMTP 使用 `smtp` 或 `prod`
+Profile，并从环境变量读取 `MAIL_HOST`、`MAIL_PORT`、`MAIL_USERNAME`、`MAIL_PASSWORD`（SMTP 授权码，非邮箱密码）
+和 `MAIL_FROM`。QQ 通常为 `smtp.qq.com:465`，163 可改为 `smtp.163.com:465`；两者都不需要改代码。
 
 ### GitHub Webhook 垂直切片
 

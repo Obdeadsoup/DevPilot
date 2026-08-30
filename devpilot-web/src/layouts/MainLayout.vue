@@ -133,6 +133,10 @@
                 <el-icon><Tools /></el-icon>
                 <span>DEAD 运维与 Replay</span>
               </el-menu-item>
+              <el-menu-item :index="`/workspaces/${scopeStore.currentWorkspaceId}/projects/${scopeStore.currentProjectId}/agent`">
+                <el-icon><MagicStick /></el-icon>
+                <span>Agent Run</span>
+              </el-menu-item>
             </el-menu-item-group>
           </template>
 
@@ -200,6 +204,7 @@ import {
   Bell,
   Monitor,
   Cpu,
+  MagicStick,
 } from '@element-plus/icons-vue'
 
 const router = useRouter()

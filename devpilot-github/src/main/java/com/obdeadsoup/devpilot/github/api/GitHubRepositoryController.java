@@ -4,6 +4,7 @@ import com.obdeadsoup.devpilot.framework.api.ApiResponse;
 import com.obdeadsoup.devpilot.github.api.dto.BindGitHubRepositoryRequest;
 import com.obdeadsoup.devpilot.github.api.dto.GitHubRepositoryResponse;
 import com.obdeadsoup.devpilot.github.api.dto.GitHubRepositoryVersionRequest;
+import com.obdeadsoup.devpilot.github.api.dto.GitHubBranchResponse;
 import com.obdeadsoup.devpilot.github.application.GitHubRepositoryBindingService;
 import com.obdeadsoup.devpilot.github.domain.GitHubRepositoryStatus;
 import com.obdeadsoup.devpilot.project.api.dto.PageResponse;
@@ -21,6 +22,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @Validated
 @RestController
@@ -70,6 +73,15 @@ public class GitHubRepositoryController {
             @PathVariable @Positive long bindingId
     ) {
         return ApiResponse.success(bindingService.getRepository(workspaceId, projectId, bindingId));
+    }
+
+    @GetMapping("/{bindingId}/branches")
+    public ApiResponse<List<GitHubBranchResponse>> listBranches(
+            @PathVariable @Positive long workspaceId,
+            @PathVariable @Positive long projectId,
+            @PathVariable @Positive long bindingId) {
+        return ApiResponse.success(bindingService.listBranches(workspaceId, projectId, bindingId)
+                .stream().map(GitHubBranchResponse::from).toList());
     }
 
     @PostMapping("/{bindingId}/disable")

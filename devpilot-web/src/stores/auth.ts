@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { User, LoginResponse } from '@/types/api'
+import { getMeApi } from '@/api/modules/auth'
 
 const TOKEN_KEY = 'devpilot_access_token'
 const EXPIRES_KEY = 'devpilot_token_expires_at'
@@ -10,6 +11,7 @@ export const useAuthStore = defineStore('auth', () => {
   const expiresAt = ref<number | null>(null)
   const user = ref<User | null>(null)
   const restoring = ref<boolean>(false)
+  const restorationAttempted = ref<boolean>(false)
 
   const isAuthenticated = computed(() => {
     if (!accessToken.value) return false
@@ -39,7 +41,8 @@ export const useAuthStore = defineStore('auth', () => {
     sessionStorage.removeItem(EXPIRES_KEY)
   }
 
-  function restoreSession(): boolean {
+  async function restoreSession(): Promise<boolean> {
+    if (restorationAttempted.value) return isAuthenticated.value
     restoring.value = true
     try {
       const savedToken = sessionStorage.getItem(TOKEN_KEY)
@@ -50,13 +53,18 @@ export const useAuthStore = defineStore('auth', () => {
         if (!isNaN(expNum) && Date.now() < expNum) {
           accessToken.value = savedToken
           expiresAt.value = expNum
-          return true
+          const response = await getMeApi()
+          if (response.success && response.data) {
+            user.value = response.data
+            return true
+          }
         }
       }
       clearAuth()
       return false
     } finally {
       restoring.value = false
+      restorationAttempted.value = true
     }
   }
 
@@ -70,5 +78,6 @@ export const useAuthStore = defineStore('auth', () => {
     setUser,
     clearAuth,
     restoreSession,
+    restorationAttempted,
   }
 })

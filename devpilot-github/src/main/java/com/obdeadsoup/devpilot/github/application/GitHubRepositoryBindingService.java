@@ -6,6 +6,8 @@ import com.obdeadsoup.devpilot.github.application.client.GitHubApiException;
 import com.obdeadsoup.devpilot.github.application.client.GitHubApiResponse;
 import com.obdeadsoup.devpilot.github.application.client.GitHubConditionalRequest;
 import com.obdeadsoup.devpilot.github.application.client.GitHubRepositoryMetadataClient;
+import com.obdeadsoup.devpilot.github.application.client.GitHubBranch;
+import com.obdeadsoup.devpilot.github.application.client.GitHubBranchClient;
 import com.obdeadsoup.devpilot.github.application.client.VerifiedGitHubRepository;
 import com.obdeadsoup.devpilot.github.application.secret.WebhookSecretResolver;
 import com.obdeadsoup.devpilot.github.domain.GitHubRepositoryReference;
@@ -41,6 +43,7 @@ public class GitHubRepositoryBindingService {
     private final GitHubRepositoryMapper repositoryMapper;
     private final WebhookSecretResolver webhookSecretResolver;
     private final GitHubRepositoryMetadataClient metadataClient;
+    private final GitHubBranchClient branchClient;
     private final Clock clock;
 
     public GitHubRepositoryBindingService(
@@ -49,6 +52,7 @@ public class GitHubRepositoryBindingService {
             GitHubRepositoryMapper repositoryMapper,
             WebhookSecretResolver webhookSecretResolver,
             GitHubRepositoryMetadataClient metadataClient,
+            GitHubBranchClient branchClient,
             Clock clock
     ) {
         this.currentUserProvider = currentUserProvider;
@@ -56,7 +60,17 @@ public class GitHubRepositoryBindingService {
         this.repositoryMapper = repositoryMapper;
         this.webhookSecretResolver = webhookSecretResolver;
         this.metadataClient = metadataClient;
+        this.branchClient = branchClient;
         this.clock = clock;
+    }
+
+    /** 仅已授权的项目成员可实时读取绑定仓库分支；凭据只在服务端统一执行器中解析。 */
+    @Transactional(readOnly = true)
+    public java.util.List<GitHubBranch> listBranches(long workspaceId, long projectId, long bindingId) {
+        requirePermission(workspaceId, projectId, ProjectPermission.REPOSITORY_READ);
+        GitHubRepositoryEntity binding = requireBinding(workspaceId, projectId, bindingId);
+        requireKnownStatus(binding);
+        return branchClient.listBranches(binding.ownerLogin(), binding.repositoryName(), binding.apiCredentialRef());
     }
 
     /**

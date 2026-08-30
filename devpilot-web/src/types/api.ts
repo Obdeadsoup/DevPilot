@@ -35,11 +35,56 @@ export interface LoginRequest {
   password: string
 }
 
+export interface RegisterRequest {
+  username: string
+  email: string
+  password: string
+  verificationCode: string
+}
+
 export interface LoginResponse {
   accessToken: string
   tokenType: string
   expiresInSeconds: number
   user: User
+}
+
+export type AgentRunStatus = 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED'
+
+export interface AgentRun {
+  runId: string
+  requestId: string
+  workspaceId: number
+  projectId: number
+  createdBy: number
+  status: AgentRunStatus
+  userInput: string
+  finalOutput: string | null
+  failureKind: string | null
+  startedAt: string | null
+  finishedAt: string | null
+  createdAt: string
+  updatedAt: string
+  version: number
+}
+
+/** 列表接口有意不返回 input/output，详情页才加载敏感且体积较大的全文。 */
+export interface AgentRunHistoryItem {
+  runId: string
+  status: AgentRunStatus
+  failureKind: string | null
+  startedAt: string
+  finishedAt: string | null
+  createdAt: string
+}
+
+export interface AgentRunEvent {
+  runId: string
+  sequence: number
+  step: number
+  toolName: string | null
+  finalOutput: string | null
+  failureKind: string | null
 }
 
 // Workspace
@@ -53,6 +98,16 @@ export interface Workspace {
   version: number
   createdAt: string
   updatedAt: string
+}
+
+export interface WorkspaceMember {
+  id: number
+  userId: number
+  role: 'ADMIN' | 'MEMBER' | 'VIEWER'
+  status: 'INVITED' | 'ACTIVE' | 'SUSPENDED' | 'REJECTED' | 'REMOVED'
+  invitedBy: number
+  joinedAt: string | null
+  version: number
 }
 
 export interface CreateWorkspaceRequest {

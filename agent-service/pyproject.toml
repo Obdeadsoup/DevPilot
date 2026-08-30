@@ -9,7 +9,8 @@ description = "DevPilot Python Agent Runtime service boundary scaffold"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "grpcio>=1.83,<2",
+    # 共享 proto 由 grpcio-tools 1.83.1 生成；运行时下限必须匹配生成代码的版本检查。
+    "grpcio>=1.83.1,<2",
     "openai>=3.0,<4",
     "protobuf>=7.35.1,<8",
 ]

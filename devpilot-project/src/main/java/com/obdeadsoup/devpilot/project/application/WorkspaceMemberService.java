@@ -16,6 +16,8 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 @Service
 public class WorkspaceMemberService {
 
@@ -62,12 +64,42 @@ public class WorkspaceMemberService {
         }
     }
 
+    /** 邀请入口只接受现有 ACTIVE 账户；不存在的邮箱不会生成悬空成员记录。 */
+    @Transactional
+    public void inviteMemberByEmail(long workspaceId, String email, WorkspaceRole role) {
+        long userId = userAccountService.findActiveUserIdByEmail(email)
+                .orElseThrow(() -> new BusinessException(WorkspaceErrorCode.USER_NOT_ACTIVE));
+        inviteMember(workspaceId, userId, role);
+    }
+
     @Transactional
     public void activateMember(long workspaceId, long userId, long expectedVersion) {
         requireActiveUser(userId);
         if (memberMapper.activate(workspaceId, userId, expectedVersion) != 1) {
             throw new BusinessException(WorkspaceErrorCode.MEMBERSHIP_VERSION_CONFLICT);
         }
+    }
+
+    /** 仅当前受邀用户可接受自己的邀请，防止管理员或其他用户替代确认。 */
+    @Transactional
+    public void acceptOwnInvitation(long workspaceId, long expectedVersion) {
+        activateMember(workspaceId, currentUserProvider.requireUserId(), expectedVersion);
+    }
+
+    /** 拒绝是终态而非删除，保留邀请审计信息且不能获得任何 workspace/project 权限。 */
+    @Transactional
+    public void rejectOwnInvitation(long workspaceId, long expectedVersion) {
+        long userId = currentUserProvider.requireUserId();
+        if (memberMapper.reject(workspaceId, userId, expectedVersion) != 1) {
+            throw new BusinessException(WorkspaceErrorCode.MEMBERSHIP_VERSION_CONFLICT);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<WorkspaceMemberEntity> listMembers(long workspaceId) {
+        authorizationService.requirePermission(currentUserProvider.requireUserId(), workspaceId,
+                WorkspacePermission.WORKSPACE_MEMBER_LIST);
+        return memberMapper.findByWorkspace(workspaceId);
     }
 
     @Transactional

@@ -5,6 +5,7 @@ import com.obdeadsoup.devpilot.identity.security.BearerTokenAuthenticationFilter
 import com.obdeadsoup.devpilot.identity.security.BearerTokenResolver;
 import com.obdeadsoup.devpilot.identity.security.DatabaseUserDetailsService;
 import com.obdeadsoup.devpilot.identity.security.IdentityProperties;
+import com.obdeadsoup.devpilot.identity.config.EmailVerificationProperties;
 import com.obdeadsoup.devpilot.identity.security.JsonAccessDeniedHandler;
 import com.obdeadsoup.devpilot.identity.security.JsonAuthenticationEntryPoint;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -28,7 +29,7 @@ import java.security.SecureRandom;
 import java.util.Arrays;
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(IdentityProperties.class)
+@EnableConfigurationProperties({IdentityProperties.class, EmailVerificationProperties.class})
 @EnableMethodSecurity
 public class SecurityConfiguration {
 
@@ -96,6 +97,8 @@ public class SecurityConfiguration {
             }
             authorize
                 .requestMatchers(HttpMethod.POST, "/api/v1/github/webhooks").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/auth/verification/email").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/auth/register").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/auth/me").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").authenticated()

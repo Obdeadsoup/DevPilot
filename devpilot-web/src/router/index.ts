@@ -3,6 +3,7 @@ import { useAuthStore } from '@/stores/auth'
 
 import MainLayout from '@/layouts/MainLayout.vue'
 import LoginView from '@/views/LoginView.vue'
+import RegisterView from '@/views/RegisterView.vue'
 import HealthView from '@/views/HealthView.vue'
 
 import WorkspaceList from '@/views/workspace/WorkspaceList.vue'
@@ -33,6 +34,12 @@ const routes = [
     path: '/login',
     name: 'Login',
     component: LoginView,
+    meta: { public: true },
+  },
+  {
+    path: '/register',
+    name: 'Register',
+    component: RegisterView,
     meta: { public: true },
   },
   {
@@ -160,6 +167,11 @@ const routes = [
         component: () => import('@/views/operations/OperationsView.vue'),
       },
       {
+        path: 'workspaces/:workspaceId/projects/:projectId/agent',
+        name: 'AgentRun',
+        component: () => import('@/views/agent/AgentRunView.vue'),
+      },
+      {
         path: 'developer-console',
         name: 'DeveloperConsole',
         component: DeveloperConsoleView,
@@ -173,20 +185,22 @@ const router = createRouter({
   routes,
 })
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to) => {
   const authStore = useAuthStore()
 
-  if (!authStore.accessToken && sessionStorage.getItem('devpilot_access_token')) {
-    authStore.restoreSession()
+  if (!authStore.restorationAttempted) {
+    await authStore.restoreSession()
   }
 
   const isPublic = to.meta.public === true
 
   if (!isPublic && !authStore.isAuthenticated) {
-    next({ path: '/login', query: { returnUrl: to.fullPath } })
-  } else {
-    next()
+    return { path: '/login', query: { returnUrl: to.fullPath } }
   }
+  if (isPublic && authStore.isAuthenticated && (to.path === '/login' || to.path === '/register')) {
+    return { path: '/workspaces' }
+  }
+  return true
 })
 
 export default router
