@@ -9,11 +9,15 @@ public record AgentRunExecutionContext(
         long workspaceId,
         long projectId,
         long createdBy,
-        AgentRunStatus status
+        AgentRunStatus status,
+        String repositoryFullName,
+        String branchName,
+        String commitSha
 ) {
     static AgentRunExecutionContext from(AgentRunEntity entity) {
         return new AgentRunExecutionContext(
                 entity.getRunId(), entity.getRequestId(), entity.getWorkspaceId(),
-                entity.getProjectId(), entity.getCreatedBy(), AgentRunStatus.valueOf(entity.getStatus()));
+                entity.getProjectId(), entity.getCreatedBy(), AgentRunStatus.valueOf(entity.getStatus()),
+                entity.getRepositoryFullName(), entity.getBranchName(), entity.getCommitSha());
     }
 }

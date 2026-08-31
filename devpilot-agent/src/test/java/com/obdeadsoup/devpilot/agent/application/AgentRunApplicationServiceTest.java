@@ -4,6 +4,8 @@ import com.obdeadsoup.devpilot.framework.error.BusinessException;
 import com.obdeadsoup.devpilot.agent.error.AgentRunErrorCode;
 import com.obdeadsoup.devpilot.identity.application.CurrentUserProvider;
 import com.obdeadsoup.devpilot.identity.error.IdentityErrorCode;
+import com.obdeadsoup.devpilot.github.application.GitHubRepositoryBindingService;
+import com.obdeadsoup.devpilot.github.application.GitHubRepositoryBranchSnapshot;
 import com.obdeadsoup.devpilot.project.application.ProjectAuthorizationService;
 import com.obdeadsoup.devpilot.project.domain.ProjectPermission;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,12 +35,13 @@ class AgentRunApplicationServiceTest {
     private final AgentRunIdentityFactory identityFactory = mock(AgentRunIdentityFactory.class);
     private final AgentRunTimeProvider timeProvider = mock(AgentRunTimeProvider.class);
     private final AgentRunCancellationMetrics cancellationMetrics = mock(AgentRunCancellationMetrics.class);
+    private final GitHubRepositoryBindingService repositoryBindingService = mock(GitHubRepositoryBindingService.class);
     private AgentRunApplicationService service;
 
     @BeforeEach
     void setUp() {
         service = new AgentRunApplicationService(currentUserProvider, authorizationService, persistenceService,
-                streamCoordinator, identityFactory, timeProvider, cancellationMetrics);
+                streamCoordinator, identityFactory, timeProvider, cancellationMetrics, repositoryBindingService);
         when(currentUserProvider.requireUserId()).thenReturn(7L);
         when(identityFactory.create()).thenReturn(new AgentRunIdentity("request-1", "run-1"));
         when(timeProvider.now()).thenReturn(STARTED_AT);
@@ -48,7 +51,7 @@ class AgentRunApplicationServiceTest {
     void commitsRunningBeforeStartingStreamAndReturnsRunningWithoutWaiting() {
         AgentRunView running = view();
         when(persistenceService.createRunning(
-                "request-1", "run-1", 1, 2, 7, "hello", STARTED_AT)).thenReturn(running);
+                "request-1", "run-1", 1, 2, 7, "hello", AgentRunCodeSnapshot.none(), STARTED_AT)).thenReturn(running);
 
         AgentRunView result = service.start(1, 2, "  hello  ");
 
@@ -57,7 +60,7 @@ class AgentRunApplicationServiceTest {
         verify(authorizationService).requirePermission(7, 1, 2, ProjectPermission.AGENT_PROPOSE);
         InOrder order = inOrder(persistenceService, streamCoordinator);
         order.verify(persistenceService).createRunning(
-                "request-1", "run-1", 1, 2, 7, "hello", STARTED_AT);
+                "request-1", "run-1", 1, 2, 7, "hello", AgentRunCodeSnapshot.none(), STARTED_AT);
         order.verify(streamCoordinator).start(
                 1, 2, new AgentRunCommand("request-1", "run-1", "hello"));
         verify(persistenceService, never()).markSucceeded(anyLong(), anyLong(), any(), any(), any());
@@ -82,7 +85,7 @@ class AgentRunApplicationServiceTest {
 
         assertThatThrownBy(() -> service.start(1, 2, "hello")).isSameAs(denied);
         verify(identityFactory, never()).create();
-        verify(persistenceService, never()).createRunning(any(), any(), eq(1L), eq(2L), eq(7L), any(), any());
+        verify(persistenceService, never()).createRunning(any(), any(), eq(1L), eq(2L), eq(7L), any(), any(), any());
         verify(streamCoordinator, never()).start(anyLong(), anyLong(), any());
     }
 
@@ -93,7 +96,7 @@ class AgentRunApplicationServiceTest {
 
         assertThatThrownBy(() -> service.start(1, 2, "hello")).isSameAs(unauthenticated);
         verify(authorizationService, never()).requirePermission(anyLong(), anyLong(), anyLong(), any());
-        verify(persistenceService, never()).createRunning(any(), any(), anyLong(), anyLong(), anyLong(), any(), any());
+        verify(persistenceService, never()).createRunning(any(), any(), anyLong(), anyLong(), anyLong(), any(), any(), any());
     }
 
     @Test
@@ -118,13 +121,31 @@ class AgentRunApplicationServiceTest {
         verify(streamCoordinator, never()).cancel(anyLong(), anyLong(), any());
     }
 
+    @Test
+    void resolvesExplicitBranchAndPersistsTheAuthorityProvidedSnapshotBeforeStartingStream() {
+        AgentRunView running = view();
+        AgentRunCodeSnapshot snapshot = new AgentRunCodeSnapshot("octo/demo", "agent", "a".repeat(40));
+        when(repositoryBindingService.resolveActiveBranchSnapshotForAgentRun(1, 2, "agent"))
+                .thenReturn(java.util.Optional.of(new GitHubRepositoryBranchSnapshot(
+                        snapshot.repositoryFullName(), snapshot.branchName(), snapshot.commitSha())));
+        when(persistenceService.createRunning("request-1", "run-1", 1, 2, 7, "hello", snapshot, STARTED_AT))
+                .thenReturn(running);
+
+        service.start(1, 2, "hello", "agent");
+
+        InOrder order = inOrder(repositoryBindingService, persistenceService, streamCoordinator);
+        order.verify(repositoryBindingService).resolveActiveBranchSnapshotForAgentRun(1, 2, "agent");
+        order.verify(persistenceService).createRunning("request-1", "run-1", 1, 2, 7, "hello", snapshot, STARTED_AT);
+        order.verify(streamCoordinator).start(1, 2, new AgentRunCommand("request-1", "run-1", "hello"));
+    }
+
     private AgentRunView view() {
         return view(AgentRunStatus.RUNNING);
     }
 
     private AgentRunView view(AgentRunStatus status) {
         return new AgentRunView("run-1", "request-1", 1, 2, 7, status,
-                "hello", status == AgentRunStatus.SUCCEEDED ? "answer" : null, null,
+                "hello", null, null, null, status == AgentRunStatus.SUCCEEDED ? "answer" : null, null,
                 STARTED_AT, status == AgentRunStatus.RUNNING ? null : STARTED_AT,
                 STARTED_AT, STARTED_AT, status == AgentRunStatus.RUNNING ? 0 : 1);
     }

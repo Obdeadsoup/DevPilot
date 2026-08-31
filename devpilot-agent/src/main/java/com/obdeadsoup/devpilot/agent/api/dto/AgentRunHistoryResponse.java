@@ -9,6 +9,8 @@ import java.time.LocalDateTime;
 /** Agent 历史列表响应，故意不包含用户输入和模型输出全文。 */
 public record AgentRunHistoryResponse(
         String runId,
+        String branchName,
+        String commitSha,
         AgentRunStatus status,
         AgentRunFailureKind failureKind,
         LocalDateTime startedAt,
@@ -16,7 +18,7 @@ public record AgentRunHistoryResponse(
         LocalDateTime createdAt
 ) {
     public static AgentRunHistoryResponse from(AgentRunHistoryItem item) {
-        return new AgentRunHistoryResponse(item.runId(), item.status(), item.failureKind(),
+        return new AgentRunHistoryResponse(item.runId(), item.branchName(), item.commitSha(), item.status(), item.failureKind(),
                 item.startedAt(), item.finishedAt(), item.createdAt());
     }
 }

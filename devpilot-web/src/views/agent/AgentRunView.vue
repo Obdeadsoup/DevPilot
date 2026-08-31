@@ -21,6 +21,23 @@
       />
 
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
+        <el-form-item label="Repository">
+          <span v-if="repositoryLoading">正在加载 GitHub Repository…</span>
+          <code v-else-if="repositoryBinding">{{ repositoryBinding.fullName }}</code>
+          <span v-else>当前项目尚未绑定 GitHub Repository</span>
+        </el-form-item>
+        <el-form-item label="Branch">
+          <el-select v-model="selectedBranch" placeholder="选择 Branch" :loading="branchesLoading"
+            :disabled="!repositoryBinding || branchesLoading || Boolean(branchesError) || isRunActive" style="width: 100%;">
+            <el-option v-for="branch in branches" :key="branch.name" :label="branch.name" :value="branch.name">
+              <span>{{ branch.name }}</span>
+              <span class="branch-option-sha">{{ shortSha(branch.commitSha) }}</span>
+            </el-option>
+          </el-select>
+          <div v-if="repositoryBinding && !branchesLoading && !branchesError && branches.length === 0" class="field-hint">Repository 没有可选择的 Branch。</div>
+          <div v-if="!repositoryBinding && !repositoryLoading" class="field-hint">当前项目尚未绑定 GitHub Repository；将沿用既有无 GitHub 上下文运行能力。</div>
+        </el-form-item>
+        <el-alert v-if="branchesError" type="error" show-icon title="无法加载 Repository Branches" :description="branchesError" style="margin-bottom: 16px;" />
         <el-form-item label="Agent 输入" prop="input">
           <el-input
             v-model="form.input"
@@ -33,7 +50,7 @@
           />
         </el-form-item>
         <el-space>
-          <el-button type="primary" :loading="starting" :disabled="isRunActive" @click="startRun">启动 Agent</el-button>
+          <el-button type="primary" :loading="starting" :disabled="startDisabled" @click="startRun">启动 Agent</el-button>
           <el-button v-if="isRunActive" type="danger" :loading="cancelling" @click="cancelRun">取消当前 Run</el-button>
         </el-space>
       </el-form>
@@ -45,6 +62,9 @@
         <el-descriptions :column="2" border>
           <el-descriptions-item label="Run ID"><code>{{ run.runId }}</code></el-descriptions-item>
           <el-descriptions-item label="当前状态">{{ run.status }}</el-descriptions-item>
+          <el-descriptions-item label="Repository">{{ run.repositoryFullName || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="Branch"><code>{{ run.branchName || '-' }}</code></el-descriptions-item>
+          <el-descriptions-item label="Commit SHA"><code :title="run.commitSha || ''">{{ run.commitSha ? shortSha(run.commitSha) : '-' }}</code></el-descriptions-item>
           <el-descriptions-item label="启动时间">{{ run.startedAt || '等待运行' }}</el-descriptions-item>
           <el-descriptions-item label="结束时间">{{ run.finishedAt || '尚未结束' }}</el-descriptions-item>
           <el-descriptions-item v-if="run.failureKind" label="失败类型">{{ run.failureKind }}</el-descriptions-item>
@@ -73,6 +93,8 @@
       <el-alert v-if="historyError" type="error" show-icon :title="historyError" style="margin-bottom: 12px;" />
       <el-table v-loading="historyLoading" :data="history.items" empty-text="当前筛选条件下还没有运行记录">
         <el-table-column prop="runId" label="Run ID" min-width="220" show-overflow-tooltip />
+        <el-table-column label="Branch" min-width="130"><template #default="scope"><code>{{ scope.row.branchName || '-' }}</code></template></el-table-column>
+        <el-table-column label="Commit" min-width="120"><template #default="scope"><code :title="scope.row.commitSha || ''">{{ scope.row.commitSha ? shortSha(scope.row.commitSha) : '-' }}</code></template></el-table-column>
         <el-table-column label="状态" width="120">
           <template #default="scope"><el-tag :type="statusTagType(scope.row.status)">{{ scope.row.status }}</el-tag></template>
         </el-table-column>
@@ -93,8 +115,9 @@ import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { type FormInstance, type FormRules } from 'element-plus'
 import { cancelAgentRunApi, getAgentRunApi, listAgentRunsApi, startAgentRunApi } from '@/api/modules/agent'
+import { listRepositoriesApi, listRepositoryBranchesApi } from '@/api/modules/repository'
 import { connectAgentRunStream, type AgentRunStreamMessage } from '@/services/agentRunStream'
-import type { AgentRun, AgentRunHistoryItem, AgentRunStatus, PageResponse } from '@/types/api'
+import type { AgentRun, AgentRunHistoryItem, AgentRunStatus, GitHubBranch, GitHubRepositoryBinding, PageResponse } from '@/types/api'
 
 type TimelineItem = { key: string; timestamp: string; title: string; detail: string; type: 'primary' | 'success' | 'warning' | 'danger' | 'info' }
 
@@ -115,11 +138,19 @@ const historyLoading = ref(false)
 const historyError = ref('')
 const historyStatus = ref('')
 const history = ref<PageResponse<AgentRunHistoryItem>>({ page: 0, size: 20, total: 0, items: [] })
+const repositoryBinding = ref<GitHubRepositoryBinding | null>(null)
+const repositoryLoading = ref(false)
+const branches = ref<GitHubBranch[]>([])
+const branchesLoading = ref(false)
+const branchesError = ref('')
+const selectedBranch = ref<string | undefined>()
 const lastEventId = ref<string | null>(null)
 let disconnectStream: (() => void) | null = null
 let reconnectAttempts = 0
 
 const isRunActive = computed(() => run.value?.status === 'PENDING' || run.value?.status === 'RUNNING')
+const startDisabled = computed(() => isRunActive.value || repositoryLoading.value || branchesLoading.value
+  || Boolean(branchesError.value) || Boolean(repositoryBinding.value && (!selectedBranch.value || branches.value.length === 0)))
 
 async function startRun() {
   if (!formRef.value || !(await formRef.value.validate().catch(() => false))) return
@@ -128,7 +159,10 @@ async function startRun() {
   events.value = []
   lastEventId.value = null
   try {
-    const result = await startAgentRunApi(workspaceId, projectId, form.input.trim())
+    const result = await startAgentRunApi(workspaceId, projectId, {
+      input: form.input.trim(),
+      ...(repositoryBinding.value ? { branchName: selectedBranch.value } : {}),
+    })
     if (!result.success || !result.data) {
       errorMessage.value = result.message || 'Agent Run 创建失败。'
       return
@@ -140,6 +174,51 @@ async function startRun() {
   } finally {
     starting.value = false
   }
+}
+
+async function loadRepositoryContext() {
+  repositoryLoading.value = true
+  branchesError.value = ''
+  try {
+    const repositories = await listRepositoriesApi(workspaceId, projectId, { page: 1, size: 20, status: 'ACTIVE' })
+    if (!repositories.success || !repositories.data) {
+      branchesError.value = repositories.message || '无法加载项目 GitHub Repository'
+      return
+    }
+    repositoryBinding.value = repositories.data.items[0] || null
+    if (!repositoryBinding.value) return
+    await loadBranches()
+  } catch (err: any) {
+    branchesError.value = err.message || '无法加载项目 GitHub Repository'
+  } finally {
+    repositoryLoading.value = false
+  }
+}
+
+async function loadBranches() {
+  if (!repositoryBinding.value) return
+  branchesLoading.value = true
+  branchesError.value = ''
+  try {
+    const result = await listRepositoryBranchesApi(workspaceId, projectId, repositoryBinding.value.id)
+    if (!result.success || !result.data) {
+      branchesError.value = result.message || '无法加载 Repository Branches'
+      return
+    }
+    branches.value = result.data
+    selectedBranch.value = branches.value.some(branch => branch.name === repositoryBinding.value?.defaultBranch)
+      ? repositoryBinding.value.defaultBranch
+      : undefined
+    if (!selectedBranch.value) branchesError.value = 'Repository 默认 Branch 不在 GitHub 当前返回的 Branches 中'
+  } catch (err: any) {
+    branchesError.value = err.message || '无法加载 Repository Branches'
+  } finally {
+    branchesLoading.value = false
+  }
+}
+
+function shortSha(sha: string) {
+  return sha.slice(0, 12)
 }
 
 async function loadHistory(page = history.value.page) {
@@ -278,7 +357,10 @@ function statusTagType(status: AgentRunStatus) {
   return 'info'
 }
 
-onMounted(() => void loadHistory(0))
+onMounted(() => {
+  void loadHistory(0)
+  void loadRepositoryContext()
+})
 onUnmounted(() => disconnectStream?.())
 </script>
 
@@ -288,4 +370,6 @@ onUnmounted(() => disconnectStream?.())
 .event-detail { display: block; margin-top: 4px; color: #606266; white-space: pre-wrap; word-break: break-word; }
 .final-output { white-space: pre-wrap; word-break: break-word; background: #fafafa; }
 .history-pager { display: flex; justify-content: flex-end; margin-top: 16px; }
+.field-hint { margin-top: 6px; color: #909399; font-size: 12px; }
+.branch-option-sha { float: right; margin-left: 24px; color: #909399; font-family: monospace; }
 </style>

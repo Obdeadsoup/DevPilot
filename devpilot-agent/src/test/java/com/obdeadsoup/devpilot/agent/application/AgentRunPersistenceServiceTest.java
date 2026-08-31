@@ -29,13 +29,17 @@ class AgentRunPersistenceServiceTest {
         AgentRunEntity stored = entity("RUNNING", null, null, 0);
         when(mapper.findByScope(1, 2, "run-1")).thenReturn(Optional.of(stored));
 
-        AgentRunView result = service.createRunning("request-1", "run-1", 1, 2, 7, "hello", now);
+        AgentRunCodeSnapshot snapshot = new AgentRunCodeSnapshot("octo/demo", "agent", "a".repeat(40));
+        AgentRunView result = service.createRunning("request-1", "run-1", 1, 2, 7, "hello", snapshot, now);
 
         ArgumentCaptor<AgentRunEntity> inserted = ArgumentCaptor.forClass(AgentRunEntity.class);
         verify(mapper).insert(inserted.capture());
         assertThat(inserted.getValue().getStatus()).isEqualTo("RUNNING");
         assertThat(inserted.getValue().getVersion()).isZero();
         assertThat(inserted.getValue().getFinishedAt()).isNull();
+        assertThat(inserted.getValue().getRepositoryFullName()).isEqualTo("octo/demo");
+        assertThat(inserted.getValue().getBranchName()).isEqualTo("agent");
+        assertThat(inserted.getValue().getCommitSha()).isEqualTo("a".repeat(40));
         assertThat(result.status()).isEqualTo(AgentRunStatus.RUNNING);
     }
 
@@ -80,6 +84,27 @@ class AgentRunPersistenceServiceTest {
         verify(mapper).markFailed(1, 2, "run-1", "PROTOCOL", now, 0);
     }
 
+    @Test
+    void runtimeContextCarriesFrozenCodeSnapshotAndLegacyNullsRemainReadable() {
+        when(mapper.findByRunId("run-1")).thenReturn(Optional.of(entity("RUNNING", null, null, 0)));
+
+        AgentRunExecutionContext snapshotContext = service.findByRunIdForRuntime("run-1").orElseThrow();
+
+        assertThat(snapshotContext.repositoryFullName()).isEqualTo("octo/demo");
+        assertThat(snapshotContext.branchName()).isEqualTo("agent");
+        assertThat(snapshotContext.commitSha()).isEqualTo("a".repeat(40));
+
+        AgentRunEntity legacy = entity("RUNNING", null, null, 0);
+        legacy.setRepositoryFullName(null);
+        legacy.setBranchName(null);
+        legacy.setCommitSha(null);
+        when(mapper.findByRunId("legacy-run")).thenReturn(Optional.of(legacy));
+
+        AgentRunExecutionContext legacyContext = service.findByRunIdForRuntime("legacy-run").orElseThrow();
+        assertThat(legacyContext.branchName()).isNull();
+        assertThat(legacyContext.commitSha()).isNull();
+    }
+
     private AgentRunEntity entity(String status, String output, String failureKind, long version) {
         AgentRunEntity entity = new AgentRunEntity();
         entity.setId(10L);
@@ -90,6 +115,9 @@ class AgentRunPersistenceServiceTest {
         entity.setCreatedBy(7);
         entity.setStatus(status);
         entity.setUserInput("hello");
+        entity.setRepositoryFullName("octo/demo");
+        entity.setBranchName("agent");
+        entity.setCommitSha("a".repeat(40));
         entity.setFinalOutput(output);
         entity.setFailureKind(failureKind);
         entity.setStartedAt(now);

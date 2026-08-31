@@ -95,6 +95,12 @@ public interface GitHubRepositoryMapper {
             @Param("fullName") String fullName
     );
 
+    @Select("SELECT " + COLUMNS + " FROM dp_github_repository"
+            + " WHERE workspace_id=#{workspaceId} AND project_id=#{projectId}"
+            + " AND binding_status='ACTIVE' AND deleted=0 ORDER BY id DESC LIMIT 1")
+    Optional<GitHubRepositoryEntity> findActiveByProject(@Param("workspaceId") long workspaceId,
+                                                           @Param("projectId") long projectId);
+
     @Select("""
             SELECT
             """ + COLUMNS + """

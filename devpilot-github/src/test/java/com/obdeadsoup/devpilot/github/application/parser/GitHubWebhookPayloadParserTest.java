@@ -56,6 +56,18 @@ class GitHubWebhookPayloadParserTest {
     }
 
     @Test
+    void preservesNonDefaultBranchInPushRef() {
+        String json = """
+                {"ref":"refs/heads/agent","before":"%s","after":"%s","compare":"https://github.com/octo/demo/compare/1...2",
+                 "repository":{"id":123},"sender":{"id":7,"login":"dev"},"commits":[]}
+                """.formatted("1".repeat(40), "2".repeat(40));
+
+        RecordProjectActivityCommand activity = parser.parse(delivery("push", json));
+
+        assertThat(activity.gitRef()).isEqualTo("refs/heads/agent");
+    }
+
+    @Test
     void pushProcessingPlanContainsCommitDetailsForUnifiedUpsert() {
         String sha = "a".repeat(40);
         String json = """

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /** 分支读取 Client，复用统一 GitHub HTTP 执行链，因此不会泄漏 Token 或绕过限流策略。 */
@@ -31,7 +32,7 @@ public class RestClientGitHubBranchClient implements GitHubBranchClient {
                 throw new GitHubApiException(GitHubApiFailureType.MALFORMED_RESPONSE, false, null,
                         response.httpStatus(), "GitHub API returned an invalid branch", null, response.rateLimit());
             }
-            return new GitHubBranch(branch.name(), branch.commit().sha());
+            return new GitHubBranch(branch.name(), branch.commit().sha().toLowerCase(Locale.ROOT));
         }).toList();
     }
 

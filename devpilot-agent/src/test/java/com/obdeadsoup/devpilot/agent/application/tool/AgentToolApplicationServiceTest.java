@@ -53,7 +53,7 @@ class AgentToolApplicationServiceTest {
 
         when(contextQuery.findByRunIdForRuntime("run-1"))
                 .thenReturn(Optional.of(new AgentRunExecutionContext(
-                        "run-1", "other", 11, 22, 33, AgentRunStatus.RUNNING)));
+                        "run-1", "other", 11, 22, 33, AgentRunStatus.RUNNING, null, null, null)));
         assertKind(service, command("project.get_summary", Map.of()), AgentToolErrorKind.PROTOCOL);
 
         when(contextQuery.findByRunIdForRuntime("run-1")).thenReturn(Optional.of(context(AgentRunStatus.RUNNING)));
@@ -78,7 +78,7 @@ class AgentToolApplicationServiceTest {
     }
 
     private AgentRunExecutionContext context(AgentRunStatus status) {
-        return new AgentRunExecutionContext("run-1", "request-1", 11, 22, 33, status);
+        return new AgentRunExecutionContext("run-1", "request-1", 11, 22, 33, status, null, null, null);
     }
 
     private void assertKind(AgentToolApplicationService service, AgentToolCommand command,

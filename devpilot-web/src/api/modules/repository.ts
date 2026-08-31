@@ -1,6 +1,7 @@
 import { request } from '../client'
 import type {
   GitHubRepositoryBinding,
+  GitHubBranch,
   CreateGitHubRepositoryRequest,
   PageResponse,
   ApiResult,
@@ -15,6 +16,18 @@ export function listRepositoriesApi(
     url: `/api/v1/workspaces/${workspaceId}/projects/${projectId}/github-repositories`,
     method: 'GET',
     params,
+  })
+}
+
+/** 由 Java Core 代理 GitHub 实时分支读取，浏览器不直接携带仓库凭据请求 GitHub。 */
+export function listRepositoryBranchesApi(
+  workspaceId: number,
+  projectId: number,
+  bindingId: number,
+): Promise<ApiResult<GitHubBranch[]>> {
+  return request<GitHubBranch[]>({
+    url: `/api/v1/workspaces/${workspaceId}/projects/${projectId}/github-repositories/${bindingId}/branches`,
+    method: 'GET',
   })
 }
 

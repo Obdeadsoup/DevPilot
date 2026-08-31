@@ -11,6 +11,9 @@ public class AgentRunEntity {
     private long createdBy;
     private String status;
     private String userInput;
+    private String repositoryFullName;
+    private String branchName;
+    private String commitSha;
     private String finalOutput;
     private String failureKind;
     private LocalDateTime startedAt;
@@ -36,6 +39,12 @@ public class AgentRunEntity {
     public void setStatus(String status) { this.status = status; }
     public String getUserInput() { return userInput; }
     public void setUserInput(String userInput) { this.userInput = userInput; }
+    public String getRepositoryFullName() { return repositoryFullName; }
+    public void setRepositoryFullName(String repositoryFullName) { this.repositoryFullName = repositoryFullName; }
+    public String getBranchName() { return branchName; }
+    public void setBranchName(String branchName) { this.branchName = branchName; }
+    public String getCommitSha() { return commitSha; }
+    public void setCommitSha(String commitSha) { this.commitSha = commitSha; }
     public String getFinalOutput() { return finalOutput; }
     public void setFinalOutput(String finalOutput) { this.finalOutput = finalOutput; }
     public String getFailureKind() { return failureKind; }

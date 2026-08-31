@@ -186,6 +186,7 @@ class AgentRunStreamCoordinatorTest {
 
     private AgentRunView view(AgentRunStatus status) {
         return new AgentRunView("run-1", "request-1", 1, 2, 7, status, "hello",
+                null, null, null,
                 status == AgentRunStatus.SUCCEEDED ? "answer" : null,
                 status == AgentRunStatus.FAILED ? AgentRunFailureKind.INTERNAL : null,
                 NOW, status == AgentRunStatus.RUNNING ? null : NOW, NOW, NOW,

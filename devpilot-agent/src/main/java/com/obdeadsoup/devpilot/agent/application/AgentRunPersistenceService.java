@@ -27,7 +27,8 @@ public class AgentRunPersistenceService implements AgentRunExecutionContextQuery
     /** 先持久化可查询的 RUNNING 投影；唯一键冲突会转换成稳定业务错误。 */
     @Transactional
     public AgentRunView createRunning(String requestId, String runId, long workspaceId, long projectId,
-                                      long createdBy, String userInput, LocalDateTime startedAt) {
+                                      long createdBy, String userInput, AgentRunCodeSnapshot codeSnapshot,
+                                      LocalDateTime startedAt) {
         AgentRunEntity entity = new AgentRunEntity();
         entity.setRequestId(requestId);
         entity.setRunId(runId);
@@ -36,6 +37,9 @@ public class AgentRunPersistenceService implements AgentRunExecutionContextQuery
         entity.setCreatedBy(createdBy);
         entity.setStatus(AgentRunStatus.RUNNING.name());
         entity.setUserInput(userInput);
+        entity.setRepositoryFullName(codeSnapshot.repositoryFullName());
+        entity.setBranchName(codeSnapshot.branchName());
+        entity.setCommitSha(codeSnapshot.commitSha());
         entity.setStartedAt(startedAt);
         entity.setVersion(0);
         entity.setDeleted(false);
@@ -45,6 +49,13 @@ public class AgentRunPersistenceService implements AgentRunExecutionContextQuery
             throw new BusinessException(AgentRunErrorCode.AGENT_RUN_ID_CONFLICT);
         }
         return requireByScope(workspaceId, projectId, runId);
+    }
+
+    /** 兼容没有 GitHub 上下文的既有内部调用。 */
+    public AgentRunView createRunning(String requestId, String runId, long workspaceId, long projectId,
+                                      long createdBy, String userInput, LocalDateTime startedAt) {
+        return createRunning(requestId, runId, workspaceId, projectId, createdBy, userInput,
+                AgentRunCodeSnapshot.none(), startedAt);
     }
 
     /** 仅允许 version=0 的 RUNNING 投影成功一次，防止并发终态相互覆盖。 */

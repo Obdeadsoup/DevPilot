@@ -32,32 +32,8 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# AI & AGENTS
 docs/*
-!docs/full-stack-testing-finalization-report.md
-!docs/email-verification-finalization-report.md
-!docs/usability-collaboration-finalization-report.md
-!docs/agent/
-docs/agent/*
-!docs/agent/03-provider-and-reliable-loop.md
-!docs/agent/04-java-python-grpc.md
-!docs/agent/05-agent-run-business-projection.md
-!docs/agent/06-grpc-streaming-sse.md
-!docs/agent/07-read-only-tool-gateway.md
-!docs/cloud/
-docs/cloud/*
-!docs/cloud/08-spring-cloud-gateway-nacos.md
-!docs/cloud/09-agent-resilience-failure-model.md
-!docs/changes/
-docs/changes/*
-!docs/changes/agent-03-provider-reliable-loop-file-map.md
-!docs/changes/agent-04-grpc-file-map.md
-!docs/changes/agent-05-agent-run-file-map.md
-!docs/changes/agent-06-streaming-sse-file-map.md
-!docs/changes/agent-07-tool-gateway-file-map.md
-!docs/changes/cloud-08-gateway-nacos-file-map.md
-!docs/changes/cloud-09-agent-resilience-file-map.md
-
+agent-service/tests/_pycache_/*
 # Local performance results
 performance/jmeter/results/
 

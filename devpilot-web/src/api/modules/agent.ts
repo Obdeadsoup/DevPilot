@@ -9,12 +9,12 @@ function runBase(workspaceId: number, projectId: number) {
 export function startAgentRunApi(
   workspaceId: number,
   projectId: number,
-  input: string,
+  data: { input: string; branchName?: string },
 ): Promise<ApiResult<AgentRun>> {
   return request<AgentRun>({
     url: runBase(workspaceId, projectId),
     method: 'POST',
-    data: { input },
+    data,
   })
 }
 

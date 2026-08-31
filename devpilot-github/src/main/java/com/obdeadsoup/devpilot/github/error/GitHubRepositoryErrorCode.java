@@ -52,6 +52,9 @@ public enum GitHubRepositoryErrorCode implements ErrorCode {
     ),
     GITHUB_API_RESPONSE_INVALID(
             "GITHUB_REPOSITORY_0513", "GitHub API returned an invalid repository response", HttpStatus.BAD_GATEWAY
+    ),
+    GITHUB_BRANCH_NOT_FOUND(
+            "GITHUB_BRANCH_0404", "The requested GitHub branch does not exist in the active repository", HttpStatus.NOT_FOUND
     );
 
     private final String code;

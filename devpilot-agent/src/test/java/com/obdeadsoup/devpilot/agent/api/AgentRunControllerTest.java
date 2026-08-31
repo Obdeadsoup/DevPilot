@@ -37,9 +37,9 @@ class AgentRunControllerTest {
     void wrapsApplicationProjectionInStandardApiResponse() {
         LocalDateTime now = LocalDateTime.of(2026, 8, 25, 12, 0);
         AgentRunView view = new AgentRunView("run-1", "request-1", 1, 2, 7,
-                AgentRunStatus.RUNNING, "hello", null, null,
+                AgentRunStatus.RUNNING, "hello", "octo/demo", "agent", "a".repeat(40), null, null,
                 now, null, now, now, 0);
-        when(service.start(1, 2, "hello")).thenReturn(view);
+        when(service.start(1, 2, "hello", null)).thenReturn(view);
 
         var response = controller.start(1, 2, new StartAgentRunRequest("hello"));
 
@@ -47,13 +47,13 @@ class AgentRunControllerTest {
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().code()).isEqualTo("COMMON_0000");
         assertThat(response.getBody().data().status()).isEqualTo(AgentRunStatus.RUNNING);
-        verify(service).start(1, 2, "hello");
+        verify(service).start(1, 2, "hello", null);
     }
 
     @Test
     void permissionErrorFromApplicationBoundaryIsNotSwallowed() {
         BusinessException denied = new BusinessException(IdentityErrorCode.ACCESS_DENIED);
-        when(service.start(1, 2, "hello")).thenThrow(denied);
+        when(service.start(1, 2, "hello", null)).thenThrow(denied);
 
         assertThatThrownBy(() -> controller.start(1, 2, new StartAgentRunRequest("hello")))
                 .isSameAs(denied);
@@ -63,7 +63,7 @@ class AgentRunControllerTest {
     void cancelReturnsCancelledProjection() {
         LocalDateTime now = LocalDateTime.of(2026, 8, 25, 12, 0);
         AgentRunView view = new AgentRunView("run-1", "request-1", 1, 2, 7,
-                AgentRunStatus.CANCELLED, "hello", null, null,
+                AgentRunStatus.CANCELLED, "hello", null, null, null, null, null,
                 now, now, now, now, 1);
         when(service.cancel(1, 2, "run-1")).thenReturn(view);
 
@@ -78,7 +78,7 @@ class AgentRunControllerTest {
         LocalDateTime now = LocalDateTime.of(2026, 8, 25, 12, 0);
         when(service.listHistory(1, 2, AgentRunStatus.SUCCEEDED, 0, 20)).thenReturn(
                 new PageResponse<>(0, 20, 1, List.of(new AgentRunHistoryItem(
-                        "run-1", AgentRunStatus.SUCCEEDED, null, now, now, now))));
+                        "run-1", "agent", "a".repeat(40), AgentRunStatus.SUCCEEDED, null, now, now, now))));
 
         var response = controller.list(1, 2, AgentRunStatus.SUCCEEDED, 0, 20);
 

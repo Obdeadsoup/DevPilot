@@ -39,6 +39,11 @@
             <groupId>com.obdeadsoup</groupId>
             <artifactId>devpilot-task</artifactId>
         </dependency>
+        <!-- Agent Run 必须通过 GitHub Application Service 权威解析 branch HEAD，不能信任浏览器 SHA。 -->
+        <dependency>
+            <groupId>com.obdeadsoup</groupId>
+            <artifactId>devpilot-github</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-autoconfigure</artifactId>

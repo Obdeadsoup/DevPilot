@@ -39,7 +39,7 @@ public class AgentRunController {
             @PathVariable @Positive long projectId,
             @Valid @RequestBody StartAgentRunRequest request) {
         return ResponseEntity.accepted().body(ApiResponse.success(AgentRunResponse.from(
-                applicationService.start(workspaceId, projectId, request.input()))));
+                applicationService.start(workspaceId, projectId, request.input(), request.branchName()))));
     }
 
     @GetMapping("/{runId}")

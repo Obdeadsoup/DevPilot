@@ -370,7 +370,8 @@ PR current-head Review 超时扫描，以及 MySQL Transactional Outbox 驱动�
 Outbox 支持 PENDING/PROCESSING/RETRY_WAIT/PROCESSED/DEAD、version claim、有限重试和 stale 恢复。
 数据库 Notification 是可靠来源；单实例 SSE 支持多连接和 Heartbeat，断线后由 REST 查询补偿。
 
-Agent 当前提供生命周期 Streaming 与只读 Tool Gateway 纵切：Java 先在 MySQL 提交 scoped `RUNNING` 投影，再用 async gRPC Stub
+Agent 当前提供生命周期 Streaming 与只读 Tool Gateway 纵切：如项目存在 ACTIVE GitHub Repository，浏览器可选择其
+Branch，Java 在创建 Run 时权威解析并冻结 branch HEAD SHA；Java 先在 MySQL 提交带该代码快照的 scoped `RUNNING` 投影，再用 async gRPC Stub
 订阅独立 Python Runtime 的 Server Streaming；POST 立即返回 `202 + RUNNING/runId`，terminal callback 以另一短事务
 写入 `SUCCEEDED/FAILED`。POST 需要 `AGENT_PROPOSE`，GET/SSE 需要 `AGENT_READ`：
 

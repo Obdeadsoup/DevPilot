@@ -14,6 +14,9 @@ public record AgentRunResponse(
         long createdBy,
         AgentRunStatus status,
         String userInput,
+        String repositoryFullName,
+        String branchName,
+        String commitSha,
         String finalOutput,
         AgentRunFailureKind failureKind,
         LocalDateTime startedAt,
@@ -24,7 +27,8 @@ public record AgentRunResponse(
 ) {
     public static AgentRunResponse from(AgentRunView view) {
         return new AgentRunResponse(view.runId(), view.requestId(), view.workspaceId(), view.projectId(),
-                view.createdBy(), view.status(), view.userInput(), view.finalOutput(), view.failureKind(),
+                view.createdBy(), view.status(), view.userInput(), view.repositoryFullName(), view.branchName(),
+                view.commitSha(), view.finalOutput(), view.failureKind(),
                 view.startedAt(), view.finishedAt(), view.createdAt(), view.updatedAt(), view.version());
     }
 }

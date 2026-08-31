@@ -27,7 +27,7 @@ import static org.mockito.Mockito.when;
 
 class AgentReadToolHandlersTest {
     private static final AgentRunExecutionContext CONTEXT = new AgentRunExecutionContext(
-            "run", "request", 10, 20, 30, AgentRunStatus.RUNNING);
+            "run", "request", 10, 20, 30, AgentRunStatus.RUNNING, "octo/demo", "agent", "a".repeat(40));
 
     @Test
     void projectSummaryUsesExplicitActorAndBoundsDescription() {

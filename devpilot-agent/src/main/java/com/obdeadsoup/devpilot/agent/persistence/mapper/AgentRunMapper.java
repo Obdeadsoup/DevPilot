@@ -18,16 +18,18 @@ public interface AgentRunMapper {
     String COLUMNS = """
             id, run_id AS runId, request_id AS requestId, workspace_id AS workspaceId,
             project_id AS projectId, created_by AS createdBy, status, user_input AS userInput,
+            repository_full_name AS repositoryFullName, branch_name AS branchName, commit_sha AS commitSha,
             final_output AS finalOutput, failure_kind AS failureKind, started_at AS startedAt,
             finished_at AS finishedAt, created_at AS createdAt, updated_at AS updatedAt, version, deleted
             """;
 
     @Insert("""
             INSERT INTO dp_agent_run (run_id, request_id, workspace_id, project_id, created_by, status,
-                user_input, final_output, failure_kind, started_at, finished_at, version, deleted)
+                user_input, repository_full_name, branch_name, commit_sha, final_output, failure_kind,
+                started_at, finished_at, version, deleted)
             VALUES (#{run.runId}, #{run.requestId}, #{run.workspaceId}, #{run.projectId}, #{run.createdBy},
-                #{run.status}, #{run.userInput}, #{run.finalOutput}, #{run.failureKind}, #{run.startedAt},
-                #{run.finishedAt}, #{run.version}, #{run.deleted})
+                #{run.status}, #{run.userInput}, #{run.repositoryFullName}, #{run.branchName}, #{run.commitSha},
+                #{run.finalOutput}, #{run.failureKind}, #{run.startedAt}, #{run.finishedAt}, #{run.version}, #{run.deleted})
             """)
     @Options(useGeneratedKeys = true, keyProperty = "run.id")
     int insert(@Param("run") AgentRunEntity run);

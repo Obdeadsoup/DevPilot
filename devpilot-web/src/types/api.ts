@@ -59,6 +59,9 @@ export interface AgentRun {
   createdBy: number
   status: AgentRunStatus
   userInput: string
+  repositoryFullName: string | null
+  branchName: string | null
+  commitSha: string | null
   finalOutput: string | null
   failureKind: string | null
   startedAt: string | null
@@ -71,6 +74,8 @@ export interface AgentRun {
 /** 列表接口有意不返回 input/output，详情页才加载敏感且体积较大的全文。 */
 export interface AgentRunHistoryItem {
   runId: string
+  branchName: string | null
+  commitSha: string | null
   status: AgentRunStatus
   failureKind: string | null
   startedAt: string
@@ -174,6 +179,11 @@ export interface GitHubRepositoryBinding {
   version: number
   createdAt: string
   updatedAt: string
+}
+
+export interface GitHubBranch {
+  name: string
+  commitSha: string
 }
 
 export interface CreateGitHubRepositoryRequest {

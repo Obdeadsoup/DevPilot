@@ -63,6 +63,20 @@
             </el-descriptions-item>
           </el-descriptions>
 
+          <el-divider content-position="left">Branches</el-divider>
+          <el-alert v-if="branchesError" type="error" show-icon :title="branchesError" style="margin-bottom: 12px;" />
+          <el-table v-loading="branchesLoading" :data="branches" empty-text="GitHub 当前没有返回可用 Branch">
+            <el-table-column prop="name" label="Branch" min-width="260">
+              <template #default="scope">
+                <code>{{ scope.row.name }}</code>
+                <el-tag v-if="scope.row.name === binding.defaultBranch" size="small" type="success" style="margin-left: 8px;">Default</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="HEAD" min-width="220">
+              <template #default="scope"><code :title="scope.row.commitSha">{{ shortSha(scope.row.commitSha) }}</code></template>
+            </el-table-column>
+          </el-table>
+
           <el-divider content-position="left">绑定动作与状态流转</el-divider>
 
           <div class="action-bar">
@@ -108,9 +122,10 @@ import {
   reactivateRepositoryApi,
   refreshRepositoryApi,
   unbindRepositoryApi,
+  listRepositoryBranchesApi,
 } from '@/api/modules/repository'
 import { triggerCommitSyncApi } from '@/api/modules/sync'
-import type { GitHubRepositoryBinding } from '@/types/api'
+import type { GitHubBranch, GitHubRepositoryBinding } from '@/types/api'
 import StatusBadge from '@/components/StatusBadge.vue'
 import PageState from '@/components/PageState.vue'
 import RawJsonPanel from '@/components/RawJsonPanel.vue'
@@ -128,6 +143,9 @@ const actionLoading = ref(false)
 const hasError = ref(false)
 const errorMsg = ref('')
 const binding = ref<GitHubRepositoryBinding | null>(null)
+const branches = ref<GitHubBranch[]>([])
+const branchesLoading = ref(false)
+const branchesError = ref('')
 const rawJson = ref<any>(null)
 
 const conflictDialogRef = ref()
@@ -142,6 +160,7 @@ async function fetchDetail() {
     rawJson.value = res.rawJson
     if (res.success && res.data) {
       binding.value = res.data
+      void fetchBranches()
     } else {
       hasError.value = true
       errorMsg.value = res.message || '仓库绑定不存在或已移除'
@@ -152,6 +171,25 @@ async function fetchDetail() {
   } finally {
     loading.value = false
   }
+}
+
+async function fetchBranches() {
+  if (!binding.value) return
+  branchesLoading.value = true
+  branchesError.value = ''
+  try {
+    const res = await listRepositoryBranchesApi(workspaceId, projectId, binding.value.id)
+    if (res.success && res.data) branches.value = res.data
+    else branchesError.value = res.message || '无法加载 Repository Branches'
+  } catch (err: any) {
+    branchesError.value = err.message || '无法加载 Repository Branches'
+  } finally {
+    branchesLoading.value = false
+  }
+}
+
+function shortSha(sha: string) {
+  return sha.slice(0, 12)
 }
 
 async function handleAction(action: 'refresh' | 'disable' | 'reactivate' | 'unbind') {

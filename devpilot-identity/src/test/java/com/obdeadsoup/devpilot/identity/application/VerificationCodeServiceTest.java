@@ -17,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -38,6 +39,17 @@ class VerificationCodeServiceTest {
         service.issue(" Test@Example.com ", "127.0.0.1");
 
         verify(sender).send("test@example.com", "000421");
+    }
+
+    @Test
+    void serializesLuaNumericArgumentsAsStrings() {
+        when(random.nextInt(1_000_000)).thenReturn(421);
+        when(redis.execute(any(DefaultRedisScript.class), anyList(), any(Object[].class))).thenReturn(0L);
+
+        service.issue("test@example.com", "127.0.0.1");
+
+        verify(redis).execute(any(DefaultRedisScript.class), anyList(), eq("000421"),
+                eq("300000"), eq("60000"), eq("60000"));
     }
 
     @Test

@@ -8,6 +8,9 @@ import com.obdeadsoup.devpilot.github.application.client.GitHubPageCursor;
 import com.obdeadsoup.devpilot.github.application.client.GitHubRateLimitSnapshot;
 import com.obdeadsoup.devpilot.github.application.client.GitHubRepositoryMetadataClient;
 import com.obdeadsoup.devpilot.github.application.client.GitHubBranchClient;
+import com.obdeadsoup.devpilot.github.application.client.GitHubBranch;
+import com.obdeadsoup.devpilot.github.application.client.GitHubApiException;
+import com.obdeadsoup.devpilot.github.application.client.GitHubApiFailureType;
 import com.obdeadsoup.devpilot.github.application.client.VerifiedGitHubRepository;
 import com.obdeadsoup.devpilot.github.application.secret.WebhookSecretResolver;
 import com.obdeadsoup.devpilot.github.error.GitHubRepositoryErrorCode;
@@ -25,6 +28,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -242,6 +246,65 @@ class GitHubRepositoryBindingServiceTest {
                 "octo", "demo", "octo/demo", "https://github.com/octo/demo",
                 "main", "private", NOW, "\"etag-v1\"", NOW.minusDays(1)
         );
+    }
+
+    @Test
+    void resolvesExplicitAgentBranchToItsAuthoritativeHeadSnapshot() {
+        GitHubRepositoryEntity active = binding("ACTIVE", 0, 123456L, "octo", "demo");
+        when(repositoryMapper.findActiveByProject(WORKSPACE_ID, PROJECT_ID)).thenReturn(Optional.of(active));
+        when(branchClient.listBranches("octo", "demo", API_REFERENCE)).thenReturn(List.of(
+                new GitHubBranch("main", "a".repeat(40)),
+                new GitHubBranch("agent", "b".repeat(40))
+        ));
+
+        GitHubRepositoryBranchSnapshot snapshot = service
+                .resolveActiveBranchSnapshotForAgentRun(WORKSPACE_ID, PROJECT_ID, "agent")
+                .orElseThrow();
+
+        assertThat(snapshot.repositoryFullName()).isEqualTo("octo/demo");
+        assertThat(snapshot.branchName()).isEqualTo("agent");
+        assertThat(snapshot.commitSha()).isEqualTo("b".repeat(40));
+    }
+
+    @Test
+    void missingBranchFallsBackOnlyToBindingDefaultBranch() {
+        GitHubRepositoryEntity active = binding("ACTIVE", 0, 123456L, "octo", "demo");
+        when(repositoryMapper.findActiveByProject(WORKSPACE_ID, PROJECT_ID)).thenReturn(Optional.of(active));
+        when(branchClient.listBranches("octo", "demo", API_REFERENCE)).thenReturn(List.of(
+                new GitHubBranch("main", "a".repeat(40)), new GitHubBranch("agent", "b".repeat(40))));
+
+        GitHubRepositoryBranchSnapshot snapshot = service
+                .resolveActiveBranchSnapshotForAgentRun(WORKSPACE_ID, PROJECT_ID, null)
+                .orElseThrow();
+
+        assertThat(snapshot.branchName()).isEqualTo("main");
+        assertThat(snapshot.commitSha()).isEqualTo("a".repeat(40));
+    }
+
+    @Test
+    void rejectsInvalidBranchInsteadOfSilentlyUsingDefaultBranch() {
+        GitHubRepositoryEntity active = binding("ACTIVE", 0, 123456L, "octo", "demo");
+        when(repositoryMapper.findActiveByProject(WORKSPACE_ID, PROJECT_ID)).thenReturn(Optional.of(active));
+        when(branchClient.listBranches("octo", "demo", API_REFERENCE))
+                .thenReturn(List.of(new GitHubBranch("main", "a".repeat(40))));
+
+        assertThatThrownBy(() -> service.resolveActiveBranchSnapshotForAgentRun(
+                WORKSPACE_ID, PROJECT_ID, "this-branch-does-not-exist"
+        )).isInstanceOfSatisfying(BusinessException.class,
+                exception -> assertThat(exception.errorCode()).isEqualTo(GitHubRepositoryErrorCode.GITHUB_BRANCH_NOT_FOUND));
+    }
+
+    @Test
+    void mapsGitHubBranchReadFailureToStableBusinessError() {
+        GitHubRepositoryEntity active = binding("ACTIVE", 0, 123456L, "octo", "demo");
+        when(repositoryMapper.findActiveByProject(WORKSPACE_ID, PROJECT_ID)).thenReturn(Optional.of(active));
+        when(branchClient.listBranches("octo", "demo", API_REFERENCE)).thenThrow(new GitHubApiException(
+                GitHubApiFailureType.NETWORK_ERROR, true, null, null, "safe", null, null
+        ));
+
+        assertThatThrownBy(() -> service.resolveActiveBranchSnapshotForAgentRun(WORKSPACE_ID, PROJECT_ID, "main"))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.errorCode()).isEqualTo(GitHubRepositoryErrorCode.GITHUB_API_UNAVAILABLE));
     }
 
     private GitHubRepositoryEntity binding(

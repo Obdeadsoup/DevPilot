@@ -70,7 +70,9 @@ public class VerificationCodeService {
         }
         String code = String.format(Locale.ROOT, "%06d", secureRandom.nextInt(1_000_000));
         Long reserved = redisTemplate.execute(RESERVE_SCRIPT, keys(normalizedEmail, sourceIp), code,
-                properties.codeTtl().toMillis(), properties.cooldown().toMillis(), properties.ipCooldown().toMillis());
+                Long.toString(properties.codeTtl().toMillis()),
+                Long.toString(properties.cooldown().toMillis()),
+                Long.toString(properties.ipCooldown().toMillis()));
         if (reserved != null && reserved == 1L) throw new BusinessException(IdentityErrorCode.VERIFICATION_COOLDOWN);
         if (reserved != null && reserved == 2L) throw new BusinessException(IdentityErrorCode.VERIFICATION_IP_LIMITED);
         try {
@@ -87,7 +89,8 @@ public class VerificationCodeService {
         String normalizedEmail = normalize(email);
         Long result = redisTemplate.execute(CONSUME_SCRIPT,
                 List.of(codeKey(normalizedEmail), cooldownKey(normalizedEmail), failureKey(normalizedEmail)),
-                code, properties.failureTtl().toMillis(), properties.maxFailures());
+                code, Long.toString(properties.failureTtl().toMillis()),
+                Integer.toString(properties.maxFailures()));
         if (result != null && result == 1L) return;
         if (result != null && result == 2L) throw new BusinessException(IdentityErrorCode.VERIFICATION_CODE_INVALID);
         if (result != null && result == 3L) throw new BusinessException(IdentityErrorCode.VERIFICATION_ATTEMPTS_EXCEEDED);

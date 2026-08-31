@@ -178,6 +178,20 @@ class AuthenticationSecurityIntegrationTest {
     }
 
     @Test
+    void emailVerificationCodeIsStoredInRedisBeforeLocalDelivery() throws Exception {
+        String email = "verification@example.com";
+
+        mockMvc.perform(post("/api/v1/auth/verification/email")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsBytes(Map.of("email", email))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("COMMON_0000"));
+
+        assertThat(redisTemplate.hasKey("devpilot:auth:verification:email:code:" + email)).isTrue();
+        assertThat(redisTemplate.hasKey("devpilot:auth:verification:email:cooldown:" + email)).isTrue();
+    }
+
+    @Test
     void registerCreatesActiveUserWithBcryptHashAndSupportsSubsequentLogin() throws Exception {
         MvcResult registration = register("New.User", "New.User@example.com", "secure-password-42")
                 .andExpect(status().isCreated())
