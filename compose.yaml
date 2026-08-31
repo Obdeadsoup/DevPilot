@@ -43,12 +43,12 @@ services:
   nacos:
     image: nacos/nacos-server:v3.0.3
     container_name: devpilot-nacos3
-    profiles: ["cloud"]
+    profiles: ["cloud", "full"]
     restart: unless-stopped
     environment:
       MODE: standalone
       NACOS_AUTH_ENABLE: "false"
-      # Nacos 3 镜像要求声明这些变量；默认值只用于本机 auth-disabled profile，不是生产凭据。
+      # 仅用于本机 auth-disabled 部署；生产环境必须开启认证、TLS 与网络隔离。
       NACOS_AUTH_TOKEN: ${DEVPILOT_NACOS_AUTH_TOKEN:-RGV2UGlsb3RMb2NhbEF1dGhEaXNhYmxlZFRva2VuMjAyNg==}
       NACOS_AUTH_IDENTITY_KEY: ${DEVPILOT_NACOS_AUTH_IDENTITY_KEY:-devpilot-local-auth-disabled-key}
       NACOS_AUTH_IDENTITY_VALUE: ${DEVPILOT_NACOS_AUTH_IDENTITY_VALUE:-devpilot-local-auth-disabled-value}
@@ -63,8 +63,183 @@ services:
       retries: 20
       start_period: 40s
 
+  nacos-config-init:
+    image: curlimages/curl:8.16.0
+    profiles: ["full"]
+    restart: "no"
+    entrypoint: ["/bin/sh", "/config/publish-config.sh"]
+    environment:
+      DEVPILOT_NACOS_HTTP_URL: http://nacos:8848
+      DEVPILOT_NACOS_GROUP: ${DEVPILOT_NACOS_GROUP:-DEVPILOT}
+    volumes:
+      - ./ops/nacos:/config:ro
+    depends_on:
+      nacos:
+        condition: service_healthy
+
+  mailpit:
+    image: axllent/mailpit:v1.30.4
+    profiles: ["full"]
+    restart: unless-stopped
+    environment:
+      MP_DATABASE: /data/mailpit.db
+    ports:
+      - "${DEVPILOT_MAILPIT_PORT:-8025}:8025"
+    volumes:
+      - devpilot-mailpit-data:/data
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  agent-service:
+    profiles: ["full"]
+    build:
+      context: ./agent-service
+      dockerfile: Dockerfile
+    image: devpilot-agent-service:local
+    restart: unless-stopped
+    environment:
+      AGENT_GRPC_HOST: 0.0.0.0
+      AGENT_GRPC_PORT: 50051
+      # Full Stack 永远使用真实 Provider；fake 仅保留给自动化测试和显式 smoke。
+      AGENT_MODEL_MODE: deepseek
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?Set DEEPSEEK_API_KEY in .env}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
+      DEEPSEEK_CONNECT_TIMEOUT_SECONDS: ${DEEPSEEK_CONNECT_TIMEOUT_SECONDS:-2}
+      DEEPSEEK_READ_TIMEOUT_SECONDS: ${DEEPSEEK_READ_TIMEOUT_SECONDS:-30}
+      DEEPSEEK_OVERALL_TIMEOUT_SECONDS: ${DEEPSEEK_OVERALL_TIMEOUT_SECONDS:-30}
+      DEVPILOT_JAVA_TOOL_GRPC_TARGET: devpilot-core:50052
+      DEVPILOT_JAVA_TOOL_GRPC_DEADLINE_SECONDS: ${DEVPILOT_JAVA_TOOL_GRPC_DEADLINE_SECONDS:-3}
+      DEVPILOT_JAVA_TOOL_GRPC_MAX_MESSAGE_BYTES: ${DEVPILOT_JAVA_TOOL_GRPC_MAX_MESSAGE_BYTES:-65536}
+      DEVPILOT_JAVA_TOOL_GRPC_MAX_RESULT_BYTES: ${DEVPILOT_JAVA_TOOL_GRPC_MAX_RESULT_BYTES:-65536}
+      DEVPILOT_JAVA_TOOL_CIRCUIT_FAILURE_THRESHOLD: ${DEVPILOT_JAVA_TOOL_CIRCUIT_FAILURE_THRESHOLD:-3}
+      DEVPILOT_JAVA_TOOL_CIRCUIT_OPEN_SECONDS: ${DEVPILOT_JAVA_TOOL_CIRCUIT_OPEN_SECONDS:-10}
+      DEVPILOT_AGENT_TOOL_SERVICE_KEY: ${DEVPILOT_AGENT_TOOL_SERVICE_KEY:?Set DEVPILOT_AGENT_TOOL_SERVICE_KEY in .env}
+    expose:
+      - "50051"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import grpc; c=grpc.insecure_channel('127.0.0.1:50051'); grpc.channel_ready_future(c).result(timeout=3); c.close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  devpilot-core:
+    profiles: ["full"]
+    build:
+      context: .
+      dockerfile: ops/docker/core.Dockerfile
+    image: devpilot-core:local
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: local,cloud,smtp
+      DEVPILOT_MYSQL_HOST: mysql
+      DEVPILOT_MYSQL_PORT: 3306
+      DEVPILOT_MYSQL_DATABASE: ${DEVPILOT_MYSQL_DATABASE:-devpilot}
+      DEVPILOT_MYSQL_USERNAME: ${DEVPILOT_MYSQL_USERNAME:-devpilot}
+      DEVPILOT_MYSQL_PASSWORD: ${DEVPILOT_MYSQL_PASSWORD:?Set DEVPILOT_MYSQL_PASSWORD in .env}
+      DEVPILOT_REDIS_HOST: redis
+      DEVPILOT_REDIS_PORT: 6379
+      DEVPILOT_REDIS_PASSWORD: ${DEVPILOT_REDIS_PASSWORD:?Set DEVPILOT_REDIS_PASSWORD in .env}
+      DEVPILOT_NACOS_SERVER_ADDR: nacos:8848
+      DEVPILOT_NACOS_GROUP: ${DEVPILOT_NACOS_GROUP:-DEVPILOT}
+      DEVPILOT_NACOS_CONFIG_ENABLED: "true"
+      DEVPILOT_NACOS_DISCOVERY_ENABLED: "true"
+      DEVPILOT_AGENT_GRPC_HOST: agent-service
+      DEVPILOT_AGENT_GRPC_PORT: 50051
+      DEVPILOT_AGENT_GRPC_PLAINTEXT: "true"
+      DEVPILOT_AGENT_TOOL_GRPC_ENABLED: "true"
+      DEVPILOT_AGENT_TOOL_GRPC_HOST: 0.0.0.0
+      DEVPILOT_AGENT_TOOL_GRPC_PORT: 50052
+      DEVPILOT_AGENT_TOOL_SERVICE_KEY: ${DEVPILOT_AGENT_TOOL_SERVICE_KEY:?Set DEVPILOT_AGENT_TOOL_SERVICE_KEY in .env}
+      MAIL_HOST: mailpit
+      MAIL_PORT: 1025
+      MAIL_USERNAME: ""
+      MAIL_PASSWORD: ""
+      MAIL_FROM: ${MAIL_FROM:-devpilot@localhost}
+      MAIL_AUTH_ENABLED: "false"
+      MAIL_SSL_ENABLED: "false"
+      MAIL_STARTTLS_ENABLED: "false"
+      MAIL_HEALTH_ENABLED: "true"
+      DEVPILOT_GITHUB_API_TOKEN_LOCAL: ${DEVPILOT_GITHUB_API_TOKEN_LOCAL:-}
+      DEVPILOT_GITHUB_WEBHOOK_SECRET_LOCAL: ${DEVPILOT_GITHUB_WEBHOOK_SECRET_LOCAL:-}
+    ports:
+      - "${DEVPILOT_CORE_PORT:-8080}:8080"
+    expose:
+      - "50052"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nacos-config-init:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_healthy
+      agent-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/actuator/health/readiness"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 45s
+
+  devpilot-gateway:
+    profiles: ["full"]
+    build:
+      context: .
+      dockerfile: ops/docker/gateway.Dockerfile
+    image: devpilot-gateway:local
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: cloud
+      DEVPILOT_NACOS_SERVER_ADDR: nacos:8848
+      DEVPILOT_NACOS_GROUP: ${DEVPILOT_NACOS_GROUP:-DEVPILOT}
+      DEVPILOT_NACOS_CONFIG_ENABLED: "true"
+      DEVPILOT_NACOS_DISCOVERY_ENABLED: "true"
+      DEVPILOT_GATEWAY_ALLOWED_ORIGINS: ${DEVPILOT_GATEWAY_ALLOWED_ORIGINS:-http://localhost:5173}
+    ports:
+      - "${DEVPILOT_GATEWAY_PORT:-8081}:8081"
+    depends_on:
+      nacos-config-init:
+        condition: service_completed_successfully
+      devpilot-core:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8081/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
+  devpilot-web:
+    profiles: ["full"]
+    build:
+      context: ./devpilot-web
+      dockerfile: Dockerfile
+    image: devpilot-web:local
+    restart: unless-stopped
+    ports:
+      - "${DEVPILOT_WEB_PORT:-5173}:80"
+    depends_on:
+      devpilot-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
 volumes:
   devpilot-mysql-data:
     name: devpilot-mysql-data
   devpilot-redis-data:
     name: devpilot-redis-data
+  devpilot-mailpit-data:
+    name: devpilot-mailpit-data

@@ -1,0 +1,3 @@
+# Nacos init runs inside Linux containers even when the repository is checked out on Windows.
+ops/nacos/publish-config.sh text eol=lf
+

@@ -7,7 +7,8 @@ spring:
     username: ${MAIL_USERNAME:}
     password: ${MAIL_PASSWORD:}
     properties:
-      mail.smtp.auth: true
+      # Mailpit 等本地 SMTP sink 不要求认证；生产 SMTP 默认仍要求认证。
+      mail.smtp.auth: ${MAIL_AUTH_ENABLED:true}
       mail.smtp.ssl.enable: ${MAIL_SSL_ENABLED:true}
       mail.smtp.starttls.enable: ${MAIL_STARTTLS_ENABLED:false}
   config:
@@ -143,6 +144,9 @@ devpilot:
 
 management:
   health:
+    # 非 SMTP Profile 不应因为默认外部邮件主机影响整体健康；Full Compose 显式开启并检查 Mailpit。
+    mail:
+      enabled: ${MAIL_HEALTH_ENABLED:false}
     nacos-config:
       enabled: false
     nacos-discovery:

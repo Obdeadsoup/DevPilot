@@ -1,418 +1,289 @@
 # DevPilot
 
-> 面向学生开发团队与小型技术团队的 GitHub 项目协作与 AI 工程助手
+面向小型开发团队的 GitHub 协作与 AI 工程助手。
+DevPilot 汇聚真实研发活动与团队协作上下文，由 Java Core 维护可靠业务、事务和权限边界，
+并把 Python Agent Runtime 作为独立服务，通过受控的只读 Tool Gateway 使用业务能力。
 
-DevPilot 以真实 GitHub 仓库为数据来源，通过 Webhook 与 GitHub API 同步 Push、Issue、Pull Request、Review 等研发活动，并在本地形成工作空间、项目、成员、任务、通知、审计和知识库能力。
+**Java 21 · Spring Boot · Spring Cloud Gateway · Nacos · MySQL · Redis · gRPC · Python · Vue 3**
 
-在传统后端链路稳定后，DevPilot 接入 Agent：让 Agent 在继承当前用户权限的前提下完成项目问答、进度总结、需求拆分、风险识别和任务草案生成；高风险写操作必须经人工确认后，再调用正式业务服务执行。
+## DevPilot 能做什么
 
-## 项目解决的痛点
+GitHub 擅长管理代码和研发事件，DevPilot 管理团队内部的 Workspace、Project、Task、Notification 与 Audit，
+再为 Agent 提供一个经过鉴权、可审计、不会绕过业务规则的项目上下文入口。它不是 GitHub 的复刻，而是连接
+GitHub 研发活动、本地协作业务和 Agent Runtime 的上下文层。
 
-学生团队和小型开发团队常见问题：
+- Workspace / Project / Member / 分层 RBAC
+- GitHub Repository / Branch / Commit / Issue / PR / Review 同步
+- Task / Activity / Notification / Audit
+- Transactional Outbox 与可恢复异步处理
+- Agent Run / SSE / 三个 read-only Tool
+- Gateway / Nacos Discovery / Nacos Config 服务治理
 
-- 需求、会议纪要、任务和 GitHub 活动分散；
-- 成员难以快速了解项目当前进度；
-- 新成员理解项目结构和历史决策成本高；
-- Issue、PR、Commit 与本地任务缺少统一关联；
-- 周报和进度同步依赖人工整理；
-- AI 助手通常只能聊天，无法安全操作真实项目。
+## 系统架构
 
-DevPilot 不复刻 GitHub，而是建立一个面向小团队的“项目上下文层”，把仓库活动、任务、文档和 Agent 工具连接起来。
-
-## 系统架构图
-
-```text
-Browser : HTTP/SSE
-  → devpilot-gateway :8081
-  → lb://devpilot-core
-  → Nacos Discovery
-  → devpilot-core :8080（Java 模块化单体）
-      → Python AgentRuntime gRPC :50051
-      ← Python Read-only Tool 调用 gRPC :50052
-
-Nacos Config
-  → spring.config.import
-  → devpilot-gateway / devpilot-core 的非敏感配置
+```mermaid
+flowchart LR
+    B[Browser / Vue] -->|HTTP / SSE| G[Spring Cloud Gateway]
+    G -->|lb://devpilot-core| N[Nacos Discovery]
+    N --> C[Java Core<br/>Modular Monolith]
+    C --> M[(MySQL)]
+    C --> R[(Redis)]
+    C -->|gRPC StreamRun| A[Python Agent Runtime]
+    A -->|gRPC ExecuteTool| T[Java Read-only Tool Gateway]
+    T -->|run-bound delegation + RBAC| C
+    NC[Nacos Config] --> G
+    NC --> C
 ```
 
-当前只有三个独立运行边界：Java Core、Java Gateway、Python Agent。`identity/project/task/github/notification/audit/agent`
-仍是 Core 进程内的 Maven 业务模块，不是微服务。Gateway 是浏览器 HTTP/SSE Edge Service，不承担登录、RBAC、
-业务规则或数据库访问；双向 Agent gRPC 不经过 Gateway。
+真正的独立运行边界只有：
 
+- `devpilot-web`：Vue 静态前端交付单元，Nginx 反向代理 HTTP/SSE。
+- `devpilot-gateway`：WebFlux Edge Service，通过 Nacos 与 LoadBalancer 路由到 Core。
+- `devpilot-core`：Spring MVC 模块化单体，拥有认证、RBAC、事务、数据与业务规则。
+- `agent-service`：独立 Python Agent Runtime，负责 AgentLoop、DeepSeek 与 Tool Registry。
 
-## 技术栈
+`identity`、`project`、`github`、`task`、`notification`、`outbox`、`audit`、`agent` 是 Core 内的 Maven
+业务模块，不是微服务。Gateway 不做 Project RBAC，Python 不直连业务数据库，双向 Agent gRPC 也不经过 Gateway。
 
-Java 21、Spring Boot 3.5.16、Spring Cloud 2025.0.0、Spring Cloud Alibaba 2025.0.0.0、Spring Cloud Gateway
-Server WebFlux、Nacos 3、Spring MVC、Spring Security、MyBatis-Plus、MySQL 8、Redis 7、Flyway、Actuator、JUnit 5
-与 Testcontainers。Core 保持 Spring MVC，只有独立 Gateway 使用 WebFlux。
+## 三条关键业务链
 
-## 模块结构
+### 1. GitHub 可靠同步
 
-- `devpilot-gateway`：可独立部署的 HTTP/SSE 边缘服务，通过 Nacos 和 LoadBalancer 路由到 Core。
-- `devpilot-boot`：可独立部署的 Java Core 组合根，运行所有 Java 业务模块。
-- `devpilot-framework`：Core/Gateway 可复用的中立基础能力。
-- `devpilot-identity/project/task/github/notification/outbox/audit/agent`：Core 进程内模块。
-- `agent-service`：可独立部署的 Python AgentRuntime。
-
-## 核心业务链路
-
-```text
-创建工作空间
-→ 邀请成员
-→ 创建项目并绑定 GitHub 仓库
-→ 接收 Webhook
-→ 验签、幂等落库、异步处理
-→ 生成活动时间线
-→ 关联 Issue、PR、任务和成员
-→ 发送通知
-→ Agent 基于真实上下文提供协助
+```mermaid
+flowchart LR
+    W[GitHub Webhook] --> H[HMAC-SHA256]
+    H --> D[Delivery ID 幂等]
+    D --> U[统一 Snapshot Upsert]
+    API[GitHub REST Reconciliation] --> C[ETag / Last-Modified<br/>Pagination / Rate Limit / Retry]
+    C --> U
+    U --> S[(Commit / Issue / PR / Review)]
+    U --> A[Project Activity]
 ```
 
-## 第一阶段功能
+Webhook 是实时路径，REST Reconciliation 是丢失事件、首次绑定和周期校准的兜底路径。两条路径汇合到同一
+Upsert：Repository ID + SHA 或 stable GitHub ID 防重复，`github_updated_at` 拒绝乱序覆盖，乐观版本处理本地并发。
+外部 API 只对安全读请求做有限重试，并处理条件请求、Link 分页与 Rate Limit。
 
-- 用户登录和工作空间成员管理
-- 工作空间 / 项目级 RBAC
-- GitHub 仓库绑定
-- Webhook HMAC-SHA256 验签
-- Delivery ID 幂等处理
-- Push、Issue、Pull Request 基础事件解析
-- 项目活动时间线
-- 同步任务状态和失败重试
-- 站内通知与关键操作审计
-- Docker Compose、自动化测试、ArchUnit、Backend CI、liveness/readiness、Prometheus-ready 指标
+### 2. Reliable Event 与通知
 
-## 技术路线
-
-第一阶段：Java 21、Spring Boot 3.5.x、Maven 多模块、Spring Security、MyBatis-Plus、MySQL 8、Redis 7、Flyway、Actuator、JUnit 5、Testcontainers、Docker Compose。
-
-当前已使用 MySQL Transactional Outbox、SSE、Micrometer 与 Prometheus Registry。后续只按真实需要评估
-RabbitMQ、Quartz/XXL-JOB、Spring AI/LangChain4j、向量检索与 OpenTelemetry。
-
-
-## 开发方式
-
-```text
-业务场景讲解
-→ 明确需求与不变量
-→ Codex 实现重复性代码
-→ 人工审查 Diff
-→ 运行测试和完整链路
-→ 调试关键代码
-→ 总结技术取舍
-→ 面试式复盘
+```mermaid
+flowchart LR
+    TX[Business Transaction] --> BO[Business State + Outbox<br/>same transaction]
+    BO --> R[Async Relay]
+    R --> N[(Notification DB)]
+    N --> SSE[SSE Delivery]
+    SSE -.断线后 REST 补偿.-> N
 ```
 
-Codex 可以承担 DTO、Mapper、普通 CRUD、配置和重复测试代码；权限边界、状态流转、事务、幂等、重试、外部 API 限流和 Agent 安全必须由项目负责人真正理解。
+业务状态与 Outbox 在同一 MySQL 事务提交。Outbox 具有
+`PENDING → PROCESSING → RETRY_WAIT → PROCESSED / DEAD` 状态机、有限退避、stale recovery、唯一约束与
+条件终态更新。Notification DB 是可靠事实；SSE 只是低延迟投递通道，发送失败不会回滚已经提交的业务事务。
 
-## 本地快速启动
+### 3. Agent 受控执行
 
-### 前置环境
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant J as Java Core
+    participant P as Python Agent Runtime
+    participant D as DeepSeek
+    B->>J: create AgentRun (Bearer Token)
+    J->>J: RBAC + freeze branch/commit + commit RUNNING
+    J-->>B: 202 + runId
+    J->>P: gRPC StreamRun
+    P->>D: model request
+    D-->>P: tool call
+    P->>J: ExecuteTool(runId, toolCallId, service key)
+    J->>J: run-bound delegation + per-tool RBAC + Application Service
+    J-->>P: bounded tool result
+    P->>D: tool result
+    D-->>P: final output
+    P-->>J: streamed lifecycle events
+    J->>J: conditional terminal update
+    J-->>B: SSE terminal event
+```
 
-- JDK 21
-- Maven 3.6.3 或更高版本
-- Docker Desktop 与 Docker Compose
+Java 保留认证和业务所有权；浏览器 Token 不交给 Python，Tool 不访问 Mapper/DAO，而是回到 Java Application Service
+再次做 run-bound delegation 与 RBAC。当前只开放：
 
-### 启动基础设施
+- `project.get_summary`
+- `task.list_open`
+- `project.list_recent_activity`
 
-复制环境变量模板并将其中的占位密码替换为仅用于本地开发的密码：
+它们全部是 read-only。写 Tool、Proposal / HITL、执行幂等与更细审计属于后续安全演进，不是当前已实现能力。
+
+## 核心技术亮点
+
+### GitHub 外部系统可靠同步
+
+HMAC-SHA256 Webhook、Delivery ID 幂等、Webhook + REST 对账、ETag / Last-Modified、Link Pagination、Rate Limit、
+有限重试、时间戳防乱序和乐观锁共同处理外部系统常见的重复、延迟、乱序和短暂失败。
+
+### Transactional Outbox 与数据库可靠性
+
+业务状态和事件意图同事务持久化，后台 Worker 通过 version claim 与有界线程池处理；失败进入退避或 DEAD，
+stale PROCESSING 可恢复。唯一索引和条件终态更新使重试不会依赖“Exactly Once”口号。
+
+### Java / Python Agent 边界
+
+Java 负责权限、事务、业务与 Run 权威状态，Python 负责模型编排；Protobuf/gRPC Server Streaming 接到浏览器 SSE。
+内部 service key、消息大小限制、Deadline、Cancel propagation、Circuit Breaker 与 Semaphore Bulkhead 约束故障域。
+
+### Spring Cloud 服务治理
+
+Gateway 通过 `lb://devpilot-core` 与 Nacos Discovery 找到 Core；Nacos Config 只保存可公开的非敏感配置，且关闭动态刷新。
+普通 REST 有短超时，SSE Route 显式取消响应超时，避免长连接继承错误的边缘策略。
+
+### 可观测与可验证工程
+
+Flyway 管理数据库版本，Actuator 提供 liveness/readiness/metrics，Micrometer 暴露 Outbox、GitHub、Notification backlog
+与失败指标。ArchUnit 检查模块和分层边界，Testcontainers 覆盖真实 MySQL/Redis 集成，CI 运行完整 Maven Verify。
+
+## 代码地图
+
+| 路径 | 职责 |
+|---|---|
+| `devpilot-boot` | Java Core 组合根、运行配置、Flyway 与 HTTP 入口 |
+| `devpilot-framework` | 中立的 API、错误与基础约定 |
+| `devpilot-identity` | 注册、登录、不透明 Access Token、Email Verification |
+| `devpilot-project` | Workspace / Project / Member / Activity / RBAC |
+| `devpilot-github` | Binding、Webhook、REST Client、Snapshot 与 Reconciliation |
+| `devpilot-task` | Task 状态机、History 与 GitHub Snapshot 关联 |
+| `devpilot-outbox` | Transactional Outbox 状态机与 Relay |
+| `devpilot-notification` | 可靠通知记录、提醒扫描与 SSE |
+| `devpilot-audit` | 审计和失败补偿记录 |
+| `devpilot-agent` | AgentRun、Java gRPC Client、Tool Gateway、SSE |
+| `devpilot-gateway` | Gateway、Nacos Discovery/Config 与 HTTP/SSE 路由 |
+| `agent-service` | Python AgentLoop、DeepSeek Provider、Tool Registry 与 gRPC Server |
+| `devpilot-web` | Vue 3 / Pinia / Element Plus 前端 |
+
+## Security / Production Evolution
+
+### Current：本地与演示
+
+Repository Binding 在 MySQL 只保存 `api_credential_ref` 与 `webhook_secret_ref`，例如指向
+`DEVPILOT_GITHUB_API_TOKEN_LOCAL`。Environment Resolver 在运行时取得 Secret；Secret 不进入数据库、Git、镜像或 API
+Response。这个迁移接缝适合个人项目、少量固定仓库和单实例演示。
+
+它不适合 1000 用户 / 10000 Repository 的 SaaS：高基数环境变量无法良好支持租户生命周期、轮换、审计、多实例分发
+和 user-managed credential。
+
+### Production design：GitHub App 优先
+
+生产首选 GitHub App。Binding 保存 `installationId`、`repositoryId` 与业务关联；App private key 和 Webhook secret
+进入 Secret Manager / KMS。Java 按 installationId 生成 App JWT，换取短期 installation access token，并只缓存到临近
+过期。权限按 least privilege 配置，不长期保存每个用户的 PAT。
+
+若必须兼容 fine-grained PAT，则由 Credential Service 使用 KMS envelope encryption 保存 ciphertext、nonce、encrypted data
+key、key version 与 rotation metadata；业务表仍只保存 credential ID/reference。Secret 仅在调用 GitHub 时短暂解密到内存，
+不进入日志、Response 或普通配置中心。上述是生产设计目标，本仓库没有冒充已经实现 KMS 或 GitHub App installation flow。
+
+| 场景 | 当前本地/演示 | 生产建议（尚未实现） |
+|---|---|---|
+| GitHub API | ENV-referenced PAT | GitHub App installation token |
+| Webhook secret | ENV reference | Secret Manager |
+| App private key | N/A | Secret Manager / KMS |
+| PAT fallback | ENV reference | Envelope-encrypted credential record |
+| Agent internal key | ENV | Secret Manager，后续评估 mTLS |
+| DeepSeek key | ENV | Secret Manager |
+
+## 当前边界
+
+- Agent Tool 当前只有只读能力，没有 Proposal / HITL 或写业务动作。
+- Agent 与 Notification SSE replay buffer 位于单个 Core JVM；Java 重启或 replay gap 后以 REST 权威状态补偿。
+- 本地 Nacos 关闭认证，只用于受控本机网络；不是生产部署模板。
+- GitHub local binding 使用 ENV PAT；GitHub App 是生产设计目标，尚未实现 installation callback。
+- Python Agent 尚未注册 Nacos，通过 Compose 内部 DNS 被 Core 直接访问。
+- 本项目提供可复现的本地全栈部署，不宣称已验证多副本、跨区域或互联网生产运行。
+- GitHub.com 无法向 localhost 主动投递 Webhook；真正的 Webhook E2E 需要公网 HTTPS 入口。
+
+## Deployment
+
+以下是 **reproducible local full-stack deployment**，不是可直接照抄的互联网生产模板。
+
+### Requirements
+
+- Docker Desktop / Docker Engine 与 Docker Compose
+- 一个真实的 DeepSeek API Key
+- GitHub Repository 集成时需要测试仓库的 fine-grained PAT 与独立 Webhook secret
+
+仅开发 Java Core 时仍可只启动基础设施：
+
+```powershell
+docker compose up -d mysql redis
+```
+
+### 1. 配置 `.env`
 
 ```powershell
 Copy-Item .env.example .env
-docker compose config
-docker compose up -d
-docker compose ps
 ```
 
-Compose 使用 MySQL 8 和 Redis 7。为避开宿主机已占用的端口，MySQL 默认映射为 `3307:3306`，Redis 默认映射为 `6380:6379`；Redis 容器名为 `devpilot-redis8`。端口可以在 `.env` 中调整。
+至少填写：
 
-Nacos 3 是可选的 `cloud` Compose profile，不会影响原基础开发流程。需要验证 Gateway/Discovery/Config 时：
+```dotenv
+DEVPILOT_MYSQL_PASSWORD=<local-password>
+DEVPILOT_MYSQL_ROOT_PASSWORD=<different-local-password>
+DEVPILOT_REDIS_PASSWORD=<local-password>
+DEVPILOT_AGENT_TOOL_SERVICE_KEY=<independent-random-value-at-least-16-chars>
+DEEPSEEK_API_KEY=<real-key>
+```
+
+绑定 GitHub Repository 前再填写 `DEVPILOT_GITHUB_API_TOKEN_LOCAL` 与
+`DEVPILOT_GITHUB_WEBHOOK_SECRET_LOCAL`。Binding 请求传环境变量名作为 reference，不传 Secret 值。
+
+`.env` 已排除版本控制，Dockerfile 也不会复制它；但 `docker compose config` 会展开环境变量，分享其输出前必须脱敏。
+
+### 2. 启动完整本地全栈
 
 ```powershell
-docker compose --profile cloud up -d nacos
-.\ops\nacos\Publish-DevPilotNacosConfig.ps1
+docker compose --profile full up -d --build
+docker compose --profile full ps
 ```
 
-### 构建与启动
+`nacos-config-init` 会等待 Nacos Healthy，自动发布 `devpilot-core.yml` 和 `devpilot-gateway.yml` 后以 0 退出；Core 与
+Gateway 只有在配置发布成功后才启动。Full Profile 固定 `AGENT_MODEL_MODE=deepseek`，不会以 FakeModel 冒充完整部署。
 
-#### 后端
+### 3. 入口与端口
+
+| 入口 | 默认地址 | 用途 |
+|---|---|---|
+| Web | http://localhost:5173 | 用户唯一主入口，Nginx 代理 API 与 SSE |
+| Mailpit | http://localhost:8025 | 读取真实 SMTP Adapter 投递的注册验证码 |
+| Gateway | http://localhost:8081 | 调试 Edge Service |
+| Core | http://localhost:8080 | 调试 Core / readiness |
+| Nacos Console | http://localhost:8082 | 本地服务与配置检查 |
+| MySQL | localhost:3307 | 本地数据库调试 |
+| Redis | localhost:6380 | 本地缓存调试 |
+
+Agent `:50051` 与 Java Tool Gateway `:50052` 仅暴露在 Compose 网络内。
+
+### 4. First-use workflow
+
+1. 在 Web 注册页申请验证码。
+2. 打开 Mailpit，读取 SMTP 收件箱中的真实验证码并完成注册。
+3. 登录并通过 `/auth/me` 验证会话，创建 Workspace 与 Project。
+4. 可选：用 ENV credential reference 绑定真实 GitHub 测试仓库，验证 metadata、Branch HEAD 与 API sync。
+5. 准备 Project/Task/Activity 后发起 Agent Run，观察 Tool lifecycle、SSE terminal 与历史权威状态。
+6. 通过真实业务动作检查 Outbox terminal、Notification DB 与 SSE delivery。
+
+容器 Healthy 只证明依赖就绪，不等于上述应用链路已经通过。
+
+### 5. GitHub Webhook 的公网 HTTPS
+
+本地 Full Stack 可真实调用 GitHub API，但 GitHub.com 不能访问 localhost。完整 Webhook Internet E2E 需要部署域名、
+Cloudflare Tunnel 或 ngrok 等公网 HTTPS 入口，将 Webhook URL 指向：
+
+```text
+https://<public-host>/api/v1/github/webhooks
+```
+
+在 GitHub Delivery 页面确认真实请求获得 2xx。不要用本地伪 payload 代替这项验收，也不要把临时 tunnel 当作生产设计。
+
+### 6. 停止
 
 ```powershell
-mvn clean verify
-mvn -pl devpilot-boot -am install -DskipTests
-java -jar .\devpilot-boot\target\devpilot-boot-0.0.1-SNAPSHOT.jar --spring.profiles.active=local
+docker compose --profile full down
 ```
 
-`local` Profile 不会被默认激活。启动命令会从未纳入版本控制的 `.env` 读取本地数据库和 Redis 配置。
-
-应用启动后检查健康状态：
-
-```powershell
-Invoke-RestMethod http://localhost:8080/actuator/health
-Invoke-RestMethod http://localhost:8080/actuator/health/liveness
-Invoke-RestMethod http://localhost:8080/actuator/health/readiness
-Invoke-RestMethod http://localhost:8080/actuator/metrics
-Invoke-WebRequest http://localhost:8080/actuator/prometheus
-```
-
-根目录 Backend CI 在 Pull Request、`main` push 和手工触发时执行同一条完整验证，并运行 ArchUnit 与
-Testcontainers；这是 CI，不包含自动部署。JMeter 基线保存在 `performance/jmeter`，仅人工运行，不作为普通 PR Gate。
-
-默认 profile 仍只暴露 `health`。`local` 或 `observability` profile 才启用 Prometheus export 并暴露
-`health,metrics,prometheus`；这一匿名 scrape 策略仅用于本机/受控运维网络，不是互联网生产安全方案。
-请求使用安全格式的 `X-Correlation-ID` 关联同步日志；GitHub/Outbox 后台任务只传播有限 MDC 或创建新的处理 ID，
-它不是 OpenTelemetry Trace，也不参与鉴权和业务幂等。
-
-默认/local/test 不要求 Nacos。完成 Nacos 配置发布并启动 MySQL、Redis 后，分别以 `cloud` Profile 启动 Core 和 Gateway：
-
-```powershell
-mvn -pl devpilot-boot,devpilot-gateway -am package -DskipTests
-java -jar .\devpilot-boot\target\devpilot-boot-0.0.1-SNAPSHOT.jar --spring.profiles.active=local,cloud
-java -jar .\devpilot-gateway\target\devpilot-gateway-0.0.1-SNAPSHOT.jar --spring.profiles.active=cloud
-.\ops\nacos\Test-DevPilotCloudSmoke.ps1
-```
-
-浏览器 API 基地址此时改为 `http://localhost:8081`。Gateway 保留合法 `X-Request-Id`，否则生成 UUID，并把同值写入
-Core 已有的 `X-Correlation-ID`。`Authorization` 透明转发，认证和 Workspace/Project RBAC 仍由 Core 执行。
-Nacos Config 当前明确关闭动态刷新，配置修改后重启对应服务；它只管理非敏感配置，不替代 Secret Manager。
-详细边界、配置约定与验收步骤见 `docs/cloud/08-spring-cloud-gateway-nacos.md`。
-
-当前 Delivery、GitHub Sync 与 Outbox 提供处理耗时、ready backlog、oldest ready age、stale processing 和
-open DEAD 指标；Notification 提供创建/去重、Handler、SSE connection/send 指标。原 DEAD 历史仍保留，
-open DEAD 会排除已被成功或开放 Replay 解决的记录。本节只建立 SLI/SLO 测量基础，未宣称达到任何 p95/p99
-或 99.9% SLO/SLA；也未部署生产 Prometheus、Grafana、Alertmanager 或 OpenTelemetry。
-
-#### 前端
-
-```powershell
-Set-Location .\devpilot-web
-npm ci
-npm run typecheck
-npm run build
-npm run dev
-```
-前端在本机5173端口
-
-### 本地登录与 Bearer Token
-
-当前支持“邮箱验证码 → 注册 → 登录”。注册创建的 `dp_user` 使用既有
-`PasswordEncoderFactories.createDelegatingPasswordEncoder()` 生成 `{bcrypt}$2a$...` Hash；不要提交原始密码或 Hash。
-
-认证接口为：
-
-```text
-POST /api/v1/auth/login
-GET  /api/v1/auth/me
-POST /api/v1/auth/logout
-```
-
-登录请求示例中的值只是环境变量占位，不是项目内置账号：
-
-```powershell
-$loginBody = @{
-    login = $env:DEVPILOT_LOCAL_LOGIN
-    password = $env:DEVPILOT_LOCAL_PASSWORD
-} | ConvertTo-Json
-
-$loginResponse = Invoke-RestMethod `
-    -Method Post `
-    -Uri http://localhost:8080/api/v1/auth/login `
-    -ContentType 'application/json' `
-    -Body $loginBody
-
-$accessToken = $loginResponse.data.accessToken
-Invoke-RestMethod `
-    -Uri http://localhost:8080/api/v1/auth/me `
-    -Headers @{ Authorization = "Bearer $accessToken" }
-```
-
-Access Token 是至少 256 bit 的随机不透明值，默认有效期 2 小时，可通过
-`devpilot.identity.access-token-ttl` 调整，配置上限为 24 小时。Redis Key 只包含原始
-Token 的 SHA-256，原始 Token 只返回客户端，不写入数据库和日志。退出登录会删除当前
-Token 对应的 Redis 会话；当前没有 Refresh Token、JWT 或 Cookie Session。
-
-### Email Verification
-
-注册先调用 `POST /api/v1/auth/verification/email`，再以 `username`、`email`、`password` 和六位
-`verificationCode` 调用 `POST /api/v1/auth/register`。验证码保存在 Redis 5 分钟，邮箱/IP 冷却默认 60 秒，
-连续五次错误会使该验证码失效；正确验证码通过 Redis Lua 原子消费，不能复用。
-
-本地 `local/dev/test` Profile 使用不出网的 Logging Sender（不会记录 code）。真实 SMTP 使用 `smtp` 或 `prod`
-Profile，并从环境变量读取 `MAIL_HOST`、`MAIL_PORT`、`MAIL_USERNAME`、`MAIL_PASSWORD`（SMTP 授权码，非邮箱密码）
-和 `MAIL_FROM`。QQ 通常为 `smtp.qq.com:465`，163 可改为 `smtp.163.com:465`；两者都不需要改代码。
-
-### GitHub Webhook 垂直切片
-
-当前实现接收 `ping`、`push`、`issues`、`pull_request` 和 `pull_request_review`。三类快照事件仅处理文档列出的 action；未知 action 安全忽略并计低基数指标：
-
-```text
-POST /api/v1/github/webhooks
-GET  /api/v1/workspaces/{workspaceId}/projects/{projectId}/activities?page=1&size=20
-```
-
-Webhook 请求必须携带 `X-Hub-Signature-256`、`X-GitHub-Delivery` 和
-`X-GitHub-Event`。服务使用原始请求字节进行 HMAC-SHA256 验签；Webhook secret
-由仓库绑定的 `webhook_secret_ref` 指向环境变量，不存储明文。首次接收返回 `202`，
-重复 Delivery 返回幂等的 `200`，不会重复生成项目活动。
-
-Repository 绑定管理接口位于 Project 作用域下：
-
-```text
-POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/github-repositories
-GET  /api/v1/workspaces/{workspaceId}/projects/{projectId}/github-repositories
-GET  /api/v1/workspaces/{workspaceId}/projects/{projectId}/github-repositories/{bindingId}
-POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/github-repositories/{bindingId}/disable
-POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/github-repositories/{bindingId}/reactivate
-POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/github-repositories/{bindingId}/refresh
-POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/github-repositories/{bindingId}/unbind
-```
-
-绑定请求只提交 owner、repositoryName 和两类凭据引用。服务端通过固定
-`https://api.github.com` 的 REST Client 获取 repository id、full name、URL、默认分支和可见性，
-客户端不能直接指定这些权威字段。`api_credential_ref` 只引用 GitHub API Token，
-`webhook_secret_ref` 只引用 HMAC Secret；响应不返回任何 Reference 或原始凭据。
-
-GitHub REST 读取统一经过 `GitHubApiHttpExecutor`：生产 Host 固定，显式配置连接/读取超时，动态添加
-Bearer Token，分类 HTTP/网络错误，只对 GET/HEAD 做有限 Retry，并解析 Rate Limit、Request ID 与
-安全 Link 分页。Metadata 刷新使用 V7 保存的 ETag/Last-Modified：200 更新权威字段，304 只推进
-`last_verified_at` 和乐观锁版本。每个 Credential 在单实例内默认最多两个并发请求；日志与指标不包含
-Token、Secret、Repository fullName 或凭据引用。详见
-`docs/learning/08-github-api-client-engineering.md` 和 `docs/changes/08-github-api-client-file-map.md`。
-
-Push Webhook 中的 Commit 明细和 GitHub List Commits API 现已汇合到同一个 Upsert。数据库按稳定
-Repository ID + SHA 去重；Webhook 继续保留每次 Push 一条 `CODE_PUSHED` 聚合 Activity，Commit 首次入库
-另有一条幂等的 `GITHUB_COMMIT_DISCOVERED` Activity。后台 Reconciliation 使用 7 天初始 Lookback、默认
-5 分钟 overlap、Link Cursor、Checkpoint 和可恢复的 Sync Run 状态机。网络分页不位于长数据库事务中。
-
-人工补偿与状态查询：
-
-```text
-POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/github-repositories/{bindingId}/sync/commits
-GET  /api/v1/workspaces/{workspaceId}/projects/{projectId}/github-repositories/{bindingId}/sync-runs/{runId}
-```
-
-POST 需要 `REPOSITORY_UPDATE`，立即返回 `202 + runId`，不接受调用方自定义 since；同一 Binding 已有开放
-Run 时返回已有 Run。自动 Scheduler 由 `devpilot.github.reconciliation.*` 配置，test Profile 默认关闭。
-当前已完成 Commit、Issue、PR 与有界 Review 对账。Issue Client 会过滤 Issues API 中带
-`pull_request` 的条目；PR 使用 Pull Requests API 的真实 PR ID；Review 仅扫描近期且
-`reviews_synced_at` 落后的有限 PR 批次。三类快照的 Webhook/API 都汇合到统一 Upsert，
-以 `github_updated_at` 拒绝乱序覆盖、以 `version` 仲裁本地并发。详见
-`docs/learning/09-webhook-api-reconciliation.md` 和
-`docs/learning/10-github-issue-pr-review-sync.md`。
-
-Project 范围只读 API：
-
-```text
-GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/github/issues
-GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/github/issues/{issueId}
-GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/github/pull-requests
-GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/github/pull-requests/{pullRequestId}
-GET /api/v1/workspaces/{workspaceId}/projects/{projectId}/github/pull-requests/{pullRequestId}/reviews
-```
-
-接口需要 `PROJECT_READ`，SQL 同时限定 Workspace/Project。列表不返回 Body，所有外部文本响应均标记
-`externalUntrustedContent=true`；前端必须使用安全 Markdown Renderer，不能执行 Issue/PR 正文中的指令。
-
-本地验证：
-
-```powershell
-mvn -pl devpilot-boot -am test
-```
-
-活动时间线接口同时受接口认证和作用域授权保护。调用方需要先通过真实登录接口获得 Bearer
-Token；`ProjectActivityService.queryTimeline` 在应用服务层校验
-`PROJECT_ACTIVITY_READ`，并同时使用 URL 中的 `workspaceId + projectId`。Workspace
-OWNER/ADMIN 可读取本 Workspace 的项目；PRIVATE 项目要求其他用户具有 ACTIVE Project
-Membership；INTERNAL 项目允许 ACTIVE Workspace Member 只读。未认证返回 JSON 401，
-已认证但无作用域权限或跨 Workspace 访问返回 JSON 403。
-
-当前固定角色为 Workspace `OWNER / ADMIN / MEMBER / VIEWER` 和 Project
-`PROJECT_ADMIN / DEVELOPER / VIEWER`。OWNER 由 `dp_workspace.owner_user_id` 推导，
-不会写入成员表；角色只在服务端映射到不可变 Permission Set，Token 不缓存作用域角色。
-成员管理应用服务、乐观锁和数据库约束已经实现，但本阶段没有开放成员管理 HTTP API，也没有
-实现动态角色、权限后台、审计落库或 Redis 权限缓存。
-
-### Workspace / Project 生命周期
-
-当前已开放经过认证并在应用服务层授权的生命周期接口：
-
-```text
-POST /api/v1/workspaces
-GET  /api/v1/workspaces
-GET  /api/v1/workspaces/{workspaceId}
-PUT  /api/v1/workspaces/{workspaceId}
-POST /api/v1/workspaces/{workspaceId}/disable
-POST /api/v1/workspaces/{workspaceId}/reactivate
-
-POST /api/v1/workspaces/{workspaceId}/projects
-GET  /api/v1/workspaces/{workspaceId}/projects
-GET  /api/v1/workspaces/{workspaceId}/projects/{projectId}
-PUT  /api/v1/workspaces/{workspaceId}/projects/{projectId}
-POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/activate
-POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/archive
-POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/restore
-```
-
-Workspace 使用 `ACTIVE / DISABLED`，Project 使用
-`PLANNING / ACTIVE / ARCHIVED`。状态变化均使用专用动作接口和 expected version；普通资料
-更新不能改变状态、Owner、Project Key 或逻辑删除标记。Project Key 创建时统一转为大写，
-要求 2～12 位、字母开头且只含字母数字，创建后不提供修改接口。
-
-Project 列表的数据范围直接在 SQL 中完成：Workspace OWNER/ADMIN 可见全部未删除项目，
-ACTIVE Workspace Member 可见 INTERNAL 项目，PRIVATE 项目还要求 ACTIVE Project
-Membership。所有单项目查询都同时携带 `workspaceId + projectId`。
-
-本阶段已开放 GitHub Repository 绑定生命周期、工程化读取 Client、Commit/Issue/PR/Review 快照同步和
-数据库 Run/Checkpoint 状态机，但仍未实现 GitHub App JWT / Installation Token 或跨实例 Credential 并发协调。
-Task 已提供本地 BACKLOG/TODO/IN_PROGRESS/IN_REVIEW/DONE/CANCELED
-状态机、版本条件更新、History、Project Activity 与显式 GitHub Issue/PR Snapshot 关联；PR MERGED 和
-Issue CLOSED 不会自动完成 Task。当前已实现数据库站内 Notification、Task 到期/逾期/Review 与
-PR current-head Review 超时扫描，以及 MySQL Transactional Outbox 驱动的六类 Task 即时通知。
-Outbox 支持 PENDING/PROCESSING/RETRY_WAIT/PROCESSED/DEAD、version claim、有限重试和 stale 恢复。
-数据库 Notification 是可靠来源；单实例 SSE 支持多连接和 Heartbeat，断线后由 REST 查询补偿。
-
-Agent 当前提供生命周期 Streaming 与只读 Tool Gateway 纵切：如项目存在 ACTIVE GitHub Repository，浏览器可选择其
-Branch，Java 在创建 Run 时权威解析并冻结 branch HEAD SHA；Java 先在 MySQL 提交带该代码快照的 scoped `RUNNING` 投影，再用 async gRPC Stub
-订阅独立 Python Runtime 的 Server Streaming；POST 立即返回 `202 + RUNNING/runId`，terminal callback 以另一短事务
-写入 `SUCCEEDED/FAILED`。POST 需要 `AGENT_PROPOSE`，GET/SSE 需要 `AGENT_READ`：
-
-```text
-POST /api/v1/workspaces/{workspaceId}/projects/{projectId}/agent-runs
-GET  /api/v1/workspaces/{workspaceId}/projects/{projectId}/agent-runs/{runId}
-GET  /api/v1/workspaces/{workspaceId}/projects/{projectId}/agent-runs/{runId}/stream
-```
-
-SSE 只传 run/model-step/tool/terminal 生命周期，不传 LLM token、reasoning、Prompt、Tool 参数/结果或 Provider body。
-单 JVM Hub 支持 Heartbeat、每 run 有界 replay 与 `Last-Event-ID`；出现 replay gap 或 Java 重启时，客户端必须用 GET
-读取权威 AgentRun。浏览器断开只移除 emitter，不会 Cancel Python Run。Unary `StartRun` 仍保留用于 smoke；当前没有
-Agent 列表、Cancel、写 Proposal、人工确认、跨实例 SSE 或自动 Retry。
-
-Python Runtime 现在可以通过独立 Java gRPC 端口（默认 `127.0.0.1:50052`）调用三个真实只读 Tool：
-`project.get_summary`、`task.list_open`、`project.list_recent_activity`。请求只携带 runId/callId/name/Struct args；
-Java 使用共享 service key 验证 Python 服务身份，再从 AgentRun 恢复 createdBy 与 scope，并在每次执行点重新 RBAC。
-Browser Bearer Token 不会转发给 Python。Tool result 有 1..20 列表限制、64 KiB 双端大小防线和 untrusted 标记；
-Gateway/Handler 只调用 Project/Task Application Query，不访问 Mapper。详见
-`docs/agent/07-read-only-tool-gateway.md`。
-
-Notification API（接收人只来自当前 Principal，不接受客户端 userId）：
-
-```text
-GET  /api/v1/notifications
-GET  /api/v1/notifications/unread-count
-POST /api/v1/notifications/{notificationId}/read
-POST /api/v1/notifications/read-all
-GET  /api/v1/notifications/stream
-```
-
-SSE 使用 Stateless Bearer Header 和 Fetch-based SSE Client，不接受 query token。它是低延迟 Channel，
-不是可靠消息队列，也不提供精确一次或跨实例广播。当前已有受控 Outbox/GitHub Sync DEAD 人工重放和
-SUCCESS/FAILURE/DENIED Audit；尚未实现 RabbitMQ/Kafka、Debezium CDC、邮件、企业 IM、跨实例 SSE 或通用管理后台。
-
-停止应用后关闭容器：
-
-```powershell
-docker compose down
-```
-
-Named volume 默认保留数据；如需删除数据卷，应在确认不再需要本地数据后显式操作。
-
-### 未来规划
+该命令保留 MySQL、Redis 与 Mailpit named volumes；只有明确需要清空本地数据时才额外处理 volumes。
