@@ -22,7 +22,14 @@ generated code 不承载手工业务逻辑，也不作为 Application Core DTO�
 
 `StreamRun` 已用于正式 Browser 链路：Java 提交 request/run/input，Python 以 Server Streaming 返回带严格
 sequence/eventId 的类型化生命周期事件。事件只含 step、tool name、final output 和稳定 failure kind；不承载
-reasoning、Prompt、Tool 参数/结果、Provider body 或凭据。`CancelRun` 仍保持 `UNIMPLEMENTED`。
+reasoning、Prompt、Tool 参数/结果、Provider body 或凭据。`CancelRun` 已实现持久意图和协作式取消；
+原 `accepted=1/status=2` 字段保留，新增 `runtime_status=3` 用于返回持久 Runtime 状态。
+
+P1-02 追加 `ResumeRun(ResumeRunRequest) returns (stream AgentEvent)`，请求只有原 run_id/request_id。
+恢复拒绝返回安全的 NOT_FOUND 或 FAILED_PRECONDITION，原因包括状态不可重试、快照缺失/损坏/版本不支持、
+脱敏和预算耗尽；恢复后执行失败继续使用原 RUN_FAILED 分类。Resume 从最新显式控制状态继续，
+不重新提交用户输入。每次调用的事件序号从 1 开始，不提供跨调用历史 replay。
+Java Stub 仍从共享 proto 生成；本次没有新增 Java REST Resume 业务流程。
 
 `DevPilotToolGateway.ExecuteTool` 已形成 Python→Java 的 Unary v1 契约：Python 只提交
 `request_id/run_id/tool_call_id/tool_name/Struct arguments`，不提交 userId、Workspace、Project、角色或权限。

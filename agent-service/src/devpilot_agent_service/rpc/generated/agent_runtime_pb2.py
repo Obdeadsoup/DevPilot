@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from google.protobuf import struct_pb2 as google_dot_protobuf_dot_struct__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x13\x61gent_runtime.proto\x12\x11\x64\x65vpilot.agent.v1\x1a\x1cgoogle/protobuf/struct.proto\"I\n\x0fStartRunRequest\x12\x12\n\nrequest_id\x18\x01 \x01(\t\x12\x0e\n\x06run_id\x18\x02 \x01(\t\x12\x12\n\nuser_input\x18\x03 \x01(\t\"f\n\x10StartRunResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x14\n\x0c\x66inal_output\x18\x02 \x01(\t\x12,\n\x06status\x18\x03 \x01(\x0e\x32\x1c.devpilot.agent.v1.RunStatus\"J\n\x10StreamRunRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x12\n\nrequest_id\x18\x02 \x01(\t\x12\x12\n\nuser_input\x18\x03 \x01(\t\"\xbe\x01\n\nAgentEvent\x12\x10\n\x08\x65vent_id\x18\x01 \x01(\t\x12\x0e\n\x06run_id\x18\x02 \x01(\t\x12\x10\n\x08sequence\x18\x03 \x01(\x04\x12/\n\x04type\x18\x04 \x01(\x0e\x32!.devpilot.agent.v1.AgentEventType\x12\x0c\n\x04step\x18\x05 \x01(\r\x12\x11\n\ttool_name\x18\x06 \x01(\t\x12\x14\n\x0c\x66inal_output\x18\x07 \x01(\t\x12\x14\n\x0c\x66\x61ilure_kind\x18\x08 \x01(\t\"6\n\x10\x43\x61ncelRunRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x12\n\nrequest_id\x18\x02 \x01(\t\"Y\n\x11\x43\x61ncelRunResponse\x12\x10\n\x08\x61\x63\x63\x65pted\x18\x01 \x01(\x08\x12\x32\n\x06status\x18\x02 \x01(\x0e\x32\".devpilot.agent.v1.CancelRunStatus\"\x8d\x01\n\x12\x45xecuteToolRequest\x12\x12\n\nrequest_id\x18\x01 \x01(\t\x12\x0e\n\x06run_id\x18\x02 \x01(\t\x12\x14\n\x0ctool_call_id\x18\x03 \x01(\t\x12\x11\n\ttool_name\x18\x04 \x01(\t\x12*\n\targuments\x18\x05 \x01(\x0b\x32\x17.google.protobuf.Struct\"\xb3\x01\n\x13\x45xecuteToolResponse\x12\x11\n\tresult_id\x18\x01 \x01(\t\x12\x14\n\x0ctool_call_id\x18\x02 \x01(\t\x12\x36\n\x06status\x18\x03 \x01(\x0e\x32&.devpilot.agent.v1.ToolExecutionStatus\x12\'\n\x06result\x18\x04 \x01(\x0b\x32\x17.google.protobuf.Struct\x12\x12\n\nerror_kind\x18\x05 \x01(\t*X\n\tRunStatus\x12\x1a\n\x16RUN_STATUS_UNSPECIFIED\x10\x00\x12\x18\n\x14RUN_STATUS_SUCCEEDED\x10\x01\x12\x15\n\x11RUN_STATUS_FAILED\x10\x02*\xae\x02\n\x0e\x41gentEventType\x12 \n\x1c\x41GENT_EVENT_TYPE_UNSPECIFIED\x10\x00\x12 \n\x1c\x41GENT_EVENT_TYPE_RUN_STARTED\x10\x01\x12\'\n#AGENT_EVENT_TYPE_MODEL_STEP_STARTED\x10\x02\x12!\n\x1d\x41GENT_EVENT_TYPE_TOOL_STARTED\x10\x03\x12#\n\x1f\x41GENT_EVENT_TYPE_TOOL_COMPLETED\x10\x04\x12\"\n\x1e\x41GENT_EVENT_TYPE_RUN_SUCCEEDED\x10\x05\x12\x1f\n\x1b\x41GENT_EVENT_TYPE_RUN_FAILED\x10\x06\x12\"\n\x1e\x41GENT_EVENT_TYPE_RUN_CANCELLED\x10\x07*\x9d\x01\n\x0f\x43\x61ncelRunStatus\x12!\n\x1d\x43\x41NCEL_RUN_STATUS_UNSPECIFIED\x10\x00\x12\x1e\n\x1a\x43\x41NCEL_RUN_STATUS_ACCEPTED\x10\x01\x12\x1f\n\x1b\x43\x41NCEL_RUN_STATUS_NOT_FOUND\x10\x02\x12&\n\"CANCEL_RUN_STATUS_ALREADY_TERMINAL\x10\x03*\x83\x01\n\x13ToolExecutionStatus\x12%\n!TOOL_EXECUTION_STATUS_UNSPECIFIED\x10\x00\x12#\n\x1fTOOL_EXECUTION_STATUS_SUCCEEDED\x10\x01\x12 \n\x1cTOOL_EXECUTION_STATUS_FAILED\x10\x02\x32\x8e\x02\n\x0c\x41gentRuntime\x12S\n\x08StartRun\x12\".devpilot.agent.v1.StartRunRequest\x1a#.devpilot.agent.v1.StartRunResponse\x12Q\n\tStreamRun\x12#.devpilot.agent.v1.StreamRunRequest\x1a\x1d.devpilot.agent.v1.AgentEvent0\x01\x12V\n\tCancelRun\x12#.devpilot.agent.v1.CancelRunRequest\x1a$.devpilot.agent.v1.CancelRunResponse2s\n\x13\x44\x65vPilotToolGateway\x12\\\n\x0b\x45xecuteTool\x12%.devpilot.agent.v1.ExecuteToolRequest\x1a&.devpilot.agent.v1.ExecuteToolResponseB-\n)com.obdeadsoup.devpilot.agent.contract.v1P\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x13\x61gent_runtime.proto\x12\x11\x64\x65vpilot.agent.v1\x1a\x1cgoogle/protobuf/struct.proto\"I\n\x0fStartRunRequest\x12\x12\n\nrequest_id\x18\x01 \x01(\t\x12\x0e\n\x06run_id\x18\x02 \x01(\t\x12\x12\n\nuser_input\x18\x03 \x01(\t\"f\n\x10StartRunResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x14\n\x0c\x66inal_output\x18\x02 \x01(\t\x12,\n\x06status\x18\x03 \x01(\x0e\x32\x1c.devpilot.agent.v1.RunStatus\"J\n\x10StreamRunRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x12\n\nrequest_id\x18\x02 \x01(\t\x12\x12\n\nuser_input\x18\x03 \x01(\t\"\xbe\x01\n\nAgentEvent\x12\x10\n\x08\x65vent_id\x18\x01 \x01(\t\x12\x0e\n\x06run_id\x18\x02 \x01(\t\x12\x10\n\x08sequence\x18\x03 \x01(\x04\x12/\n\x04type\x18\x04 \x01(\x0e\x32!.devpilot.agent.v1.AgentEventType\x12\x0c\n\x04step\x18\x05 \x01(\r\x12\x11\n\ttool_name\x18\x06 \x01(\t\x12\x14\n\x0c\x66inal_output\x18\x07 \x01(\t\x12\x14\n\x0c\x66\x61ilure_kind\x18\x08 \x01(\t\"6\n\x10\x43\x61ncelRunRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x12\n\nrequest_id\x18\x02 \x01(\t\"q\n\x11\x43\x61ncelRunResponse\x12\x10\n\x08\x61\x63\x63\x65pted\x18\x01 \x01(\x08\x12\x32\n\x06status\x18\x02 \x01(\x0e\x32\".devpilot.agent.v1.CancelRunStatus\x12\x16\n\x0eruntime_status\x18\x03 \x01(\t\"6\n\x10ResumeRunRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x12\n\nrequest_id\x18\x02 \x01(\t\"\x8d\x01\n\x12\x45xecuteToolRequest\x12\x12\n\nrequest_id\x18\x01 \x01(\t\x12\x0e\n\x06run_id\x18\x02 \x01(\t\x12\x14\n\x0ctool_call_id\x18\x03 \x01(\t\x12\x11\n\ttool_name\x18\x04 \x01(\t\x12*\n\targuments\x18\x05 \x01(\x0b\x32\x17.google.protobuf.Struct\"\xb3\x01\n\x13\x45xecuteToolResponse\x12\x11\n\tresult_id\x18\x01 \x01(\t\x12\x14\n\x0ctool_call_id\x18\x02 \x01(\t\x12\x36\n\x06status\x18\x03 \x01(\x0e\x32&.devpilot.agent.v1.ToolExecutionStatus\x12\'\n\x06result\x18\x04 \x01(\x0b\x32\x17.google.protobuf.Struct\x12\x12\n\nerror_kind\x18\x05 \x01(\t*X\n\tRunStatus\x12\x1a\n\x16RUN_STATUS_UNSPECIFIED\x10\x00\x12\x18\n\x14RUN_STATUS_SUCCEEDED\x10\x01\x12\x15\n\x11RUN_STATUS_FAILED\x10\x02*\xae\x02\n\x0e\x41gentEventType\x12 \n\x1c\x41GENT_EVENT_TYPE_UNSPECIFIED\x10\x00\x12 \n\x1c\x41GENT_EVENT_TYPE_RUN_STARTED\x10\x01\x12\'\n#AGENT_EVENT_TYPE_MODEL_STEP_STARTED\x10\x02\x12!\n\x1d\x41GENT_EVENT_TYPE_TOOL_STARTED\x10\x03\x12#\n\x1f\x41GENT_EVENT_TYPE_TOOL_COMPLETED\x10\x04\x12\"\n\x1e\x41GENT_EVENT_TYPE_RUN_SUCCEEDED\x10\x05\x12\x1f\n\x1b\x41GENT_EVENT_TYPE_RUN_FAILED\x10\x06\x12\"\n\x1e\x41GENT_EVENT_TYPE_RUN_CANCELLED\x10\x07*\x9d\x01\n\x0f\x43\x61ncelRunStatus\x12!\n\x1d\x43\x41NCEL_RUN_STATUS_UNSPECIFIED\x10\x00\x12\x1e\n\x1a\x43\x41NCEL_RUN_STATUS_ACCEPTED\x10\x01\x12\x1f\n\x1b\x43\x41NCEL_RUN_STATUS_NOT_FOUND\x10\x02\x12&\n\"CANCEL_RUN_STATUS_ALREADY_TERMINAL\x10\x03*\x83\x01\n\x13ToolExecutionStatus\x12%\n!TOOL_EXECUTION_STATUS_UNSPECIFIED\x10\x00\x12#\n\x1fTOOL_EXECUTION_STATUS_SUCCEEDED\x10\x01\x12 \n\x1cTOOL_EXECUTION_STATUS_FAILED\x10\x02\x32\xe1\x02\n\x0c\x41gentRuntime\x12S\n\x08StartRun\x12\".devpilot.agent.v1.StartRunRequest\x1a#.devpilot.agent.v1.StartRunResponse\x12Q\n\tStreamRun\x12#.devpilot.agent.v1.StreamRunRequest\x1a\x1d.devpilot.agent.v1.AgentEvent0\x01\x12V\n\tCancelRun\x12#.devpilot.agent.v1.CancelRunRequest\x1a$.devpilot.agent.v1.CancelRunResponse\x12Q\n\tResumeRun\x12#.devpilot.agent.v1.ResumeRunRequest\x1a\x1d.devpilot.agent.v1.AgentEvent0\x01\x32s\n\x13\x44\x65vPilotToolGateway\x12\\\n\x0b\x45xecuteTool\x12%.devpilot.agent.v1.ExecuteToolRequest\x1a&.devpilot.agent.v1.ExecuteToolResponseB-\n)com.obdeadsoup.devpilot.agent.contract.v1P\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -33,14 +33,14 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'agent_runtime_pb2', _global
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'\n)com.obdeadsoup.devpilot.agent.contract.v1P\001'
-  _globals['_RUNSTATUS']._serialized_start=993
-  _globals['_RUNSTATUS']._serialized_end=1081
-  _globals['_AGENTEVENTTYPE']._serialized_start=1084
-  _globals['_AGENTEVENTTYPE']._serialized_end=1386
-  _globals['_CANCELRUNSTATUS']._serialized_start=1389
-  _globals['_CANCELRUNSTATUS']._serialized_end=1546
-  _globals['_TOOLEXECUTIONSTATUS']._serialized_start=1549
-  _globals['_TOOLEXECUTIONSTATUS']._serialized_end=1680
+  _globals['_RUNSTATUS']._serialized_start=1073
+  _globals['_RUNSTATUS']._serialized_end=1161
+  _globals['_AGENTEVENTTYPE']._serialized_start=1164
+  _globals['_AGENTEVENTTYPE']._serialized_end=1466
+  _globals['_CANCELRUNSTATUS']._serialized_start=1469
+  _globals['_CANCELRUNSTATUS']._serialized_end=1626
+  _globals['_TOOLEXECUTIONSTATUS']._serialized_start=1629
+  _globals['_TOOLEXECUTIONSTATUS']._serialized_end=1760
   _globals['_STARTRUNREQUEST']._serialized_start=72
   _globals['_STARTRUNREQUEST']._serialized_end=145
   _globals['_STARTRUNRESPONSE']._serialized_start=147
@@ -52,13 +52,15 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_CANCELRUNREQUEST']._serialized_start=520
   _globals['_CANCELRUNREQUEST']._serialized_end=574
   _globals['_CANCELRUNRESPONSE']._serialized_start=576
-  _globals['_CANCELRUNRESPONSE']._serialized_end=665
-  _globals['_EXECUTETOOLREQUEST']._serialized_start=668
-  _globals['_EXECUTETOOLREQUEST']._serialized_end=809
-  _globals['_EXECUTETOOLRESPONSE']._serialized_start=812
-  _globals['_EXECUTETOOLRESPONSE']._serialized_end=991
-  _globals['_AGENTRUNTIME']._serialized_start=1683
-  _globals['_AGENTRUNTIME']._serialized_end=1953
-  _globals['_DEVPILOTTOOLGATEWAY']._serialized_start=1955
-  _globals['_DEVPILOTTOOLGATEWAY']._serialized_end=2070
+  _globals['_CANCELRUNRESPONSE']._serialized_end=689
+  _globals['_RESUMERUNREQUEST']._serialized_start=691
+  _globals['_RESUMERUNREQUEST']._serialized_end=745
+  _globals['_EXECUTETOOLREQUEST']._serialized_start=748
+  _globals['_EXECUTETOOLREQUEST']._serialized_end=889
+  _globals['_EXECUTETOOLRESPONSE']._serialized_start=892
+  _globals['_EXECUTETOOLRESPONSE']._serialized_end=1071
+  _globals['_AGENTRUNTIME']._serialized_start=1763
+  _globals['_AGENTRUNTIME']._serialized_end=2116
+  _globals['_DEVPILOTTOOLGATEWAY']._serialized_start=2118
+  _globals['_DEVPILOTTOOLGATEWAY']._serialized_end=2233
 # @@protoc_insertion_point(module_scope)

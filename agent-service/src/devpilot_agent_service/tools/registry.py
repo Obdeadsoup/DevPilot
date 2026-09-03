@@ -62,7 +62,9 @@ class ToolRegistry:
             raise
         except Exception as error:
             # Tool 实现异常在 Registry 边界统一分类，但保留 __cause__ 供本地调试。
-            raise ToolExecutionError(name) from error
+            raise ToolExecutionError(
+                name, retryable=getattr(error, "retryable", False) is True
+            ) from error
 
         try:
             json.dumps(result, ensure_ascii=False, allow_nan=False)

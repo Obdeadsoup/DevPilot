@@ -32,8 +32,8 @@ class FakeServicerContext:
         return self.active
 
 
-def servicer_with(script: Sequence[ModelResponse | Exception]) -> AgentRuntimeServicer:
-    loop = AgentLoop(FakeModel(script), ToolRegistry())
+def servicer_with(script: Sequence[ModelResponse | Exception], repository) -> AgentRuntimeServicer:
+    loop = AgentLoop(FakeModel(script), ToolRegistry(), repository=repository)
     return AgentRuntimeServicer(AgentRuntimeApplication(loop))
 
 
@@ -53,8 +53,8 @@ def valid_stream_request() -> agent_runtime_pb2.StreamRunRequest:
     )
 
 
-def test_start_run_returns_same_run_id_and_final_output() -> None:
-    response = servicer_with([ModelResponse.final("finished")]).StartRun(
+def test_start_run_returns_same_run_id_and_final_output(repository) -> None:
+    response = servicer_with([ModelResponse.final("finished")], repository=repository).StartRun(
         valid_request(),
         FakeServicerContext(),  # type: ignore[arg-type]
     )
@@ -65,12 +65,12 @@ def test_start_run_returns_same_run_id_and_final_output() -> None:
 
 
 @pytest.mark.parametrize("field_name", ["request_id", "run_id", "user_input"])
-def test_start_run_rejects_blank_required_field(field_name: str) -> None:
+def test_start_run_rejects_blank_required_field(field_name: str, repository) -> None:
     request = valid_request()
     setattr(request, field_name, " ")
 
     with pytest.raises(RpcAbort) as captured:
-        servicer_with([ModelResponse.final("unused")]).StartRun(
+        servicer_with([ModelResponse.final("unused")], repository=repository).StartRun(
             request,
             FakeServicerContext(),  # type: ignore[arg-type]
         )
@@ -79,9 +79,11 @@ def test_start_run_rejects_blank_required_field(field_name: str) -> None:
     assert captured.value.details == f"{field_name} must not be blank"
 
 
-def test_agent_loop_failure_becomes_sanitized_internal_status() -> None:
+def test_agent_loop_failure_becomes_sanitized_internal_status(repository) -> None:
     with pytest.raises(RpcAbort) as captured:
-        servicer_with([RuntimeError("provider-body-must-not-leak")]).StartRun(
+        servicer_with(
+            [RuntimeError("provider-body-must-not-leak")], repository=repository
+        ).StartRun(
             valid_request(),
             FakeServicerContext(),  # type: ignore[arg-type]
         )
@@ -92,13 +94,13 @@ def test_agent_loop_failure_becomes_sanitized_internal_status() -> None:
 
 
 @pytest.mark.parametrize("field_name", ["request_id", "run_id", "user_input"])
-def test_stream_run_rejects_blank_required_field(field_name: str) -> None:
+def test_stream_run_rejects_blank_required_field(field_name: str, repository) -> None:
     request = valid_stream_request()
     setattr(request, field_name, " ")
 
     with pytest.raises(RpcAbort) as captured:
         list(
-            servicer_with([ModelResponse.final("unused")]).StreamRun(
+            servicer_with([ModelResponse.final("unused")], repository=repository).StreamRun(
                 request,
                 FakeServicerContext(),  # type: ignore[arg-type]
             )
@@ -108,7 +110,7 @@ def test_stream_run_rejects_blank_required_field(field_name: str) -> None:
     assert captured.value.details == f"{field_name} must not be blank"
 
 
-def test_stream_run_emits_strict_sequence_lifecycle_and_terminal_last() -> None:
+def test_stream_run_emits_strict_sequence_lifecycle_and_terminal_last(repository) -> None:
     model_script = [
         ModelResponse.request_tools(
             [ToolCall(call_id="private-id", name="echo", arguments={"text": "secret"})]
@@ -120,7 +122,7 @@ def test_stream_run_emits_strict_sequence_lifecycle_and_terminal_last() -> None:
 
     registry.register(EchoTool())
     servicer = AgentRuntimeServicer(
-        AgentRuntimeApplication(AgentLoop(FakeModel(model_script), registry))
+        AgentRuntimeApplication(AgentLoop(FakeModel(model_script), registry, repository=repository))
     )
 
     events = list(servicer.StreamRun(valid_stream_request(), FakeServicerContext()))  # type: ignore[arg-type]
@@ -143,9 +145,9 @@ def test_stream_run_emits_strict_sequence_lifecycle_and_terminal_last() -> None:
     assert "secret" not in repr(events)
 
 
-def test_stream_run_business_failure_is_single_last_terminal() -> None:
+def test_stream_run_business_failure_is_single_last_terminal(repository) -> None:
     events = list(
-        servicer_with([RuntimeError("private provider body")]).StreamRun(
+        servicer_with([RuntimeError("private provider body")], repository=repository).StreamRun(
             valid_stream_request(),
             FakeServicerContext(),  # type: ignore[arg-type]
         )
@@ -154,17 +156,20 @@ def test_stream_run_business_failure_is_single_last_terminal() -> None:
     assert events[0].type == agent_runtime_pb2.AGENT_EVENT_TYPE_RUN_STARTED
     assert events[-1].type == agent_runtime_pb2.AGENT_EVENT_TYPE_RUN_FAILED
     assert events[-1].failure_kind == "MODEL_ERROR"
-    assert sum(
-        event.type
-        in {
-            agent_runtime_pb2.AGENT_EVENT_TYPE_RUN_SUCCEEDED,
-            agent_runtime_pb2.AGENT_EVENT_TYPE_RUN_FAILED,
-        }
-        for event in events
-    ) == 1
+    assert (
+        sum(
+            event.type
+            in {
+                agent_runtime_pb2.AGENT_EVENT_TYPE_RUN_SUCCEEDED,
+                agent_runtime_pb2.AGENT_EVENT_TYPE_RUN_FAILED,
+            }
+            for event in events
+        )
+        == 1
+    )
 
 
-def test_active_run_rejects_duplicate_and_cancel_emits_exactly_one_terminal() -> None:
+def test_active_run_rejects_duplicate_and_cancel_emits_exactly_one_terminal(repository) -> None:
     release_model = threading.Event()
 
     class BlockingModel:
@@ -173,7 +178,7 @@ def test_active_run_rejects_duplicate_and_cancel_emits_exactly_one_terminal() ->
             return ModelResponse.final("must-not-succeed")
 
     servicer = AgentRuntimeServicer(
-        AgentRuntimeApplication(AgentLoop(BlockingModel(), ToolRegistry()))
+        AgentRuntimeApplication(AgentLoop(BlockingModel(), ToolRegistry(), repository=repository))
     )
     context = FakeServicerContext()
     stream = servicer.StreamRun(valid_stream_request(), context)  # type: ignore[arg-type]
@@ -181,15 +186,14 @@ def test_active_run_rejects_duplicate_and_cancel_emits_exactly_one_terminal() ->
     assert first.type == agent_runtime_pb2.AGENT_EVENT_TYPE_RUN_STARTED
 
     duplicate = servicer.StreamRun(
-        valid_stream_request(), FakeServicerContext()  # type: ignore[arg-type]
+        valid_stream_request(),
+        FakeServicerContext(),  # type: ignore[arg-type]
     )
     with pytest.raises(RpcAbort) as captured:
         next(duplicate)
     assert captured.value.code is grpc.StatusCode.ALREADY_EXISTS
 
-    cancel_request = agent_runtime_pb2.CancelRunRequest(
-        run_id="run-1", request_id="request-1"
-    )
+    cancel_request = agent_runtime_pb2.CancelRunRequest(run_id="run-1", request_id="request-1")
     assert servicer.CancelRun(cancel_request, context).status == (
         agent_runtime_pb2.CANCEL_RUN_STATUS_ACCEPTED
     )
@@ -212,17 +216,16 @@ def test_active_run_rejects_duplicate_and_cancel_emits_exactly_one_terminal() ->
     )
 
 
-def test_cancelled_context_releases_producer_blocked_by_bounded_queue(monkeypatch) -> None:
+def test_cancelled_context_releases_producer_blocked_by_bounded_queue(
+    monkeypatch, repository
+) -> None:
     import devpilot_agent_service.rpc.servicer as servicer_module
 
     monkeypatch.setattr(servicer_module, "STREAM_QUEUE_CAPACITY", 1)
     context = FakeServicerContext()
     generator = servicer_with(
-        [
-            ModelResponse.request_tools(
-                [ToolCall(call_id="call-1", name="missing", arguments={})]
-            )
-        ]
+        [ModelResponse.request_tools([ToolCall(call_id="call-1", name="missing", arguments={})])],
+        repository=repository,
     ).StreamRun(valid_stream_request(), context)  # type: ignore[arg-type]
 
     assert next(generator).type == agent_runtime_pb2.AGENT_EVENT_TYPE_RUN_STARTED

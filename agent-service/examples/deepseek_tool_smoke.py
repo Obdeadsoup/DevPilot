@@ -7,6 +7,7 @@ from pathlib import Path
 SOURCE_ROOT = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SOURCE_ROOT))
 
+from devpilot_agent_service.config import create_runtime_repository  # noqa: E402
 from devpilot_agent_service.model.errors import ProviderErrorKind  # noqa: E402
 from devpilot_agent_service.model.providers.config import OpenAICompatibleConfig  # noqa: E402
 from devpilot_agent_service.model.providers.openai_compatible import (  # noqa: E402
@@ -31,6 +32,7 @@ def main() -> int:
     loop = AgentLoop(
         OpenAICompatibleModel(OpenAICompatibleConfig.from_deepseek_env()),
         registry,
+        repository=create_runtime_repository(),
         max_steps=4,
         max_tool_calls=2,
         system_prompt=(

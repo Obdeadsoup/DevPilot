@@ -4,7 +4,7 @@ import time
 from collections.abc import Callable, Sequence
 
 from devpilot_agent_service.model.types import ModelResponse
-from devpilot_agent_service.runtime.agent_loop import AgentLoop, RunResult
+from devpilot_agent_service.runtime.agent_loop import AgentLoop, PreparedRun, RunResult
 from devpilot_agent_service.runtime.cancellation import CancellationToken
 from devpilot_agent_service.runtime.context import RunContext
 from devpilot_agent_service.runtime.events import RuntimeEvent
@@ -35,6 +35,31 @@ class AgentRuntimeApplication:
             on_event=on_event,
             cancellation_token=cancellation_token,
         )
+
+    def prepare_run(self, user_input: str, run_context: RunContext) -> PreparedRun:
+        return self._loop.prepare_run(user_input, run_context=run_context)
+
+    def prepare_resume(self, run_context: RunContext) -> PreparedRun:
+        return self._loop.prepare_resume(run_context)
+
+    def execute_prepared(
+        self,
+        prepared: PreparedRun,
+        *,
+        on_event=None,
+        cancellation_token=None,
+    ) -> RunResult:
+        return self._loop.execute_prepared(
+            prepared,
+            on_event=on_event,
+            cancellation_token=cancellation_token,
+        )
+
+    def request_cancel(self, run_id: str, request_id: str):
+        return self._loop.repository.request_cancel(run_id, request_id)
+
+    def reconcile_interrupted_runs(self) -> tuple[str, ...]:
+        return self._loop.repository.reconcile_interrupted_runs()
 
     def close(self) -> None:
         """关闭进程级 Tool Channel；每次 ToolCall 不创建/销毁连接。"""

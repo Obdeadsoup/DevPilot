@@ -50,3 +50,15 @@ def test_generated_tool_contract_uses_struct_and_preserves_correlation() -> None
     assert request.HasField("arguments")
     assert hasattr(agent_runtime_pb2_grpc, "DevPilotToolGatewayStub")
     assert agent_runtime_pb2.TOOL_EXECUTION_STATUS_SUCCEEDED > 0
+
+
+def test_resume_is_additive_streaming_rpc_and_cancel_preserves_existing_fields():
+    service = agent_runtime_pb2.DESCRIPTOR.services_by_name["AgentRuntime"]
+    resume = service.methods_by_name["ResumeRun"]
+    assert resume.server_streaming and not resume.client_streaming
+    request = agent_runtime_pb2.ResumeRunRequest(run_id="run", request_id="request")
+    assert set(request.DESCRIPTOR.fields_by_name) == {"run_id", "request_id"}
+    fields = agent_runtime_pb2.CancelRunResponse.DESCRIPTOR.fields_by_name
+    assert fields["accepted"].number == 1
+    assert fields["status"].number == 2
+    assert fields["runtime_status"].number == 3

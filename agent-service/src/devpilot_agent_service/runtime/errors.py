@@ -69,10 +69,19 @@ class InvalidToolArguments(AgentRuntimeError):
 class ToolExecutionError(AgentRuntimeError):
     stop_reason = StopReason.TOOL_ERROR
 
-    def __init__(self, tool_name: str) -> None:
+    def __init__(self, tool_name: str, *, retryable: bool = False) -> None:
         # 不拼接原始参数或底层异常，避免异常文本意外扩散敏感输入。
         super().__init__(f"tool execution failed: {tool_name}")
         self.tool_name = tool_name
+        self.retryable = retryable
+
+
+class ResumeRejected(RuntimeError):
+    """安全、稳定的恢复拒绝原因；不包含快照正文或用户输入。"""
+
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(code)
 
 
 class MaxStepsExceeded(AgentRuntimeError):

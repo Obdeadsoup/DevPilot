@@ -106,6 +106,7 @@ services:
       AGENT_GRPC_PORT: 50051
       # Full Stack 永远使用真实 Provider；fake 仅保留给自动化测试和显式 smoke。
       AGENT_MODEL_MODE: deepseek
+      AGENT_RUNTIME_DB_PATH: /app/data/agent-runtime.sqlite3
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?Set DEEPSEEK_API_KEY in .env}
       DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
@@ -119,6 +120,8 @@ services:
       DEVPILOT_JAVA_TOOL_CIRCUIT_FAILURE_THRESHOLD: ${DEVPILOT_JAVA_TOOL_CIRCUIT_FAILURE_THRESHOLD:-3}
       DEVPILOT_JAVA_TOOL_CIRCUIT_OPEN_SECONDS: ${DEVPILOT_JAVA_TOOL_CIRCUIT_OPEN_SECONDS:-10}
       DEVPILOT_AGENT_TOOL_SERVICE_KEY: ${DEVPILOT_AGENT_TOOL_SERVICE_KEY:?Set DEVPILOT_AGENT_TOOL_SERVICE_KEY in .env}
+    volumes:
+      - devpilot-agent-runtime-data:/app/data
     expose:
       - "50051"
     healthcheck:
@@ -237,6 +240,8 @@ services:
       start_period: 5s
 
 volumes:
+  devpilot-agent-runtime-data:
+    name: devpilot-agent-runtime-data
   devpilot-mysql-data:
     name: devpilot-mysql-data
   devpilot-redis-data:

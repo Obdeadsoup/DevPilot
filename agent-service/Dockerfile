@@ -18,6 +18,8 @@ ENV PATH="/opt/venv/bin:$PATH" \
     AGENT_GRPC_PORT=50051 \
     AGENT_MODEL_MODE=deepseek
 WORKDIR /app
+RUN mkdir -p /app/data && chown devpilot:devpilot /app/data
+ENV AGENT_RUNTIME_DB_PATH=/app/data/agent-runtime.sqlite3
 USER devpilot
 EXPOSE 50051
 # Channel readiness 验证真实 gRPC 监听；Agent/DeepSeek/Tool 全链仍必须单独做应用层 E2E。

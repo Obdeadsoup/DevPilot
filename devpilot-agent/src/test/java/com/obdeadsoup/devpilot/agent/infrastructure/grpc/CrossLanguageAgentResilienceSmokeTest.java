@@ -17,6 +17,7 @@ import io.grpc.netty.shaded.io.grpc.netty.NettyChannelBuilder;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -31,6 +32,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /** 真实 TCP/HTTP2 fault injection；显式环境开关避免普通单测依赖本机 Python。 */
 @EnabledIfEnvironmentVariable(named = "DEVPILOT_AGENT_RESILIENCE_SMOKE", matches = "true")
 class CrossLanguageAgentResilienceSmokeTest {
+    @TempDir
+    Path runtimeDirectory;
 
     @Test
     void downOpenRecoverCancelAndCapacity() throws Exception {
@@ -149,6 +152,8 @@ class CrossLanguageAgentResilienceSmokeTest {
         builder.environment().put("AGENT_GRPC_PORT", Integer.toString(port));
         builder.environment().put("AGENT_MODEL_MODE", "fake");
         builder.environment().put("AGENT_FAKE_DELAY_SECONDS", "0.5");
+        builder.environment().put("AGENT_RUNTIME_DB_PATH",
+                runtimeDirectory.resolve("runtime.sqlite3").toString());
         builder.redirectErrorStream(true);
         return builder.start();
     }

@@ -43,6 +43,12 @@ class JavaToolGatewayError(RuntimeError):
     def __init__(self, kind: JavaToolGatewayFailureKind) -> None:
         super().__init__(kind.value)
         self.kind = kind
+        # 只有明确暂时性依赖故障允许 Runtime 显式重试，权限/业务/协议错误不自动放行。
+        self.retryable = kind in {
+            JavaToolGatewayFailureKind.DEADLINE,
+            JavaToolGatewayFailureKind.UNAVAILABLE,
+            JavaToolGatewayFailureKind.CIRCUIT_OPEN,
+        }
 
 
 @dataclass(frozen=True, slots=True)

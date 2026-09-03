@@ -12,6 +12,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -27,6 +28,9 @@ class CrossLanguageGrpcSmokeTest {
 
     @Test
     void javaProcessCallsPythonFakeAgentOverTcpHttp2() throws InterruptedException {
+        // Runtime 会拒绝已存在的 run_id；同一持久化 Server 上重复 smoke 也必须使用新 identity。
+        String unaryRunId = "p0-04-" + UUID.randomUUID();
+        String streamRunId = "p0-06-" + UUID.randomUUID();
         String host = System.getenv().getOrDefault("AGENT_GRPC_CLIENT_HOST", "127.0.0.1");
         int port = Integer.parseInt(System.getenv().getOrDefault("AGENT_GRPC_PORT", "50051"));
         AgentGrpcProperties properties = new AgentGrpcProperties(
@@ -46,11 +50,11 @@ class CrossLanguageGrpcSmokeTest {
 
             var result = client.run(new AgentRunCommand(
                     "p0-04-java-request",
-                    "p0-04-cross-language-run",
+                    unaryRunId,
                     "hello-cross-language"
             ));
 
-            assertThat(result.runId()).isEqualTo("p0-04-cross-language-run");
+            assertThat(result.runId()).isEqualTo(unaryRunId);
             assertThat(result.finalOutput()).isEqualTo("fake:hello-cross-language");
             assertThat(result.status()).isEqualTo(AgentRunStatus.SUCCEEDED);
 
@@ -59,7 +63,7 @@ class CrossLanguageGrpcSmokeTest {
             var streamingClient = new GrpcAgentRuntimeStreamingClient(
                     AgentRuntimeGrpc.newStub(channel.channel()), properties.streamDeadline());
             streamingClient.stream(new AgentRunCommand(
-                    "p0-06-java-request", "p0-06-cross-language-run", "hello-streaming"
+                    "p0-06-java-request", streamRunId, "hello-streaming"
             ), new AgentRuntimeEventListener() {
                 @Override
                 public void onEvent(AgentStreamEvent event) {
@@ -84,9 +88,9 @@ class CrossLanguageGrpcSmokeTest {
                     AgentStreamEventType.RUN_SUCCEEDED);
             assertThat(events).extracting(AgentStreamEvent::sequence).containsExactly(1L, 2L, 3L);
             assertThat(events).extracting(AgentStreamEvent::eventId).containsExactly(
-                    "p0-06-cross-language-run:1",
-                    "p0-06-cross-language-run:2",
-                    "p0-06-cross-language-run:3");
+                    streamRunId + ":1",
+                    streamRunId + ":2",
+                    streamRunId + ":3");
             assertThat(events.getLast().finalOutput()).isEqualTo("fake:hello-streaming");
         }
     }

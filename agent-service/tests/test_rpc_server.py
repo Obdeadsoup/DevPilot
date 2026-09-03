@@ -21,6 +21,7 @@ def test_server_config_uses_safe_defaults_and_environment_overrides() -> None:
             "AGENT_GRPC_HOST": "127.0.0.1",
             "AGENT_GRPC_PORT": "55051",
             "AGENT_MODEL_MODE": "FAKE",
+            "AGENT_RUNTIME_DB_PATH": "custom/runtime.sqlite3",
         }
     )
 
@@ -31,6 +32,7 @@ def test_server_config_uses_safe_defaults_and_environment_overrides() -> None:
     )
     assert overridden.bind_address == "127.0.0.1:55051"
     assert overridden.model_mode == "fake"
+    assert overridden.runtime_db_path == "custom/runtime.sqlite3"
 
 
 @pytest.mark.parametrize(
@@ -41,6 +43,8 @@ def test_server_config_uses_safe_defaults_and_environment_overrides() -> None:
         {"AGENT_GRPC_PORT": "65536"},
         {"AGENT_MODEL_MODE": "unknown"},
         {"AGENT_GRPC_HOST": " "},
+        {"AGENT_RUNTIME_DB_PATH": " "},
+        {"AGENT_RUNTIME_DB_PATH": ":memory:"},
     ],
 )
 def test_server_config_rejects_invalid_values(environment: dict[str, str]) -> None:
@@ -48,19 +52,28 @@ def test_server_config_rejects_invalid_values(environment: dict[str, str]) -> No
         RpcServerConfig.from_env(environment)
 
 
-def test_fake_mode_is_deterministic_and_still_uses_agent_loop() -> None:
-    result = create_application(RpcServerConfig(model_mode="fake")).start_run("hello")
+def test_fake_mode_is_deterministic_and_still_uses_agent_loop(tmp_path) -> None:
+    result = create_application(
+        RpcServerConfig(model_mode="fake", runtime_db_path=str(tmp_path / "runtime.sqlite3"))
+    ).start_run("hello")
 
     assert result.final_answer == "fake:hello"
     assert len(result.trace) == 1
 
 
-def test_server_bootstrap_registers_real_tcp_server() -> None:
+def test_server_bootstrap_registers_real_tcp_server(tmp_path) -> None:
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
 
-    server = create_server(RpcServerConfig(host="127.0.0.1", port=port, model_mode="fake"))
+    server = create_server(
+        RpcServerConfig(
+            host="127.0.0.1",
+            port=port,
+            model_mode="fake",
+            runtime_db_path=str(tmp_path / "runtime.sqlite3"),
+        )
+    )
     server.start()
     try:
         assert server is not None
@@ -68,12 +81,19 @@ def test_server_bootstrap_registers_real_tcp_server() -> None:
         server.stop(grace=0).wait()
 
 
-def test_stream_run_uses_real_tcp_and_cancel_reports_not_found() -> None:
+def test_stream_run_uses_real_tcp_and_cancel_reports_not_found(tmp_path) -> None:
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
 
-    server = create_server(RpcServerConfig(host="127.0.0.1", port=port, model_mode="fake"))
+    server = create_server(
+        RpcServerConfig(
+            host="127.0.0.1",
+            port=port,
+            model_mode="fake",
+            runtime_db_path=str(tmp_path / "runtime.sqlite3"),
+        )
+    )
     server.start()
     channel = grpc.insecure_channel(
         f"127.0.0.1:{port}",

@@ -12,6 +12,8 @@ service AgentRuntime {
   rpc StartRun(StartRunRequest) returns (StartRunResponse);
   rpc StreamRun(StreamRunRequest) returns (stream AgentEvent);
   rpc CancelRun(CancelRunRequest) returns (CancelRunResponse);
+  // 只恢复已持久化、明确可重试的 Runtime；不会再次提交 user_input。
+  rpc ResumeRun(ResumeRunRequest) returns (stream AgentEvent);
 }
 
 // Python 调用 Java 的受控 Tool Gateway 边界。
@@ -73,6 +75,13 @@ message CancelRunRequest {
 message CancelRunResponse {
   bool accepted = 1;
   CancelRunStatus status = 2;
+  // 保留原 status/accepted 字段兼容 Java；新调用方可观察持久 Runtime 状态。
+  string runtime_status = 3;
+}
+
+message ResumeRunRequest {
+  string run_id = 1;
+  string request_id = 2;
 }
 
 enum CancelRunStatus {

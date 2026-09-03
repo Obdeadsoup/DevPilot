@@ -9,6 +9,13 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .venv/
+.runtime/
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.sqlite3-*
+*.db
+*.db-*
 
 # Local configuration and secrets
 .env

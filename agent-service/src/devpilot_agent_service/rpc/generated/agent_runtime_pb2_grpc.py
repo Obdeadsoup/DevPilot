@@ -50,6 +50,11 @@ class AgentRuntimeStub:
                 request_serializer=agent__runtime__pb2.CancelRunRequest.SerializeToString,
                 response_deserializer=agent__runtime__pb2.CancelRunResponse.FromString,
                 _registered_method=True)
+        self.ResumeRun = channel.unary_stream(
+                '/devpilot.agent.v1.AgentRuntime/ResumeRun',
+                request_serializer=agent__runtime__pb2.ResumeRunRequest.SerializeToString,
+                response_deserializer=agent__runtime__pb2.AgentEvent.FromString,
+                _registered_method=True)
 
 
 class AgentRuntimeServicer:
@@ -74,6 +79,13 @@ class AgentRuntimeServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ResumeRun(self, request, context):
+        """只恢复已持久化、明确可重试的 Runtime；不会再次提交 user_input。
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_AgentRuntimeServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -91,6 +103,11 @@ def add_AgentRuntimeServicer_to_server(servicer, server):
                     servicer.CancelRun,
                     request_deserializer=agent__runtime__pb2.CancelRunRequest.FromString,
                     response_serializer=agent__runtime__pb2.CancelRunResponse.SerializeToString,
+            ),
+            'ResumeRun': grpc.unary_stream_rpc_method_handler(
+                    servicer.ResumeRun,
+                    request_deserializer=agent__runtime__pb2.ResumeRunRequest.FromString,
+                    response_serializer=agent__runtime__pb2.AgentEvent.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -175,6 +192,33 @@ class AgentRuntime:
             '/devpilot.agent.v1.AgentRuntime/CancelRun',
             agent__runtime__pb2.CancelRunRequest.SerializeToString,
             agent__runtime__pb2.CancelRunResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ResumeRun(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            '/devpilot.agent.v1.AgentRuntime/ResumeRun',
+            agent__runtime__pb2.ResumeRunRequest.SerializeToString,
+            agent__runtime__pb2.AgentEvent.FromString,
             options,
             channel_credentials,
             insecure,

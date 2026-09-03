@@ -9,6 +9,7 @@ from typing import Self
 
 import grpc
 
+from devpilot_agent_service.config import DEFAULT_RUNTIME_DB_PATH, create_runtime_repository
 from devpilot_agent_service.model.providers.config import OpenAICompatibleConfig
 from devpilot_agent_service.model.providers.openai_compatible import OpenAICompatibleModel
 from devpilot_agent_service.rpc.application import (
@@ -48,6 +49,7 @@ class RpcServerConfig:
     port: int = DEFAULT_GRPC_PORT
     model_mode: str = DEFAULT_MODEL_MODE
     fake_delay_seconds: float = 0.0
+    runtime_db_path: str = DEFAULT_RUNTIME_DB_PATH
 
     def __post_init__(self) -> None:
         if not isinstance(self.host, str) or not self.host.strip():
@@ -62,6 +64,8 @@ class RpcServerConfig:
             raise ValueError("AGENT_MODEL_MODE must be 'deepseek' or 'fake'")
         if self.fake_delay_seconds < 0:
             raise ValueError("AGENT_FAKE_DELAY_SECONDS must not be negative")
+        if not self.runtime_db_path.strip() or self.runtime_db_path == ":memory:":
+            raise ValueError("AGENT_RUNTIME_DB_PATH must be a file path")
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> Self:
@@ -80,6 +84,7 @@ class RpcServerConfig:
             port=port,
             model_mode=source.get("AGENT_MODEL_MODE", DEFAULT_MODEL_MODE).strip().lower(),
             fake_delay_seconds=fake_delay,
+            runtime_db_path=source.get("AGENT_RUNTIME_DB_PATH", DEFAULT_RUNTIME_DB_PATH),
         )
 
     @property
@@ -91,9 +96,14 @@ class RpcServerConfig:
 def create_application(config: RpcServerConfig) -> AgentRuntimeApplication:
     """按显式模式组装 Model；fake 永不访问网络，deepseek 继续只读既有环境变量。"""
 
+    repository = create_runtime_repository(config.runtime_db_path)
     if config.model_mode == "fake":
         return AgentRuntimeApplication(
-            AgentLoop(DeterministicFakeModel(config.fake_delay_seconds), ToolRegistry())
+            AgentLoop(
+                DeterministicFakeModel(config.fake_delay_seconds),
+                ToolRegistry(),
+                repository=repository,
+            )
         )
 
     model = OpenAICompatibleModel(OpenAICompatibleConfig.from_deepseek_env())
@@ -103,7 +113,7 @@ def create_application(config: RpcServerConfig) -> AgentRuntimeApplication:
     registry.register(ListOpenTasksTool(client))
     registry.register(RecentProjectActivityTool(client))
     return AgentRuntimeApplication(
-        AgentLoop(model, registry, system_prompt=TOOL_DATA_GUARD),
+        AgentLoop(model, registry, system_prompt=TOOL_DATA_GUARD, repository=repository),
         close_callback=client.close,
     )
 
@@ -114,16 +124,21 @@ def create_server(
 ) -> grpc.Server:
     """创建但不启动 Server；线程池只承载同步 Unary 调用，生命周期由进程入口管理。"""
 
+    application = application if application is not None else create_application(config)
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=8))
     agent_runtime_pb2_grpc.add_AgentRuntimeServicer_to_server(
         AgentRuntimeServicer(
-            application if application is not None else create_application(config),
+            application,
             ActiveRunRegistry(),
         ),
         server,
     )
     if server.add_insecure_port(config.bind_address) == 0:
         raise RuntimeError("failed to bind Agent Runtime gRPC server")
+    recovered = application.reconcile_interrupted_runs()
+    if recovered:
+        # 单实例启动，在接收请求前收敛旧进程记录；只记录数量，不输出外部 run_id。
+        LOGGER.warning("Reconciled interrupted Agent Runtime runs count=%d", len(recovered))
     return server
 
 

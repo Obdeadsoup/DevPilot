@@ -25,7 +25,7 @@ class FakeGatewayClient:
         return {"items": [{"key": "DP-1"}], "external_untrusted_content": True}
 
 
-def test_remote_tool_definitions_and_argument_boundaries() -> None:
+def test_remote_tool_definitions_and_argument_boundaries(repository) -> None:
     client = FakeGatewayClient()
     tools = [
         ProjectSummaryTool(client),
@@ -45,7 +45,7 @@ def test_remote_tool_definitions_and_argument_boundaries() -> None:
         tools[1].execute({"limit": 21}, run_context=RunContext("run", "request"), tool_call_id="c")
 
 
-def test_agent_loop_propagates_run_context_call_id_and_returns_tool_message() -> None:
+def test_agent_loop_propagates_run_context_call_id_and_returns_tool_message(repository) -> None:
     client = FakeGatewayClient()
     registry = ToolRegistry()
     registry.register(ListOpenTasksTool(client))
@@ -59,7 +59,9 @@ def test_agent_loop_propagates_run_context_call_id_and_returns_tool_message() ->
     )
     context = RunContext("run-1", "request-1")
 
-    result = AgentLoop(model, registry).run("list tasks", run_context=context)
+    result = AgentLoop(model, registry, repository=repository).run(
+        "list tasks", run_context=context
+    )
 
     assert client.calls == [(context, "provider-call-1", "task.list_open", {"limit": 5})]
     tool_message = next(message for message in result.messages if message.role is MessageRole.TOOL)

@@ -48,9 +48,7 @@ class CountingTool:
 
 
 def tool_response(call_id: str, name: str = "echo", **arguments: object) -> ModelResponse:
-    return ModelResponse.request_tools(
-        [ToolCall(call_id=call_id, name=name, arguments=arguments)]
-    )
+    return ModelResponse.request_tools([ToolCall(call_id=call_id, name=name, arguments=arguments)])
 
 
 def tools_response(*calls: ToolCall) -> ModelResponse:
@@ -63,12 +61,14 @@ def echo_registry() -> ToolRegistry:
     return registry
 
 
-def test_cancellation_is_checked_before_and_after_model_call() -> None:
+def test_cancellation_is_checked_before_and_after_model_call(repository) -> None:
     before = CancellationToken()
     before.cancel()
     model = FakeModel([ModelResponse.final("must-not-run")])
     with pytest.raises(RunCancelled):
-        AgentLoop(model, ToolRegistry()).run("hello", cancellation_token=before)
+        AgentLoop(model, ToolRegistry(), repository=repository).run(
+            "hello", cancellation_token=before
+        )
     assert model.calls == []
 
     after = CancellationToken()
@@ -79,12 +79,12 @@ def test_cancellation_is_checked_before_and_after_model_call() -> None:
             return ModelResponse.final("must-not-return")
 
     with pytest.raises(RunCancelled):
-        AgentLoop(CancellingModel(), ToolRegistry()).run(
+        AgentLoop(CancellingModel(), ToolRegistry(), repository=repository).run(
             "hello", cancellation_token=after
         )
 
 
-def test_cancellation_after_model_prevents_tool_execution() -> None:
+def test_cancellation_after_model_prevents_tool_execution(repository) -> None:
     token = CancellationToken()
     tool = CountingTool()
 
@@ -94,14 +94,14 @@ def test_cancellation_after_model_prevents_tool_execution() -> None:
             return tool_response("call-1", name="count")
 
     with pytest.raises(RunCancelled):
-        AgentLoop(CancellingModel(), counting_registry(tool)).run(
+        AgentLoop(CancellingModel(), counting_registry(tool), repository=repository).run(
             "hello", cancellation_token=token
         )
 
     assert tool.calls == []
 
 
-def test_cancellation_after_tool_prevents_next_model_step() -> None:
+def test_cancellation_after_tool_prevents_next_model_step(repository) -> None:
     token = CancellationToken()
 
     class CancellingTool(CountingTool):
@@ -119,7 +119,9 @@ def test_cancellation_after_tool_prevents_next_model_step() -> None:
     )
 
     with pytest.raises(RunCancelled):
-        AgentLoop(model, counting_registry(tool)).run("hello", cancellation_token=token)
+        AgentLoop(model, counting_registry(tool), repository=repository).run(
+            "hello", cancellation_token=token
+        )
 
     assert tool.calls == [{}]
     assert len(model.calls) == 1
@@ -131,10 +133,10 @@ def counting_registry(tool: CountingTool) -> ToolRegistry:
     return registry
 
 
-def test_direct_final_stops_without_tool() -> None:
+def test_direct_final_stops_without_tool(repository) -> None:
     model = FakeModel([ModelResponse.final("done")])
 
-    result = AgentLoop(model, echo_registry()).run("hello")
+    result = AgentLoop(model, echo_registry(), repository=repository).run("hello")
 
     assert result.final_answer == "done"
     assert result.stop_reason is StopReason.MODEL_FINAL
@@ -145,7 +147,7 @@ def test_direct_final_stops_without_tool() -> None:
     assert result.trace[-1].stop_reason is StopReason.MODEL_FINAL
 
 
-def test_one_tool_call_returns_result_to_model_then_stops() -> None:
+def test_one_tool_call_returns_result_to_model_then_stops(repository) -> None:
     model = FakeModel(
         [
             tool_response("call-1", text="hello"),
@@ -153,7 +155,7 @@ def test_one_tool_call_returns_result_to_model_then_stops() -> None:
         ]
     )
 
-    result = AgentLoop(model, echo_registry()).run("please echo")
+    result = AgentLoop(model, echo_registry(), repository=repository).run("please echo")
 
     assert result.final_answer == "echo complete"
     assert len(model.calls) == 2
@@ -168,13 +170,13 @@ def test_one_tool_call_returns_result_to_model_then_stops() -> None:
     assert model.calls[0].tools[0].name == "echo"
 
 
-def test_optional_runtime_event_hook_observes_only_lifecycle_metadata() -> None:
+def test_optional_runtime_event_hook_observes_only_lifecycle_metadata(repository) -> None:
     events: list[RuntimeEvent] = []
     model = FakeModel(
         [tool_response("private-call-id", text="private argument"), ModelResponse.final("done")]
     )
 
-    AgentLoop(model, echo_registry()).run("hello", on_event=events.append)
+    AgentLoop(model, echo_registry(), repository=repository).run("hello", on_event=events.append)
 
     assert events == [
         RuntimeEvent(RuntimeEventType.MODEL_STEP_STARTED, 1),
@@ -186,7 +188,7 @@ def test_optional_runtime_event_hook_observes_only_lifecycle_metadata() -> None:
     assert "private argument" not in repr(events)
 
 
-def test_multiple_tool_rounds_accumulate_results_in_context() -> None:
+def test_multiple_tool_rounds_accumulate_results_in_context(repository) -> None:
     model = FakeModel(
         [
             tool_response("call-1", text="first"),
@@ -195,7 +197,7 @@ def test_multiple_tool_rounds_accumulate_results_in_context() -> None:
         ]
     )
 
-    result = AgentLoop(model, echo_registry()).run("two rounds")
+    result = AgentLoop(model, echo_registry(), repository=repository).run("two rounds")
 
     assert result.final_answer == "done"
     tool_messages = [
@@ -208,58 +210,58 @@ def test_multiple_tool_rounds_accumulate_results_in_context() -> None:
     assert [step.tool_names for step in result.trace] == [("echo",), ("echo",), ()]
 
 
-def test_unknown_tool_has_explicit_invalid_tool_call_stop_reason() -> None:
+def test_unknown_tool_has_explicit_invalid_tool_call_stop_reason(repository) -> None:
     model = FakeModel([tool_response("call-1", name="missing")])
 
     with pytest.raises(UnknownToolError) as captured:
-        AgentLoop(model, echo_registry()).run("unknown")
+        AgentLoop(model, echo_registry(), repository=repository).run("unknown")
 
     assert captured.value.stop_reason is StopReason.INVALID_TOOL_CALL
 
 
-def test_invalid_tool_arguments_have_explicit_stop_reason() -> None:
+def test_invalid_tool_arguments_have_explicit_stop_reason(repository) -> None:
     model = FakeModel([tool_response("call-1")])
 
     with pytest.raises(InvalidToolArguments) as captured:
-        AgentLoop(model, echo_registry()).run("invalid arguments")
+        AgentLoop(model, echo_registry(), repository=repository).run("invalid arguments")
 
     assert captured.value.stop_reason is StopReason.INVALID_TOOL_CALL
 
 
-def test_tool_exception_has_explicit_tool_error_stop_reason() -> None:
+def test_tool_exception_has_explicit_tool_error_stop_reason(repository) -> None:
     registry = ToolRegistry()
     registry.register(ExplodingTool())
     model = FakeModel([tool_response("call-1", name="explode")])
 
     with pytest.raises(ToolExecutionError) as captured:
-        AgentLoop(model, registry).run("explode")
+        AgentLoop(model, registry, repository=repository).run("explode")
 
     assert captured.value.stop_reason is StopReason.TOOL_ERROR
 
 
-def test_model_exception_has_explicit_model_error_stop_reason() -> None:
+def test_model_exception_has_explicit_model_error_stop_reason(repository) -> None:
     model = FakeModel([RuntimeError("provider unavailable")])
 
     with pytest.raises(ModelInvocationError) as captured:
-        AgentLoop(model, echo_registry()).run("hello")
+        AgentLoop(model, echo_registry(), repository=repository).run("hello")
 
     assert captured.value.stop_reason is StopReason.MODEL_ERROR
     assert captured.value.provider_kind is ProviderErrorKind.UNKNOWN
     assert isinstance(captured.value.__cause__, RuntimeError)
 
 
-def test_provider_error_kind_survives_runtime_boundary() -> None:
+def test_provider_error_kind_survives_runtime_boundary(repository) -> None:
     provider_error = ProviderError(ProviderErrorKind.RATE_LIMIT)
     model = FakeModel([provider_error])
 
     with pytest.raises(ModelInvocationError) as captured:
-        AgentLoop(model, echo_registry()).run("hello")
+        AgentLoop(model, echo_registry(), repository=repository).run("hello")
 
     assert captured.value.provider_kind is ProviderErrorKind.RATE_LIMIT
     assert captured.value.__cause__ is provider_error
 
 
-def test_max_steps_stops_model_that_keeps_requesting_tools() -> None:
+def test_max_steps_stops_model_that_keeps_requesting_tools(repository) -> None:
     model = FakeModel(
         [
             tool_response("call-1", text="first"),
@@ -269,23 +271,23 @@ def test_max_steps_stops_model_that_keeps_requesting_tools() -> None:
     )
 
     with pytest.raises(MaxStepsExceeded) as captured:
-        AgentLoop(model, echo_registry(), max_steps=2).run("keep going")
+        AgentLoop(model, echo_registry(), repository=repository, max_steps=2).run("keep going")
 
     assert captured.value.stop_reason is StopReason.MAX_STEPS
     assert len(model.calls) == 2
 
 
-def test_max_steps_must_be_positive_integer() -> None:
+def test_max_steps_must_be_positive_integer(repository) -> None:
     with pytest.raises(ValueError, match="正整数"):
-        AgentLoop(FakeModel([]), echo_registry(), max_steps=0)
+        AgentLoop(FakeModel([]), echo_registry(), repository=repository, max_steps=0)
 
 
-def test_max_tool_calls_must_be_positive_integer() -> None:
+def test_max_tool_calls_must_be_positive_integer(repository) -> None:
     with pytest.raises(ValueError, match="正整数"):
-        AgentLoop(FakeModel([]), echo_registry(), max_tool_calls=0)
+        AgentLoop(FakeModel([]), echo_registry(), repository=repository, max_tool_calls=0)
 
 
-def test_multiple_calls_in_one_response_execute_within_budget() -> None:
+def test_multiple_calls_in_one_response_execute_within_budget(repository) -> None:
     tool = CountingTool()
     model = FakeModel(
         [
@@ -300,6 +302,7 @@ def test_multiple_calls_in_one_response_execute_within_budget() -> None:
     result = AgentLoop(
         model,
         counting_registry(tool),
+        repository=repository,
         max_tool_calls=2,
     ).run("count twice")
 
@@ -307,7 +310,7 @@ def test_multiple_calls_in_one_response_execute_within_budget() -> None:
     assert tool.calls == [{"value": 1}, {"value": 2}]
 
 
-def test_over_budget_batch_executes_no_tool() -> None:
+def test_over_budget_batch_executes_no_tool(repository) -> None:
     tool = CountingTool()
     model = FakeModel(
         [
@@ -322,6 +325,7 @@ def test_over_budget_batch_executes_no_tool() -> None:
         AgentLoop(
             model,
             counting_registry(tool),
+            repository=repository,
             max_tool_calls=1,
         ).run("too many")
 
@@ -329,7 +333,7 @@ def test_over_budget_batch_executes_no_tool() -> None:
     assert tool.calls == []
 
 
-def test_tool_call_budget_is_cumulative_across_steps() -> None:
+def test_tool_call_budget_is_cumulative_across_steps(repository) -> None:
     tool = CountingTool()
     model = FakeModel(
         [
@@ -345,13 +349,16 @@ def test_tool_call_budget_is_cumulative_across_steps() -> None:
         AgentLoop(
             model,
             counting_registry(tool),
+            repository=repository,
             max_tool_calls=2,
         ).run("three calls")
 
     assert tool.calls == [{}]
 
 
-def test_duplicate_tool_call_id_across_steps_is_rejected_before_second_execution() -> None:
+def test_duplicate_tool_call_id_across_steps_is_rejected_before_second_execution(
+    repository,
+) -> None:
     tool = CountingTool()
     model = FakeModel(
         [
@@ -361,13 +368,13 @@ def test_duplicate_tool_call_id_across_steps_is_rejected_before_second_execution
     )
 
     with pytest.raises(DuplicateToolCallIdError) as captured:
-        AgentLoop(model, counting_registry(tool)).run("duplicate")
+        AgentLoop(model, counting_registry(tool), repository=repository).run("duplicate")
 
     assert captured.value.stop_reason is StopReason.INVALID_TOOL_CALL
     assert tool.calls == [{"round": 1}]
 
 
-def test_duplicate_tool_call_ids_in_one_batch_execute_no_tool() -> None:
+def test_duplicate_tool_call_ids_in_one_batch_execute_no_tool(repository) -> None:
     tool = CountingTool()
     model = FakeModel(
         [
@@ -379,6 +386,6 @@ def test_duplicate_tool_call_ids_in_one_batch_execute_no_tool() -> None:
     )
 
     with pytest.raises(DuplicateToolCallIdError):
-        AgentLoop(model, counting_registry(tool)).run("duplicate batch")
+        AgentLoop(model, counting_registry(tool), repository=repository).run("duplicate batch")
 
     assert tool.calls == []

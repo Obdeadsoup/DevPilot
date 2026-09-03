@@ -17,6 +17,7 @@ GitHub 研发活动、本地协作业务和 Agent Runtime 的上下文层。
 - Task / Activity / Notification / Audit
 - Transactional Outbox 与可恢复异步处理
 - Agent Run / SSE / 三个 read-only Tool
+- Python Runtime Run / Step / JSON Checkpoint 持久化（独立 SQLite）
 - Gateway / Nacos Discovery / Nacos Config 服务治理
 
 ## 系统架构
@@ -194,6 +195,8 @@ key、key version 与 rotation metadata；业务表仍只保存 credential ID/re
 - 本地 Nacos 关闭认证，只用于受控本机网络；不是生产部署模板。
 - GitHub local binding 使用 ENV PAT；GitHub App 是生产设计目标，尚未实现 installation callback。
 - Python Agent 尚未注册 Nacos，通过 Compose 内部 DNS 被 Core 直接访问。
+- Python Runtime 支持持久取消意图、Checkpoint v2 显式 Resume 和单实例启动收敛，详见
+  [Cancel / Resume 学习材料](agent-service/docs/cancel-resume.md)；浏览器和 Java 业务侧恢复入口尚未新增。
 - 本项目提供可复现的本地全栈部署，不宣称已验证多副本、跨区域或互联网生产运行。
 - GitHub.com 无法向 localhost 主动投递 Webhook；真正的 Webhook E2E 需要公网 HTTPS 入口。
 
