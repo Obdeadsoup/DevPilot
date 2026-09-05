@@ -26,6 +26,8 @@ reasoning、Prompt、Tool 参数/结果、Provider body 或凭据。`CancelRun` 
 原 `accepted=1/status=2` 字段保留，新增 `runtime_status=3` 用于返回持久 Runtime 状态。
 
 P1-02 追加 `ResumeRun(ResumeRunRequest) returns (stream AgentEvent)`，请求只有原 run_id/request_id。
+P1-03 追加 `ResumeApproval`、`CreateToolProposal` 和 `GetToolProposal`。浏览器审批走 Java HTTP，
+Runtime 恢复时只携带 proposal_id，再从 Java 读取固化决议和结果，不重传 Tool 参数。
 恢复拒绝返回安全的 NOT_FOUND 或 FAILED_PRECONDITION，原因包括状态不可重试、快照缺失/损坏/版本不支持、
 脱敏和预算耗尽；恢复后执行失败继续使用原 RUN_FAILED 分类。Resume 从最新显式控制状态继续，
 不重新提交用户输入。每次调用的事件序号从 1 开始，不提供跨调用历史 replay。

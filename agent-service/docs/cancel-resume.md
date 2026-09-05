@@ -297,8 +297,8 @@ v1 JSON 保留可查，`.state` 和 Resume 不把它假装转换成 v2。
 
 ## G. 后续任务
 
-- P1-03 Write Tool + Proposal
-- P1-04 HITL Approval / Interrupt / Resume
+- P1-03 Write Tool + Proposal + HITL（已在后续实现，见 `write-tool-proposal-hitl.md`）
+- P1-04 更通用的 HITL 类型与恢复策略
 
 ## 验收与 Git
 

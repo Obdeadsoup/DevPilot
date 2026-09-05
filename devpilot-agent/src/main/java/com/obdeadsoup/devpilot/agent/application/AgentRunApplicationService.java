@@ -98,7 +98,8 @@ public class AgentRunApplicationService {
         if (current.status() == AgentRunStatus.CANCELLED) {
             return current;
         }
-        if (current.status() != AgentRunStatus.RUNNING) {
+        if (current.status() != AgentRunStatus.RUNNING
+                && current.status() != AgentRunStatus.WAITING_APPROVAL) {
             throw new BusinessException(AgentRunErrorCode.AGENT_RUN_ALREADY_TERMINAL);
         }
         cancellationMetrics.requested();

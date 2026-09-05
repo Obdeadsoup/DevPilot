@@ -165,6 +165,31 @@ class AgentRunStreamCoordinatorTest {
         verify(publisher, times(2)).publish(any());
     }
 
+    @Test
+    void approvalResumeKeepsOneContinuousSseSequence() {
+        listener.onEvent(started());
+        listener.onEvent(new AgentStreamEvent("run-1:2", "run-1", 2,
+                AgentStreamEventType.RUN_WAITING_APPROVAL, 0, "", "", "",
+                "proposal-1", "2026-08-26T13:15:00"));
+        listener.onCompleted();
+        when(streamingPort.resumeApproval(any(), any())).thenReturn(streamHandle);
+
+        coordinator.resumeApproval(1, 2, view(AgentRunStatus.WAITING_APPROVAL), "proposal-1");
+        ArgumentCaptor<AgentRuntimeEventListener> resumedCaptor =
+                ArgumentCaptor.forClass(AgentRuntimeEventListener.class);
+        verify(streamingPort).resumeApproval(any(), resumedCaptor.capture());
+        AgentRuntimeEventListener resumed = resumedCaptor.getValue();
+        resumed.onEvent(event(1, AgentStreamEventType.RUN_RESUMED, 0, "", "", ""));
+        resumed.onEvent(event(2, AgentStreamEventType.RUN_SUCCEEDED, 0, "", "answer", ""));
+
+        ArgumentCaptor<AgentStreamEvent> published = ArgumentCaptor.forClass(AgentStreamEvent.class);
+        verify(publisher, times(4)).publish(published.capture());
+        assertThat(published.getAllValues()).extracting(AgentStreamEvent::sequence)
+                .containsExactly(1L, 2L, 3L, 4L);
+        assertThat(published.getAllValues()).extracting(AgentStreamEvent::eventId)
+                .containsExactly("run-1:1", "run-1:2", "run-1:3", "run-1:4");
+    }
+
     private void assertProtocolFailure(AgentStreamEvent invalid) {
         listener.onEvent(invalid);
         verify(persistenceService).tryMarkFailed(1, 2, "run-1", AgentRunFailureKind.PROTOCOL, NOW);

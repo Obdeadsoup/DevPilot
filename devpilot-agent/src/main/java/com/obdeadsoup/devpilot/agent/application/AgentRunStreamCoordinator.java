@@ -1,5 +1,6 @@
 package com.obdeadsoup.devpilot.agent.application;
 
+import com.obdeadsoup.devpilot.framework.error.BusinessException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -8,6 +9,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 异步流的业务仲裁点：校验协议、持有可取消句柄，并用 RUNNING/version 条件更新裁决唯一终态。
@@ -25,6 +27,7 @@ public class AgentRunStreamCoordinator {
     private final AgentRunTimeProvider timeProvider;
     private final AgentRunEventPublisher eventPublisher;
     private final Map<String, ActiveRun> activeRuns = new ConcurrentHashMap<>();
+    private final Map<String, AtomicLong> publishedSequences = new ConcurrentHashMap<>();
 
     public AgentRunStreamCoordinator(AgentRuntimeStreamingPort streamingPort,
                                      AgentRuntimeCancellationPort cancellationPort,
@@ -41,8 +44,9 @@ public class AgentRunStreamCoordinator {
     /** RUNNING 已由调用方提交；本方法只启动 async RPC，不等待 terminal。 */
     public void start(long workspaceId, long projectId, AgentRunCommand command) {
         Objects.requireNonNull(command, "command must not be null");
+        publishedSequences.put(command.runId(), new AtomicLong());
         eventPublisher.initialize(command.runId());
-        RunListener listener = new RunListener(workspaceId, projectId, command.runId());
+        RunListener listener = new RunListener(workspaceId, projectId, command.runId(), false);
         ActiveRun active = new ActiveRun(listener);
         activeRuns.put(command.runId(), active);
         try {
@@ -52,6 +56,23 @@ public class AgentRunStreamCoordinator {
                 // callback/cancel 可能在 stream(...) 返回句柄前完成；补取消避免孤儿流。
                 handle.cancel();
             }
+        } catch (RuntimeException exception) {
+            listener.onError(AgentRuntimeStreamFailureKind.UNKNOWN);
+        }
+    }
+
+    /** Proposal 事务已提交且 Java Run 已回到 RUNNING 后，启动专用 Runtime 恢复流。 */
+    public void resumeApproval(long workspaceId, long projectId, AgentRunView run, String proposalId) {
+        RunListener listener = new RunListener(workspaceId, projectId, run.runId(), true);
+        ActiveRun active = new ActiveRun(listener);
+        if (activeRuns.putIfAbsent(run.runId(), active) != null) {
+            throw new BusinessException(com.obdeadsoup.devpilot.agent.error.AgentRunErrorCode.AGENT_RUN_STATE_CONFLICT);
+        }
+        try {
+            AgentRuntimeStreamHandle handle = streamingPort.resumeApproval(
+                    new AgentApprovalResumeCommand(run.requestId(), run.runId(), proposalId), listener);
+            active.handle = handle;
+            if (activeRuns.get(run.runId()) != active) handle.cancel();
         } catch (RuntimeException exception) {
             listener.onError(AgentRuntimeStreamFailureKind.UNKNOWN);
         }
@@ -74,8 +95,9 @@ public class AgentRunStreamCoordinator {
     private AgentRunView cancelWithoutLocalStream(long workspaceId, long projectId, String runId) {
         return persistenceService.tryMarkCancelled(workspaceId, projectId, runId, timeProvider.now())
                 .map(view -> {
-                    eventPublisher.publish(new AgentStreamEvent(runId + ":1", runId, 1,
+                    publish(new AgentStreamEvent(runId + ":1", runId, 1,
                             AgentStreamEventType.RUN_CANCELLED, 0, "", "", ""));
+                    publishedSequences.remove(runId);
                     return view;
                 })
                 .orElseGet(() -> persistenceService.get(workspaceId, projectId, runId));
@@ -98,11 +120,13 @@ public class AgentRunStreamCoordinator {
         private long expectedSequence = 1;
         private boolean terminalSeen;
         private boolean streamFinished;
+        private final boolean resumed;
 
-        private RunListener(long workspaceId, long projectId, String runId) {
+        private RunListener(long workspaceId, long projectId, String runId, boolean resumed) {
             this.workspaceId = workspaceId;
             this.projectId = projectId;
             this.runId = runId;
+            this.resumed = resumed;
         }
 
         @Override
@@ -131,14 +155,17 @@ public class AgentRunStreamCoordinator {
                 publish = persistenceService.tryMarkCancelled(
                         workspaceId, projectId, runId, timeProvider.now()).isPresent();
                 terminalSeen = true;
+            } else if (event.type() == AgentStreamEventType.RUN_WAITING_APPROVAL) {
+                terminalSeen = true;
             }
             if (publish) {
-                eventPublisher.publish(event);
+                AgentRunStreamCoordinator.this.publish(event);
             }
             expectedSequence++;
             if (event.type().isTerminal()) {
                 streamFinished = true;
                 activeRuns.remove(runId);
+                if (event.type().isRunTerminal()) publishedSequences.remove(runId);
             }
         }
 
@@ -178,7 +205,8 @@ public class AgentRunStreamCoordinator {
                                 0, "", "", "");
                         terminalSeen = true;
                         streamFinished = true;
-                        eventPublisher.publish(event);
+                        AgentRunStreamCoordinator.this.publish(event);
+                        publishedSequences.remove(runId);
                         expectedSequence++;
                         return view;
                     })
@@ -195,8 +223,10 @@ public class AgentRunStreamCoordinator {
                     && event.sequence() == expectedSequence
                     && event.sequence() > 0
                     && (runId + ":" + event.sequence()).equals(event.eventId())
-                    && (expectedSequence != 1 || event.type() == AgentStreamEventType.RUN_STARTED)
-                    && (expectedSequence == 1 || event.type() != AgentStreamEventType.RUN_STARTED);
+                    && (expectedSequence != 1 || event.type() ==
+                        (resumed ? AgentStreamEventType.RUN_RESUMED : AgentStreamEventType.RUN_STARTED))
+                    && (expectedSequence == 1 || (event.type() != AgentStreamEventType.RUN_STARTED
+                        && event.type() != AgentStreamEventType.RUN_RESUMED));
         }
 
         private boolean validPayload(AgentStreamEvent event) {
@@ -214,6 +244,11 @@ public class AgentRunStreamCoordinator {
                 case RUN_FAILED -> event.step() == 0 && noTool && noOutput
                         && REMOTE_FAILURE_KINDS.contains(event.failureKind());
                 case RUN_CANCELLED -> event.step() == 0 && noTool && noOutput && noFailure;
+                case RUN_RESUMED -> event.step() == 0 && noTool && noOutput && noFailure;
+                case RUN_WAITING_APPROVAL -> event.step() == 0 && noTool && noOutput && noFailure
+                        && event.proposalId() != null
+                        && event.proposalId().matches("[A-Za-z0-9-]{1,64}")
+                        && event.proposalExpiresAt() != null && !event.proposalExpiresAt().isBlank();
             };
         }
 
@@ -222,13 +257,14 @@ public class AgentRunStreamCoordinator {
             boolean won = persistenceService.tryMarkFailed(
                     workspaceId, projectId, runId, persisted, timeProvider.now()).isPresent();
             if (won) {
-                eventPublisher.publish(new AgentStreamEvent(runId + ":" + expectedSequence,
+                AgentRunStreamCoordinator.this.publish(new AgentStreamEvent(runId + ":" + expectedSequence,
                         runId, expectedSequence, AgentStreamEventType.RUN_FAILED,
                         0, "", "", failureKind.name()));
             }
             terminalSeen = true;
             streamFinished = true;
             activeRuns.remove(runId);
+            publishedSequences.remove(runId);
             expectedSequence++;
         }
 
@@ -241,6 +277,15 @@ public class AgentRunStreamCoordinator {
         private boolean blank(String value) {
             return value == null || value.isBlank();
         }
+    }
+
+    /** 每次 Runtime resume 都从 1 计数；这里转换为单个 Run 的连续 SSE 序号。 */
+    private void publish(AgentStreamEvent event) {
+        long sequence = publishedSequences.computeIfAbsent(event.runId(), ignored -> new AtomicLong())
+                .incrementAndGet();
+        eventPublisher.publish(new AgentStreamEvent(event.runId() + ":" + sequence, event.runId(), sequence,
+                event.type(), event.step(), event.toolName(), event.finalOutput(), event.failureKind(),
+                event.proposalId(), event.proposalExpiresAt()));
     }
 
     private static final class ActiveRun {

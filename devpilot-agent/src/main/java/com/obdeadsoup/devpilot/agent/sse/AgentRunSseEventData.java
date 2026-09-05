@@ -9,10 +9,12 @@ public record AgentRunSseEventData(
         int step,
         String toolName,
         String finalOutput,
-        String failureKind
+        String failureKind,
+        String proposalId,
+        String proposalExpiresAt
 ) {
     static AgentRunSseEventData from(AgentStreamEvent event) {
         return new AgentRunSseEventData(event.runId(), event.sequence(), event.step(), event.toolName(),
-                event.finalOutput(), event.failureKind());
+                event.finalOutput(), event.failureKind(), event.proposalId(), event.proposalExpiresAt());
     }
 }

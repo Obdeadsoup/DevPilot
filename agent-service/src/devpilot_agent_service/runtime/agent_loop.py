@@ -12,6 +12,7 @@ from devpilot_agent_service.model.types import ModelResponse, ModelResponseKind
 from devpilot_agent_service.runtime.cancellation import CancellationToken
 from devpilot_agent_service.runtime.context import RunContext
 from devpilot_agent_service.runtime.errors import (
+    ApprovalRequired,
     DuplicateToolCallIdError,
     InvalidModelResponseError,
     MaxStepsExceeded,
@@ -32,6 +33,7 @@ from devpilot_agent_service.runtime.persistence import (
 )
 from devpilot_agent_service.runtime.recovery import classify_failure, restore_checkpoint
 from devpilot_agent_service.runtime.repository import AgentRuntimeRepository, RuntimeStateConflict
+from devpilot_agent_service.tools.base import ToolRisk
 from devpilot_agent_service.tools.registry import ToolRegistry
 
 LOGGER = logging.getLogger(__name__)
@@ -166,6 +168,89 @@ class AgentLoop:
             ):
                 raise ResumeRejected("RESUME_CONFLICT")
             state = replace(state, status=RunStatus.RUNNING)
+            repository.save_checkpoint(run.run_id, checkpoint.after_step, state)
+        return PreparedRun(run.run_id, state, run_context)
+
+    def prepare_approval_resume(
+        self, run_context: RunContext, proposal_id: str
+    ) -> PreparedRun:
+        """从 exact Proposal 决议继续；不再次调用模型生成已批准参数。"""
+        repository = self._repository
+        with repository.transaction():
+            run = repository.get_run(run_context.run_id)
+            checkpoint = repository.get_latest_checkpoint(run_context.run_id)
+            if (
+                run is None
+                or run.request_id != run_context.request_id
+                or run.status is not RunStatus.WAITING_APPROVAL
+                or checkpoint is None
+            ):
+                raise ResumeRejected("RUN_NOT_WAITING_APPROVAL")
+            state = checkpoint.state
+            proposal = state.pending_proposal
+            if (
+                state.next_action != "WAIT_APPROVAL"
+                or state.status is not RunStatus.WAITING_APPROVAL
+                or proposal is None
+                or proposal.proposal_id != proposal_id
+            ):
+                raise ResumeRejected("PROPOSAL_MISMATCH")
+
+        resolution = self._registry.get_proposal_resolution(
+            proposal.tool_name,
+            run_context=run_context,
+            proposal_id=proposal_id,
+        )
+        if (
+            resolution.proposal_id != proposal.proposal_id
+            or resolution.tool_call_id != proposal.tool_call_id
+            or resolution.tool_name != proposal.tool_name
+        ):
+            raise ResumeRejected("PROPOSAL_MISMATCH")
+        if resolution.status not in {"EXECUTED", "REJECTED", "EXPIRED", "FAILED"}:
+            raise ResumeRejected("PROPOSAL_NOT_RESOLVED")
+
+        call = next(
+            (item for item in state.pending_tool_calls if item.call_id == proposal.tool_call_id),
+            None,
+        )
+        if call is None:
+            raise ResumeRejected("INVALID_CHECKPOINT")
+        result = (
+            resolution.result
+            if resolution.status == "EXECUTED"
+            else {
+                "approved": False,
+                "proposal_id": proposal_id,
+                "status": resolution.status,
+            }
+        )
+        completed = (*state.completed_tool_call_ids, call.call_id)
+        remaining = tuple(item for item in state.pending_tool_calls if item.call_id != call.call_id)
+        state = replace(
+            state,
+            messages=(
+                *state.messages,
+                Message.tool_result(
+                    call,
+                    json.dumps(result, ensure_ascii=False, sort_keys=True, allow_nan=False),
+                ),
+            ),
+            completed_tool_call_ids=completed,
+            pending_tool_calls=remaining,
+            pending_proposal=None,
+            status=RunStatus.RUNNING,
+            next_action="TOOLS" if remaining else "MODEL",
+        )
+        with repository.transaction():
+            current = repository.get_run(run.run_id)
+            if not repository.compare_and_set_status(
+                run.run_id,
+                (RunStatus.WAITING_APPROVAL,),
+                RunStatus.RUNNING,
+                expected_version=current.version,
+            ):
+                raise ResumeRejected("RESUME_CONFLICT")
             repository.save_checkpoint(run.run_id, checkpoint.after_step, state)
         return PreparedRun(run.run_id, state, run_context)
 
@@ -321,6 +406,39 @@ class AgentLoop:
                             ),
                         )
                         safe_point()
+                        if self._registry.risk(call.name) is ToolRisk.WRITE_REQUIRES_APPROVAL:
+                            if run_context is None:
+                                raise ResumeRejected("WRITE_TOOL_REQUIRES_RUN_CONTEXT")
+                            proposal = self._registry.create_proposal(
+                                call.name,
+                                call.arguments,
+                                run_context=run_context,
+                                tool_call_id=call.call_id,
+                            )
+                            state = replace(
+                                state,
+                                pending_proposal=proposal,
+                                status=RunStatus.WAITING_APPROVAL,
+                                next_action="WAIT_APPROVAL",
+                            )
+                            with repository.transaction():
+                                repository.finish_step(
+                                    active_step.step_id,
+                                    {
+                                        "proposal_id": proposal.proposal_id,
+                                        "status": proposal.status,
+                                        "expires_at": proposal.expires_at,
+                                    },
+                                )
+                                repository.update_run_status(
+                                    run_id,
+                                    RunStatus.WAITING_APPROVAL,
+                                    current_step=state.current_step,
+                                    tool_call_count=state.tool_call_count,
+                                )
+                                repository.save_checkpoint(run_id, after_step, state)
+                            active_step = None
+                            raise ApprovalRequired(proposal)
                         result = self._registry.execute(
                             call.name,
                             call.arguments,
@@ -400,6 +518,8 @@ class AgentLoop:
                     )
                 else:
                     raise ResumeRejected("INVALID_CHECKPOINT")
+        except ApprovalRequired:
+            raise
         except Exception as error:
             code, retryable = classify_failure(error)
             cancelled = isinstance(error, RunCancelled)

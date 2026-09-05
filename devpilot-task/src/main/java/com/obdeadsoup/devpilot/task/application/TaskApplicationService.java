@@ -47,6 +47,12 @@ public class TaskApplicationService {
     @Transactional
     public TaskResponse createTask(long workspaceId, long projectId, CreateTaskCommand command) {
         long actor = currentUserProvider.requireUserId();
+        return createTaskAs(actor, workspaceId, projectId, command);
+    }
+
+    /** 内部受控调用显式携带从 AgentRun 恢复的 actor；仍在 TaskService 内重做完整 RBAC。 */
+    @Transactional
+    public TaskResponse createTaskAs(long actor, long workspaceId, long projectId, CreateTaskCommand command) {
         String projectKey = requireWritableProject(workspaceId, projectId);
         authorizationService.requirePermission(actor, workspaceId, projectId, ProjectPermission.TASK_CREATE);
         if (command.assigneeUserId() != null) authorizationService.requireEligibleAssignee(command.assigneeUserId(), workspaceId, projectId);

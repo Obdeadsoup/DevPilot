@@ -25,6 +25,7 @@ from devpilot_agent_service.rpc.tool_gateway_client import (
 from devpilot_agent_service.runtime.agent_loop import AgentLoop
 from devpilot_agent_service.runtime.cancellation import ActiveRunRegistry
 from devpilot_agent_service.tools.devpilot import (
+    CreateTaskTool,
     ListOpenTasksTool,
     ProjectSummaryTool,
     RecentProjectActivityTool,
@@ -112,6 +113,7 @@ def create_application(config: RpcServerConfig) -> AgentRuntimeApplication:
     registry.register(ProjectSummaryTool(client))
     registry.register(ListOpenTasksTool(client))
     registry.register(RecentProjectActivityTool(client))
+    registry.register(CreateTaskTool(client))
     return AgentRuntimeApplication(
         AgentLoop(model, registry, system_prompt=TOOL_DATA_GUARD, repository=repository),
         close_callback=client.close,

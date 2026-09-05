@@ -49,7 +49,7 @@ export interface LoginResponse {
   user: User
 }
 
-export type AgentRunStatus = 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED'
+export type AgentRunStatus = 'PENDING' | 'RUNNING' | 'WAITING_APPROVAL' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED'
 
 export interface AgentRun {
   runId: string
@@ -90,6 +90,24 @@ export interface AgentRunEvent {
   toolName: string | null
   finalOutput: string | null
   failureKind: string | null
+  proposalId: string | null
+  proposalExpiresAt: string | null
+}
+
+export type AgentToolProposalStatus = 'PENDING_APPROVAL' | 'EXECUTING' | 'EXECUTED' | 'REJECTED' | 'EXPIRED' | 'FAILED'
+
+export interface AgentToolProposal {
+  proposalId: string
+  runId: string
+  toolName: string
+  arguments: Record<string, unknown>
+  status: AgentToolProposalStatus
+  createdAt: string
+  expiresAt: string
+  decisionAt: string | null
+  executedAt: string | null
+  resourceId: string | null
+  failureReason: string | null
 }
 
 // Workspace

@@ -55,6 +55,11 @@ class AgentRuntimeStub:
                 request_serializer=agent__runtime__pb2.ResumeRunRequest.SerializeToString,
                 response_deserializer=agent__runtime__pb2.AgentEvent.FromString,
                 _registered_method=True)
+        self.ResumeApproval = channel.unary_stream(
+                '/devpilot.agent.v1.AgentRuntime/ResumeApproval',
+                request_serializer=agent__runtime__pb2.ResumeApprovalRequest.SerializeToString,
+                response_deserializer=agent__runtime__pb2.AgentEvent.FromString,
+                _registered_method=True)
 
 
 class AgentRuntimeServicer:
@@ -86,6 +91,13 @@ class AgentRuntimeServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ResumeApproval(self, request, context):
+        """恢复 WAITING_APPROVAL；Runtime 会从 Java 重新读取该 Proposal 的权威决议和结果。
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_AgentRuntimeServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -107,6 +119,11 @@ def add_AgentRuntimeServicer_to_server(servicer, server):
             'ResumeRun': grpc.unary_stream_rpc_method_handler(
                     servicer.ResumeRun,
                     request_deserializer=agent__runtime__pb2.ResumeRunRequest.FromString,
+                    response_serializer=agent__runtime__pb2.AgentEvent.SerializeToString,
+            ),
+            'ResumeApproval': grpc.unary_stream_rpc_method_handler(
+                    servicer.ResumeApproval,
+                    request_deserializer=agent__runtime__pb2.ResumeApprovalRequest.FromString,
                     response_serializer=agent__runtime__pb2.AgentEvent.SerializeToString,
             ),
     }
@@ -229,6 +246,33 @@ class AgentRuntime:
             metadata,
             _registered_method=True)
 
+    @staticmethod
+    def ResumeApproval(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            '/devpilot.agent.v1.AgentRuntime/ResumeApproval',
+            agent__runtime__pb2.ResumeApprovalRequest.SerializeToString,
+            agent__runtime__pb2.AgentEvent.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
 
 class DevPilotToolGatewayStub:
     """Python 调用 Java 的受控 Tool Gateway 边界。
@@ -245,6 +289,16 @@ class DevPilotToolGatewayStub:
                 request_serializer=agent__runtime__pb2.ExecuteToolRequest.SerializeToString,
                 response_deserializer=agent__runtime__pb2.ExecuteToolResponse.FromString,
                 _registered_method=True)
+        self.CreateToolProposal = channel.unary_unary(
+                '/devpilot.agent.v1.DevPilotToolGateway/CreateToolProposal',
+                request_serializer=agent__runtime__pb2.CreateToolProposalRequest.SerializeToString,
+                response_deserializer=agent__runtime__pb2.CreateToolProposalResponse.FromString,
+                _registered_method=True)
+        self.GetToolProposal = channel.unary_unary(
+                '/devpilot.agent.v1.DevPilotToolGateway/GetToolProposal',
+                request_serializer=agent__runtime__pb2.GetToolProposalRequest.SerializeToString,
+                response_deserializer=agent__runtime__pb2.GetToolProposalResponse.FromString,
+                _registered_method=True)
 
 
 class DevPilotToolGatewayServicer:
@@ -257,6 +311,18 @@ class DevPilotToolGatewayServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def CreateToolProposal(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetToolProposal(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_DevPilotToolGatewayServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -264,6 +330,16 @@ def add_DevPilotToolGatewayServicer_to_server(servicer, server):
                     servicer.ExecuteTool,
                     request_deserializer=agent__runtime__pb2.ExecuteToolRequest.FromString,
                     response_serializer=agent__runtime__pb2.ExecuteToolResponse.SerializeToString,
+            ),
+            'CreateToolProposal': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateToolProposal,
+                    request_deserializer=agent__runtime__pb2.CreateToolProposalRequest.FromString,
+                    response_serializer=agent__runtime__pb2.CreateToolProposalResponse.SerializeToString,
+            ),
+            'GetToolProposal': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetToolProposal,
+                    request_deserializer=agent__runtime__pb2.GetToolProposalRequest.FromString,
+                    response_serializer=agent__runtime__pb2.GetToolProposalResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -294,6 +370,60 @@ class DevPilotToolGateway:
             '/devpilot.agent.v1.DevPilotToolGateway/ExecuteTool',
             agent__runtime__pb2.ExecuteToolRequest.SerializeToString,
             agent__runtime__pb2.ExecuteToolResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreateToolProposal(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/devpilot.agent.v1.DevPilotToolGateway/CreateToolProposal',
+            agent__runtime__pb2.CreateToolProposalRequest.SerializeToString,
+            agent__runtime__pb2.CreateToolProposalResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetToolProposal(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/devpilot.agent.v1.DevPilotToolGateway/GetToolProposal',
+            agent__runtime__pb2.GetToolProposalRequest.SerializeToString,
+            agent__runtime__pb2.GetToolProposalResponse.FromString,
             options,
             channel_credentials,
             insecure,

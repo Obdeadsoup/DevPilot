@@ -2,7 +2,7 @@
 
 面向小型开发团队的 GitHub 协作与 AI 工程助手。
 DevPilot 汇聚真实研发活动与团队协作上下文，由 Java Core 维护可靠业务、事务和权限边界，
-并把 Python Agent Runtime 作为独立服务，通过受控的只读 Tool Gateway 使用业务能力。
+并把 Python Agent Runtime 作为独立服务，通过受控 Tool Gateway 使用只读能力或创建待人工确认的写 Proposal。
 
 **Java 21 · Spring Boot · Spring Cloud Gateway · Nacos · MySQL · Redis · gRPC · Python · Vue 3**
 
@@ -16,7 +16,7 @@ GitHub 研发活动、本地协作业务和 Agent Runtime 的上下文层。
 - GitHub Repository / Branch / Commit / Issue / PR / Review 同步
 - Task / Activity / Notification / Audit
 - Transactional Outbox 与可恢复异步处理
-- Agent Run / SSE / 三个 read-only Tool
+- Agent Run / SSE / 三个 read-only Tool / `task.create` Proposal + HITL
 - Python Runtime Run / Step / JSON Checkpoint 持久化（独立 SQLite）
 - Gateway / Nacos Discovery / Nacos Config 服务治理
 
@@ -111,7 +111,8 @@ Java 保留认证和业务所有权；浏览器 Token 不交给 Python，Tool �
 - `task.list_open`
 - `project.list_recent_activity`
 
-它们全部是 read-only。写 Tool、Proposal / HITL、执行幂等与更细审计属于后续安全演进，不是当前已实现能力。
+它们全部是 read-only；`task.create` 是首个 `WRITE_REQUIRES_APPROVAL` Tool。它只在 Java 固化 Proposal，
+经页面批准、再次 RBAC 和 `proposal:{id}` 幂等执行后才进入 TaskService。
 
 ## 核心技术亮点
 
@@ -190,7 +191,7 @@ key、key version 与 rotation metadata；业务表仍只保存 credential ID/re
 
 ## 当前边界
 
-- Agent Tool 当前只有只读能力，没有 Proposal / HITL 或写业务动作。
+- Agent 写能力当前只开放 `task.create`，必须经过 Proposal / HITL；其他写动作尚未开放。
 - Agent 与 Notification SSE replay buffer 位于单个 Core JVM；Java 重启或 replay gap 后以 REST 权威状态补偿。
 - 本地 Nacos 关闭认证，只用于受控本机网络；不是生产部署模板。
 - GitHub local binding 使用 ENV PAT；GitHub App 是生产设计目标，尚未实现 installation callback。
@@ -267,7 +268,7 @@ Agent `:50051` 与 Java Tool Gateway `:50052` 仅暴露在 Compose 网络内。
 2. 打开 Mailpit，读取 SMTP 收件箱中的真实验证码并完成注册。
 3. 登录并通过 `/auth/me` 验证会话，创建 Workspace 与 Project。
 4. 可选：用 ENV credential reference 绑定真实 GitHub 测试仓库，验证 metadata、Branch HEAD 与 API sync。
-5. 准备 Project/Task/Activity 后发起 Agent Run，观察 Tool lifecycle、SSE terminal 与历史权威状态。
+5. 准备 Project/Task/Activity 后发起 Agent Run；`task.create` 会显示固定 Proposal，人工批准或拒绝后从 Checkpoint 继续。
 6. 通过真实业务动作检查 Outbox terminal、Notification DB 与 SSE delivery。
 
 容器 Healthy 只证明依赖就绪，不等于上述应用链路已经通过。

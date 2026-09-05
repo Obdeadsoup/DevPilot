@@ -16,7 +16,12 @@ from devpilot_agent_service.runtime.cancellation import (
     DuplicateActiveRunError,
 )
 from devpilot_agent_service.runtime.context import RunContext
-from devpilot_agent_service.runtime.errors import AgentRuntimeError, ResumeRejected, RunCancelled
+from devpilot_agent_service.runtime.errors import (
+    AgentRuntimeError,
+    ApprovalRequired,
+    ResumeRejected,
+    RunCancelled,
+)
 from devpilot_agent_service.runtime.events import RuntimeEvent, RuntimeEventType
 from devpilot_agent_service.runtime.repository import RunAlreadyExists
 
@@ -30,6 +35,7 @@ class _StreamOutcome:
     final_output: str | None = None
     failure_kind: str | None = None
     cancelled: bool = False
+    proposal: object | None = None
 
 
 class AgentRuntimeServicer(agent_runtime_pb2_grpc.AgentRuntimeServicer):
@@ -95,18 +101,26 @@ class AgentRuntimeServicer(agent_runtime_pb2_grpc.AgentRuntimeServicer):
         """恢复当前快照；新流只观察本次执行，不重放旧事件或原始 user_input。"""
         yield from self._stream(request, context, resume=True)
 
-    def _prepare(self, request, context, *, resume):
+    def ResumeApproval(self, request, context):
+        """从 Java 权威 Proposal 决议恢复，不接受客户端重传 Tool 参数。"""
+        _require_non_blank(request.proposal_id, "proposal_id", context)
+        yield from self._stream(
+            request, context, resume=True, proposal_id=request.proposal_id
+        )
+
+    def _prepare(self, request, context, *, resume, proposal_id=None):
         try:
             token = self._active_runs.register(request.run_id, request.request_id)
         except DuplicateActiveRunError:
             context.abort(grpc.StatusCode.ALREADY_EXISTS, "agent run is already active")
         try:
             run_context = RunContext(request.run_id, request.request_id)
-            prepared = (
-                self._application.prepare_resume(run_context)
-                if resume
-                else self._application.prepare_run(request.user_input, run_context)
-            )
+            if proposal_id is not None:
+                prepared = self._application.prepare_approval_resume(run_context, proposal_id)
+            elif resume:
+                prepared = self._application.prepare_resume(run_context)
+            else:
+                prepared = self._application.prepare_run(request.user_input, run_context)
             return token, prepared
         except RunAlreadyExists:
             self._active_runs.complete(request.run_id)
@@ -123,7 +137,7 @@ class AgentRuntimeServicer(agent_runtime_pb2_grpc.AgentRuntimeServicer):
             self._active_runs.complete(request.run_id)
             context.abort(grpc.StatusCode.INTERNAL, "runtime preparation failed")
 
-    def _stream(self, request, context, *, resume):
+    def _stream(self, request, context, *, resume, proposal_id=None):
         _require_non_blank(request.request_id, "request_id", context)
         _require_non_blank(request.run_id, "run_id", context)
         if not resume:
@@ -132,7 +146,9 @@ class AgentRuntimeServicer(agent_runtime_pb2_grpc.AgentRuntimeServicer):
         events: queue.Queue[RuntimeEvent | _StreamOutcome] = queue.Queue(
             maxsize=STREAM_QUEUE_CAPACITY
         )
-        token, prepared = self._prepare(request, context, resume=resume)
+        token, prepared = self._prepare(
+            request, context, resume=resume, proposal_id=proposal_id
+        )
 
         def enqueue(item: RuntimeEvent | _StreamOutcome) -> None:
             # Stream 只是观察者；断流仅停止投递。独立 worker 继续保存 Step/Checkpoint/终态，
@@ -157,6 +173,8 @@ class AgentRuntimeServicer(agent_runtime_pb2_grpc.AgentRuntimeServicer):
                 enqueue(_StreamOutcome(final_output=result.final_answer))
             except RunCancelled:
                 enqueue(_StreamOutcome(cancelled=True))
+            except ApprovalRequired as interrupt:
+                enqueue(_StreamOutcome(proposal=interrupt.proposal))
             except AgentRuntimeError as error:
                 LOGGER.warning(
                     "Agent stream failed failureType=%s stopReason=%s",
@@ -183,7 +201,11 @@ class AgentRuntimeServicer(agent_runtime_pb2_grpc.AgentRuntimeServicer):
         yield _agent_event(
             request.run_id,
             sequence,
-            agent_runtime_pb2.AGENT_EVENT_TYPE_RUN_STARTED,
+            (
+                agent_runtime_pb2.AGENT_EVENT_TYPE_RUN_RESUMED
+                if proposal_id is not None
+                else agent_runtime_pb2.AGENT_EVENT_TYPE_RUN_STARTED
+            ),
         )
         sequence += 1
         while context.is_active():
@@ -192,7 +214,15 @@ class AgentRuntimeServicer(agent_runtime_pb2_grpc.AgentRuntimeServicer):
             except queue.Empty:
                 continue
             if isinstance(item, _StreamOutcome):
-                if item.cancelled:
+                if item.proposal is not None:
+                    yield _agent_event(
+                        request.run_id,
+                        sequence,
+                        agent_runtime_pb2.AGENT_EVENT_TYPE_RUN_WAITING_APPROVAL,
+                        proposal_id=item.proposal.proposal_id,
+                        proposal_expires_at=item.proposal.expires_at,
+                    )
+                elif item.cancelled:
                     yield _agent_event(
                         request.run_id,
                         sequence,
@@ -286,6 +316,8 @@ def _agent_event(
     tool_name: str = "",
     final_output: str = "",
     failure_kind: str = "",
+    proposal_id: str = "",
+    proposal_expires_at: str = "",
 ) -> agent_runtime_pb2.AgentEvent:
     return agent_runtime_pb2.AgentEvent(
         event_id=f"{run_id}:{sequence}",
@@ -296,4 +328,6 @@ def _agent_event(
         tool_name=tool_name,
         final_output=final_output,
         failure_kind=failure_kind,
+        proposal_id=proposal_id,
+        proposal_expires_at=proposal_expires_at,
     )

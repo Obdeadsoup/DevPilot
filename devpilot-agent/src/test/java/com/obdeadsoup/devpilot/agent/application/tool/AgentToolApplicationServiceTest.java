@@ -68,6 +68,13 @@ class AgentToolApplicationServiceTest {
                 AgentToolErrorKind.RESULT_TOO_LARGE);
     }
 
+    @Test
+    void writeToolCannotUseDirectExecutionBoundary() {
+        when(contextQuery.findByRunIdForRuntime("run-1")).thenReturn(Optional.of(context(AgentRunStatus.RUNNING)));
+        assertKind(service(65_536), command("task.create", Map.of("title", "unsafe direct write")),
+                AgentToolErrorKind.INVALID_ARGUMENT);
+    }
+
     private AgentToolApplicationService service(int maxBytes) {
         return new AgentToolApplicationService(
                 contextQuery, List.of(handler), new AgentToolResultSizePolicy(maxBytes));

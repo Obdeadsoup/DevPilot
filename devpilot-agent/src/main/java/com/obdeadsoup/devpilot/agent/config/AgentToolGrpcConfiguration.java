@@ -9,10 +9,12 @@ import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /** Python→Java Tool Gateway 的 service identity、消息大小和 Server 生命周期装配。 */
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(AgentToolGrpcProperties.class)
+@EnableScheduling
+@EnableConfigurationProperties({AgentToolGrpcProperties.class, AgentProposalProperties.class})
 public class AgentToolGrpcConfiguration {
     @Bean
     AgentToolResultSizePolicy agentToolResultSizePolicy(AgentToolGrpcProperties properties) {

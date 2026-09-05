@@ -132,11 +132,13 @@ class SQLiteAgentRuntimeRepository:
                 RunStatus.PENDING: {RunStatus.RUNNING, RunStatus.CANCELLED, RunStatus.FAILED},
                 RunStatus.RUNNING: {
                     RunStatus.RUNNING,
+                    RunStatus.WAITING_APPROVAL,
                     RunStatus.SUCCEEDED,
                     RunStatus.FAILED,
                     RunStatus.CANCEL_REQUESTED,
                 },
                 RunStatus.CANCEL_REQUESTED: {RunStatus.CANCEL_REQUESTED, RunStatus.CANCELLED},
+                RunStatus.WAITING_APPROVAL: {RunStatus.RUNNING, RunStatus.CANCELLED},
                 RunStatus.FAILED: {RunStatus.RUNNING} if run.retryable else set(),
             }
             if status not in allowed.get(run.status, set()):
@@ -203,10 +205,10 @@ class SQLiteAgentRuntimeRepository:
             run = self.get_run(run_id)
             if run is None or run.request_id != request_id:
                 return None
-            if run.status in {RunStatus.PENDING, RunStatus.RUNNING}:
+            if run.status in {RunStatus.PENDING, RunStatus.RUNNING, RunStatus.WAITING_APPROVAL}:
                 status = (
                     RunStatus.CANCELLED
-                    if run.status is RunStatus.PENDING
+                    if run.status in {RunStatus.PENDING, RunStatus.WAITING_APPROVAL}
                     else RunStatus.CANCEL_REQUESTED
                 )
                 self.update_run_status(run_id, status)
@@ -217,6 +219,7 @@ class SQLiteAgentRuntimeRepository:
                     RunStatus.PENDING,
                     RunStatus.RUNNING,
                     RunStatus.CANCEL_REQUESTED,
+                    RunStatus.WAITING_APPROVAL,
                 },
             )
 

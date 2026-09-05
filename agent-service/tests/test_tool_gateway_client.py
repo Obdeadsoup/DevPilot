@@ -38,6 +38,9 @@ class FakeStub:
             raise self.response
         return self.response
 
+    CreateToolProposal = ExecuteTool
+    GetToolProposal = ExecuteTool
+
 
 class FakeRpcError(grpc.RpcError):
     def __init__(self, code: grpc.StatusCode) -> None:
@@ -205,3 +208,36 @@ def test_config_hides_service_key_and_validates_environment() -> None:
     assert "0123456789abcdef" not in repr(config)
     with pytest.raises(ValueError):
         JavaToolGatewayConfig.from_env({})
+
+
+def test_create_and_get_proposal_use_authoritative_ids_and_resolution(monkeypatch) -> None:
+    response = agent_runtime_pb2.CreateToolProposalResponse(
+        proposal_id="proposal-1",
+        tool_call_id="call-1",
+        status="PENDING_APPROVAL",
+        expires_at="2030-01-01T00:00:00",
+    )
+    client, stub, _ = client_with(monkeypatch, response)
+    proposal = client.create_proposal(
+        RunContext("run-1", "request-1"),
+        "call-1",
+        "task.create",
+        {"title": "Exact title"},
+    )
+    assert proposal.proposal_id == "proposal-1"
+    assert stub.calls[-1][0].arguments.fields["title"].string_value == "Exact title"
+
+    result = Struct()
+    result.update({"created": True, "resourceId": "42"})
+    stub.response = agent_runtime_pb2.GetToolProposalResponse(
+        proposal_id="proposal-1",
+        tool_call_id="call-1",
+        tool_name="task.create",
+        status=agent_runtime_pb2.TOOL_PROPOSAL_STATUS_EXECUTED,
+        result=result,
+    )
+    resolution = client.get_proposal(
+        RunContext("run-1", "request-1"), "proposal-1"
+    )
+    assert resolution.status == "EXECUTED"
+    assert resolution.result == {"created": True, "resourceId": "42"}

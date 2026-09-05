@@ -42,6 +42,11 @@ class AgentRuntimeApplication:
     def prepare_resume(self, run_context: RunContext) -> PreparedRun:
         return self._loop.prepare_resume(run_context)
 
+    def prepare_approval_resume(
+        self, run_context: RunContext, proposal_id: str
+    ) -> PreparedRun:
+        return self._loop.prepare_approval_resume(run_context, proposal_id)
+
     def execute_prepared(
         self,
         prepared: PreparedRun,

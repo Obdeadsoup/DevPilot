@@ -10,7 +10,15 @@ from devpilot_agent_service.runtime.errors import (
     ToolExecutionError,
     UnknownToolError,
 )
-from devpilot_agent_service.tools.base import JsonValue, Tool, ToolDefinition, definition_of
+from devpilot_agent_service.tools.base import (
+    JsonValue,
+    Tool,
+    ToolDefinition,
+    ToolProposal,
+    ToolProposalResolution,
+    ToolRisk,
+    definition_of,
+)
 
 
 class ToolRegistry:
@@ -33,6 +41,50 @@ class ToolRegistry:
 
     def definitions(self) -> tuple[ToolDefinition, ...]:
         return tuple(definition_of(tool) for tool in self._tools.values())
+
+    def risk(self, name: str) -> ToolRisk:
+        return definition_of(self.get(name)).risk
+
+    def create_proposal(
+        self,
+        name: str,
+        arguments: Mapping[str, object],
+        *,
+        run_context: RunContext,
+        tool_call_id: str,
+    ) -> ToolProposal:
+        tool = self.get(name)
+        if definition_of(tool).risk is not ToolRisk.WRITE_REQUIRES_APPROVAL:
+            raise InvalidToolArguments(name, "tool does not require a proposal")
+        method = getattr(tool, "create_proposal", None)
+        if not callable(method):
+            raise ToolExecutionError(name)
+        try:
+            return method(dict(arguments), run_context=run_context, tool_call_id=tool_call_id)
+        except InvalidToolArguments:
+            raise
+        except Exception as error:
+            raise ToolExecutionError(
+                name, retryable=getattr(error, "retryable", False) is True
+            ) from error
+
+    def get_proposal_resolution(
+        self,
+        name: str,
+        *,
+        run_context: RunContext,
+        proposal_id: str,
+    ) -> ToolProposalResolution:
+        tool = self.get(name)
+        method = getattr(tool, "get_proposal_resolution", None)
+        if not callable(method):
+            raise ToolExecutionError(name)
+        try:
+            return method(run_context=run_context, proposal_id=proposal_id)
+        except Exception as error:
+            raise ToolExecutionError(
+                name, retryable=getattr(error, "retryable", False) is True
+            ) from error
 
     def execute(
         self,

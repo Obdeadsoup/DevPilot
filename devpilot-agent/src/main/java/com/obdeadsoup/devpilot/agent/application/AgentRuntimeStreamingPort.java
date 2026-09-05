@@ -4,4 +4,9 @@ package com.obdeadsoup.devpilot.agent.application;
 public interface AgentRuntimeStreamingPort {
     /** 发起后立即返回；后续事件、失败和完成由 listener 接收。 */
     AgentRuntimeStreamHandle stream(AgentRunCommand command, AgentRuntimeEventListener listener);
+
+    default AgentRuntimeStreamHandle resumeApproval(
+            AgentApprovalResumeCommand command, AgentRuntimeEventListener listener) {
+        throw new UnsupportedOperationException("approval resume is not configured");
+    }
 }

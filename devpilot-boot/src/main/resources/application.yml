@@ -61,6 +61,10 @@ devpilot:
       worker-threads: 4
       queue-capacity: 64
       shutdown-grace: 5s
+    proposal:
+      ttl: ${DEVPILOT_AGENT_PROPOSAL_TTL:15m}
+      expiration-batch-size: 100
+      expiration-scan-interval: ${DEVPILOT_AGENT_PROPOSAL_SCAN_INTERVAL:30s}
     sse:
       enabled: true
       timeout: 30m

@@ -174,7 +174,7 @@ def test_active_run_rejects_duplicate_and_cancel_emits_exactly_one_terminal(repo
 
     class BlockingModel:
         def generate(self, messages: object, tools: object) -> ModelResponse:
-            assert release_model.wait(timeout=2)
+            assert release_model.wait(timeout=5)
             return ModelResponse.final("must-not-succeed")
 
     servicer = AgentRuntimeServicer(

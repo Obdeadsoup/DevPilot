@@ -87,6 +87,26 @@ class AgentRunEventHubTest {
         assertThat(emitters.getLast().sendCount).isOne();
     }
 
+    @Test
+    void waitingApprovalKeepsConnectionForResumedRun() {
+        AgentRunEventHub hub = hub(8, 2);
+        hub.initialize("run-1");
+        hub.register("run-1", null);
+        CapturingEmitter emitter = emitters.getLast();
+
+        hub.publish(event(1, AgentStreamEventType.RUN_STARTED));
+        hub.publish(new AgentStreamEvent("run-1:2", "run-1", 2,
+                AgentStreamEventType.RUN_WAITING_APPROVAL, 0, "", "", "",
+                "proposal-1", "2026-08-26T13:15:00"));
+
+        assertThat(emitter.completed).isFalse();
+        assertThat(hub.activeConnections("run-1")).isOne();
+        hub.publish(event(3, AgentStreamEventType.RUN_RESUMED));
+        hub.publish(event(4, AgentStreamEventType.RUN_SUCCEEDED));
+        assertThat(emitter.sendCount).isEqualTo(4);
+        assertThat(emitter.completed).isTrue();
+    }
+
     private AgentRunEventHub hub(int replayCapacity, int maxConnections) {
         AgentRunSseProperties properties = new AgentRunSseProperties(
                 true, Duration.ofMinutes(30), Duration.ofSeconds(20), maxConnections,

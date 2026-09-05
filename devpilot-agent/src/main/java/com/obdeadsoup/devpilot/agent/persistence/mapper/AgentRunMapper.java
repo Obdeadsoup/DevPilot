@@ -95,9 +95,21 @@ public interface AgentRunMapper {
             UPDATE dp_agent_run SET status='CANCELLED', final_output=NULL, failure_kind=NULL,
                 finished_at=#{finishedAt}, version=version+1
             WHERE run_id=#{runId} AND workspace_id=#{workspaceId} AND project_id=#{projectId}
-              AND status='RUNNING' AND version=#{expectedVersion} AND deleted=0
+              AND status IN ('RUNNING','WAITING_APPROVAL') AND version=#{expectedVersion} AND deleted=0
             """)
     int markCancelled(@Param("workspaceId") long workspaceId, @Param("projectId") long projectId,
                       @Param("runId") String runId, @Param("finishedAt") LocalDateTime finishedAt,
                       @Param("expectedVersion") long expectedVersion);
+
+    @Update("""
+            UPDATE dp_agent_run SET status='WAITING_APPROVAL', version=version+1
+            WHERE run_id=#{runId} AND status='RUNNING' AND version=#{expectedVersion} AND deleted=0
+            """)
+    int markWaitingApproval(@Param("runId") String runId, @Param("expectedVersion") long expectedVersion);
+
+    @Update("""
+            UPDATE dp_agent_run SET status='RUNNING', version=version+1
+            WHERE run_id=#{runId} AND status='WAITING_APPROVAL' AND version=#{expectedVersion} AND deleted=0
+            """)
+    int markRunningAfterApproval(@Param("runId") String runId, @Param("expectedVersion") long expectedVersion);
 }

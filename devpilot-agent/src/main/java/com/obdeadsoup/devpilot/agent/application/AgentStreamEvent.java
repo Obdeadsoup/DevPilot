@@ -11,11 +11,18 @@ public record AgentStreamEvent(
         int step,
         String toolName,
         String finalOutput,
-        String failureKind
+        String failureKind,
+        String proposalId,
+        String proposalExpiresAt
 ) {
     public AgentStreamEvent {
         Objects.requireNonNull(eventId, "eventId must not be null");
         Objects.requireNonNull(runId, "runId must not be null");
         Objects.requireNonNull(type, "type must not be null");
+    }
+
+    public AgentStreamEvent(String eventId, String runId, long sequence, AgentStreamEventType type,
+                            int step, String toolName, String finalOutput, String failureKind) {
+        this(eventId, runId, sequence, type, step, toolName, finalOutput, failureKind, "", "");
     }
 }

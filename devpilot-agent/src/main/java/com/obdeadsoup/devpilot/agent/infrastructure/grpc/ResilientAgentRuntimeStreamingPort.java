@@ -36,6 +36,18 @@ public final class ResilientAgentRuntimeStreamingPort implements AgentRuntimeStr
 
     @Override
     public AgentRuntimeStreamHandle stream(AgentRunCommand command, AgentRuntimeEventListener listener) {
+        return protectedStart(listener, guarded -> delegate.stream(command, guarded));
+    }
+
+    @Override
+    public AgentRuntimeStreamHandle resumeApproval(
+            com.obdeadsoup.devpilot.agent.application.AgentApprovalResumeCommand command,
+            AgentRuntimeEventListener listener) {
+        return protectedStart(listener, guarded -> delegate.resumeApproval(command, guarded));
+    }
+
+    private AgentRuntimeStreamHandle protectedStart(
+            AgentRuntimeEventListener listener, StreamStart start) {
         if (!bulkhead.tryAcquirePermission()) {
             metrics.capacityRejected();
             listener.onError(AgentRuntimeStreamFailureKind.CAPACITY_REJECTED);
@@ -74,7 +86,7 @@ public final class ResilientAgentRuntimeStreamingPort implements AgentRuntimeStr
             }
         };
         try {
-            delegateHandle.set(delegate.stream(command, guarded));
+            delegateHandle.set(start.open(guarded));
         } catch (RuntimeException exception) {
             guarded.onError(AgentRuntimeStreamFailureKind.UNKNOWN);
         }
@@ -86,6 +98,11 @@ public final class ResilientAgentRuntimeStreamingPort implements AgentRuntimeStr
                 lifecycle.finish(AgentRuntimeStreamFailureKind.USER_CANCELLED);
             }
         };
+    }
+
+    @FunctionalInterface
+    private interface StreamStart {
+        AgentRuntimeStreamHandle open(AgentRuntimeEventListener listener);
     }
 
     private final class Lifecycle {

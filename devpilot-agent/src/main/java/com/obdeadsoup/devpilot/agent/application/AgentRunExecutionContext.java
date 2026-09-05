@@ -12,12 +12,20 @@ public record AgentRunExecutionContext(
         AgentRunStatus status,
         String repositoryFullName,
         String branchName,
-        String commitSha
+        String commitSha,
+        long version
 ) {
+    public AgentRunExecutionContext(String runId, String requestId, long workspaceId, long projectId,
+                                    long createdBy, AgentRunStatus status, String repositoryFullName,
+                                    String branchName, String commitSha) {
+        this(runId, requestId, workspaceId, projectId, createdBy, status,
+                repositoryFullName, branchName, commitSha, 0);
+    }
+
     static AgentRunExecutionContext from(AgentRunEntity entity) {
         return new AgentRunExecutionContext(
                 entity.getRunId(), entity.getRequestId(), entity.getWorkspaceId(),
                 entity.getProjectId(), entity.getCreatedBy(), AgentRunStatus.valueOf(entity.getStatus()),
-                entity.getRepositoryFullName(), entity.getBranchName(), entity.getCommitSha());
+                entity.getRepositoryFullName(), entity.getBranchName(), entity.getCommitSha(), entity.getVersion());
     }
 }

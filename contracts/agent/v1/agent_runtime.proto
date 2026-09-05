@@ -14,11 +14,15 @@ service AgentRuntime {
   rpc CancelRun(CancelRunRequest) returns (CancelRunResponse);
   // 只恢复已持久化、明确可重试的 Runtime；不会再次提交 user_input。
   rpc ResumeRun(ResumeRunRequest) returns (stream AgentEvent);
+  // 恢复 WAITING_APPROVAL；Runtime 会从 Java 重新读取该 Proposal 的权威决议和结果。
+  rpc ResumeApproval(ResumeApprovalRequest) returns (stream AgentEvent);
 }
 
 // Python 调用 Java 的受控 Tool Gateway 边界。
 service DevPilotToolGateway {
   rpc ExecuteTool(ExecuteToolRequest) returns (ExecuteToolResponse);
+  rpc CreateToolProposal(CreateToolProposalRequest) returns (CreateToolProposalResponse);
+  rpc GetToolProposal(GetToolProposalRequest) returns (GetToolProposalResponse);
 }
 
 message StartRunRequest {
@@ -54,6 +58,8 @@ message AgentEvent {
   string tool_name = 6;
   string final_output = 7;
   string failure_kind = 8;
+  string proposal_id = 9;
+  string proposal_expires_at = 10;
 }
 
 enum AgentEventType {
@@ -65,6 +71,8 @@ enum AgentEventType {
   AGENT_EVENT_TYPE_RUN_SUCCEEDED = 5;
   AGENT_EVENT_TYPE_RUN_FAILED = 6;
   AGENT_EVENT_TYPE_RUN_CANCELLED = 7;
+  AGENT_EVENT_TYPE_RUN_WAITING_APPROVAL = 8;
+  AGENT_EVENT_TYPE_RUN_RESUMED = 9;
 }
 
 message CancelRunRequest {
@@ -82,6 +90,12 @@ message CancelRunResponse {
 message ResumeRunRequest {
   string run_id = 1;
   string request_id = 2;
+}
+
+message ResumeApprovalRequest {
+  string run_id = 1;
+  string request_id = 2;
+  string proposal_id = 3;
 }
 
 enum CancelRunStatus {
@@ -111,4 +125,44 @@ enum ToolExecutionStatus {
   TOOL_EXECUTION_STATUS_UNSPECIFIED = 0;
   TOOL_EXECUTION_STATUS_SUCCEEDED = 1;
   TOOL_EXECUTION_STATUS_FAILED = 2;
+}
+
+message CreateToolProposalRequest {
+  string request_id = 1;
+  string run_id = 2;
+  string tool_call_id = 3;
+  string tool_name = 4;
+  google.protobuf.Struct arguments = 5;
+}
+
+message CreateToolProposalResponse {
+  string proposal_id = 1;
+  string tool_call_id = 2;
+  string status = 3;
+  string expires_at = 4;
+}
+
+message GetToolProposalRequest {
+  string request_id = 1;
+  string run_id = 2;
+  string proposal_id = 3;
+}
+
+message GetToolProposalResponse {
+  string proposal_id = 1;
+  string tool_call_id = 2;
+  string tool_name = 3;
+  ToolProposalStatus status = 4;
+  google.protobuf.Struct result = 5;
+  string expires_at = 6;
+}
+
+enum ToolProposalStatus {
+  TOOL_PROPOSAL_STATUS_UNSPECIFIED = 0;
+  TOOL_PROPOSAL_STATUS_PENDING_APPROVAL = 1;
+  TOOL_PROPOSAL_STATUS_EXECUTING = 2;
+  TOOL_PROPOSAL_STATUS_EXECUTED = 3;
+  TOOL_PROPOSAL_STATUS_REJECTED = 4;
+  TOOL_PROPOSAL_STATUS_EXPIRED = 5;
+  TOOL_PROPOSAL_STATUS_FAILED = 6;
 }

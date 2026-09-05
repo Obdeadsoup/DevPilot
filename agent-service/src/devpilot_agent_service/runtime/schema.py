@@ -1,4 +1,4 @@
-"""单实例 SQLite schema v2；原地保留 P1-01 三张表及所有检查点。"""
+"""单实例 SQLite schema v3；原地保留历史 Run、Step 和 Checkpoint。"""
 
 import json
 import sqlite3
@@ -7,7 +7,7 @@ _SCHEMA = """
 CREATE TABLE IF NOT EXISTS runtime_runs (
     run_id TEXT PRIMARY KEY,
     status TEXT NOT NULL CHECK(status IN
-        ('PENDING','RUNNING','CANCEL_REQUESTED','SUCCEEDED','FAILED','CANCELLED')),
+        ('PENDING','RUNNING','CANCEL_REQUESTED','WAITING_APPROVAL','SUCCEEDED','FAILED','CANCELLED')),
     current_step INTEGER NOT NULL DEFAULT 0 CHECK(current_step >= 0),
     tool_call_count INTEGER NOT NULL DEFAULT 0 CHECK(tool_call_count >= 0),
     created_at TEXT NOT NULL,
@@ -54,21 +54,23 @@ def initialize_schema(connection: sqlite3.Connection) -> None:
     try:
         connection.execute("BEGIN IMMEDIATE")
         version = connection.execute("PRAGMA user_version").fetchone()[0]
-        if version > 2:
+        if version > 3:
             raise ValueError("unsupported runtime database version")
         columns = {row[1] for row in connection.execute("PRAGMA table_info(runtime_runs)")}
         statements = [sql.strip() for sql in _SCHEMA.split(";") if sql.strip()]
-        if columns and "retryable" not in columns:
-            connection.execute(statements[0].replace("runtime_runs", "runtime_runs_v2", 1))
-            fields = (
-                "run_id,status,current_step,tool_call_count,created_at,updated_at,"
-                "started_at,finished_at,failure_code,failure_message"
+        if columns and version < 3:
+            connection.execute(statements[0].replace("runtime_runs", "runtime_runs_v3", 1))
+            ordered = (
+                "run_id", "status", "current_step", "tool_call_count", "created_at", "updated_at",
+                "started_at", "finished_at", "failure_code", "failure_message", "request_id",
+                "retryable", "version",
             )
+            fields = ",".join(field for field in ordered if field in columns)
             connection.execute(
-                f"INSERT INTO runtime_runs_v2 ({fields}) SELECT {fields} FROM runtime_runs"
+                f"INSERT INTO runtime_runs_v3 ({fields}) SELECT {fields} FROM runtime_runs"
             )
             connection.execute("DROP TABLE runtime_runs")
-            connection.execute("ALTER TABLE runtime_runs_v2 RENAME TO runtime_runs")
+            connection.execute("ALTER TABLE runtime_runs_v3 RENAME TO runtime_runs")
             # 仅提取旧快照中的关联字段，不凭 messages 推测恢复位置。
             for row in connection.execute(
                 "SELECT run_id,state_json FROM runtime_checkpoints ORDER BY checkpoint_no"
@@ -85,7 +87,7 @@ def initialize_schema(connection: sqlite3.Connection) -> None:
             connection.execute(statement)
         if connection.execute("PRAGMA foreign_key_check").fetchall():
             raise ValueError("runtime database foreign key check failed")
-        connection.execute("PRAGMA user_version=2")
+        connection.execute("PRAGMA user_version=3")
         connection.commit()
     except BaseException:
         connection.rollback()

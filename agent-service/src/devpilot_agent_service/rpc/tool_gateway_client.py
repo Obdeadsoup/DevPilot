@@ -16,7 +16,7 @@ from devpilot_agent_service.rpc.circuit_breaker import (
 )
 from devpilot_agent_service.rpc.generated import agent_runtime_pb2, agent_runtime_pb2_grpc
 from devpilot_agent_service.runtime.context import RunContext
-from devpilot_agent_service.tools.base import JsonValue
+from devpilot_agent_service.tools.base import JsonValue, ToolProposal, ToolProposalResolution
 
 SERVICE_KEY_HEADER = "x-devpilot-agent-service-key"
 
@@ -136,10 +136,6 @@ class JavaToolGatewayClient:
             argument_struct.update(dict(arguments))
         except (TypeError, ValueError) as error:
             raise JavaToolGatewayError(JavaToolGatewayFailureKind.INVALID_ARGUMENT) from error
-        try:
-            self._circuit_breaker.before_call()
-        except CircuitOpenError as error:
-            raise JavaToolGatewayError(JavaToolGatewayFailureKind.CIRCUIT_OPEN) from error
         request = agent_runtime_pb2.ExecuteToolRequest(
             request_id=run_context.request_id,
             run_id=run_context.run_id,
@@ -147,8 +143,84 @@ class JavaToolGatewayClient:
             tool_name=tool_name,
             arguments=argument_struct,
         )
+        response = self._invoke(self._stub.ExecuteTool, request)
+
+        if response.tool_call_id != tool_call_id:
+            raise JavaToolGatewayError(JavaToolGatewayFailureKind.PROTOCOL)
+        if response.status == agent_runtime_pb2.TOOL_EXECUTION_STATUS_FAILED:
+            raise JavaToolGatewayError(_failure_kind(response.error_kind))
+        if response.status != agent_runtime_pb2.TOOL_EXECUTION_STATUS_SUCCEEDED:
+            raise JavaToolGatewayError(JavaToolGatewayFailureKind.PROTOCOL)
+        if response.result.ByteSize() > self._config.max_result_bytes:
+            raise JavaToolGatewayError(JavaToolGatewayFailureKind.RESULT_TOO_LARGE)
+        result = MessageToDict(response.result, preserving_proto_field_name=True)
+        if result.get("external_untrusted_content") is not True:
+            raise JavaToolGatewayError(JavaToolGatewayFailureKind.PROTOCOL)
+        return result
+
+    def create_proposal(
+        self,
+        run_context: RunContext,
+        tool_call_id: str,
+        tool_name: str,
+        arguments: Mapping[str, object],
+    ) -> ToolProposal:
+        argument_struct = Struct()
         try:
-            response = self._stub.ExecuteTool(
+            argument_struct.update(dict(arguments))
+        except (TypeError, ValueError) as error:
+            raise JavaToolGatewayError(JavaToolGatewayFailureKind.INVALID_ARGUMENT) from error
+        request = agent_runtime_pb2.CreateToolProposalRequest(
+            request_id=run_context.request_id,
+            run_id=run_context.run_id,
+            tool_call_id=tool_call_id,
+            tool_name=tool_name,
+            arguments=argument_struct,
+        )
+        response = self._invoke(self._stub.CreateToolProposal, request)
+        if response.tool_call_id != tool_call_id or response.status != "PENDING_APPROVAL":
+            raise JavaToolGatewayError(JavaToolGatewayFailureKind.PROTOCOL)
+        return ToolProposal(
+            response.proposal_id,
+            response.tool_call_id,
+            tool_name,
+            response.status,
+            response.expires_at,
+        )
+
+    def get_proposal(
+        self, run_context: RunContext, proposal_id: str
+    ) -> ToolProposalResolution:
+        response = self._invoke(
+            self._stub.GetToolProposal,
+            agent_runtime_pb2.GetToolProposalRequest(
+                request_id=run_context.request_id,
+                run_id=run_context.run_id,
+                proposal_id=proposal_id,
+            ),
+        )
+        if response.proposal_id != proposal_id:
+            raise JavaToolGatewayError(JavaToolGatewayFailureKind.PROTOCOL)
+        status_name = agent_runtime_pb2.ToolProposalStatus.Name(response.status)
+        prefix = "TOOL_PROPOSAL_STATUS_"
+        if not status_name.startswith(prefix):
+            raise JavaToolGatewayError(JavaToolGatewayFailureKind.PROTOCOL)
+        result = MessageToDict(response.result, preserving_proto_field_name=True)
+        return ToolProposalResolution(
+            response.proposal_id,
+            response.tool_call_id,
+            response.tool_name,
+            status_name[len(prefix):],
+            result,
+        )
+
+    def _invoke(self, method, request):
+        try:
+            self._circuit_breaker.before_call()
+        except CircuitOpenError as error:
+            raise JavaToolGatewayError(JavaToolGatewayFailureKind.CIRCUIT_OPEN) from error
+        try:
+            response = method(
                 request,
                 timeout=self._config.deadline_seconds,
                 metadata=((SERVICE_KEY_HEADER, self._config.service_key),),
@@ -169,19 +241,7 @@ class JavaToolGatewayClient:
 
         # 收到合法 gRPC response 即证明依赖可达；业务/协议分类不能把依赖熔断。
         self._circuit_breaker.record_success()
-
-        if response.tool_call_id != tool_call_id:
-            raise JavaToolGatewayError(JavaToolGatewayFailureKind.PROTOCOL)
-        if response.status == agent_runtime_pb2.TOOL_EXECUTION_STATUS_FAILED:
-            raise JavaToolGatewayError(_failure_kind(response.error_kind))
-        if response.status != agent_runtime_pb2.TOOL_EXECUTION_STATUS_SUCCEEDED:
-            raise JavaToolGatewayError(JavaToolGatewayFailureKind.PROTOCOL)
-        if response.result.ByteSize() > self._config.max_result_bytes:
-            raise JavaToolGatewayError(JavaToolGatewayFailureKind.RESULT_TOO_LARGE)
-        result = MessageToDict(response.result, preserving_proto_field_name=True)
-        if result.get("external_untrusted_content") is not True:
-            raise JavaToolGatewayError(JavaToolGatewayFailureKind.PROTOCOL)
-        return result
+        return response
 
     def close(self) -> None:
         if self._owns_channel:

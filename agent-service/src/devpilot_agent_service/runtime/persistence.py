@@ -7,6 +7,7 @@ from typing import ClassVar, Self
 
 from devpilot_agent_service.model.types import ToolCall
 from devpilot_agent_service.runtime.message import Message, MessageRole
+from devpilot_agent_service.tools.base import ToolProposal
 
 
 class RunStatus(StrEnum):
@@ -14,6 +15,7 @@ class RunStatus(StrEnum):
     PENDING = "PENDING"
     RUNNING = "RUNNING"
     CANCEL_REQUESTED = "CANCEL_REQUESTED"
+    WAITING_APPROVAL = "WAITING_APPROVAL"
     SUCCEEDED = "SUCCEEDED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
@@ -95,6 +97,7 @@ class RuntimeCheckpointState:
     redacted: bool = False
     pending_tool_calls: tuple[ToolCall, ...] = ()
     final_answer: str | None = None
+    pending_proposal: ToolProposal | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -114,6 +117,17 @@ class RuntimeCheckpointState:
                 for c in self.pending_tool_calls
             ],
             "final_answer": self.final_answer,
+            "pending_proposal": (
+                {
+                    "proposal_id": self.pending_proposal.proposal_id,
+                    "tool_call_id": self.pending_proposal.tool_call_id,
+                    "tool_name": self.pending_proposal.tool_name,
+                    "status": self.pending_proposal.status,
+                    "expires_at": self.pending_proposal.expires_at,
+                }
+                if self.pending_proposal
+                else None
+            ),
         }
 
     @classmethod
@@ -124,7 +138,9 @@ class RuntimeCheckpointState:
             raise ValueError("invalid checkpoint")
         if data["version"] != cls.version:
             raise ValueError("unsupported runtime checkpoint version")
-        if data["next_action"] not in {"MODEL", "TOOLS", "FINALIZE", "TERMINAL"}:
+        if data["next_action"] not in {
+            "MODEL", "TOOLS", "WAIT_APPROVAL", "FINALIZE", "TERMINAL"
+        }:
             raise ValueError("invalid checkpoint next_action")
         messages = tuple(
             Message(
@@ -146,6 +162,8 @@ class RuntimeCheckpointState:
                 [],
             )
         )
+        proposal = data.pop("pending_proposal", None)
+        data["pending_proposal"] = ToolProposal(**proposal) if proposal is not None else None
         return cls(messages=messages, **data)
 
 

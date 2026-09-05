@@ -1,5 +1,5 @@
 import { request } from '../client'
-import type { AgentRun, AgentRunHistoryItem, ApiResult, PageResponse } from '@/types/api'
+import type { AgentRun, AgentRunHistoryItem, AgentToolProposal, ApiResult, PageResponse } from '@/types/api'
 
 function runBase(workspaceId: number, projectId: number) {
   return `/api/v1/workspaces/${workspaceId}/projects/${projectId}/agent-runs`
@@ -56,4 +56,28 @@ export function cancelAgentRunApi(
 
 export function agentRunStreamUrl(workspaceId: number, projectId: number, runId: string) {
   return `${runBase(workspaceId, projectId)}/${encodeURIComponent(runId)}/stream`
+}
+
+function proposalBase(workspaceId: number, projectId: number, runId: string) {
+  return `${runBase(workspaceId, projectId)}/${encodeURIComponent(runId)}/proposals`
+}
+
+export function getAgentProposalApi(workspaceId: number, projectId: number, runId: string, proposalId: string) {
+  return request<AgentToolProposal>({
+    url: `${proposalBase(workspaceId, projectId, runId)}/${encodeURIComponent(proposalId)}`,
+    method: 'GET',
+  })
+}
+
+export function getPendingAgentProposalApi(workspaceId: number, projectId: number, runId: string) {
+  return request<AgentToolProposal>({ url: `${proposalBase(workspaceId, projectId, runId)}/pending`, method: 'GET' })
+}
+
+export function decideAgentProposalApi(
+  workspaceId: number, projectId: number, runId: string, proposalId: string, decision: 'APPROVE' | 'REJECT',
+) {
+  return request<AgentToolProposal>({
+    url: `${proposalBase(workspaceId, projectId, runId)}/${encodeURIComponent(proposalId)}/decision`,
+    method: 'POST', data: { decision },
+  })
 }

@@ -24,8 +24,8 @@ P1-02 在已有协作式 Cancel 上增加持久取消意图、CAS、Checkpoint v
 它不属于 Maven reactor，不嵌入 `devpilot-agent` Java 模块，也不得直接连接或修改 DevPilot 的 `dp_*` 业务表。
 
 跨进程通信只能基于 `../contracts/agent/v1` 中的 `.proto` 契约：Java 可通过 BlockingStub 调用 Unary
-`StartRun`，正式 Browser 链路通过 async Stub 调用 `StreamRun`。Python→Java 只开放上述三个只读业务 Tool；
-`EchoTool` 留在教学和测试路径。当前仍没有写 Tool、Proposal/HITL、LangGraph、RAG、Memory 或 MCP，Python 也没有
+`StartRun`，正式 Browser 链路通过 async Stub 调用 `StreamRun`。Python→Java 开放三个只读业务 Tool，以及
+只创建 Proposal 的 `task.create`；`EchoTool` 留在教学和测试路径。当前没有 LangGraph、RAG、Memory 或 MCP，Python 也没有
 任何 `dp_*` 数据库连接。
 
 核心代码：
@@ -49,7 +49,7 @@ runtime/schema.py      SQLite schema v2 与保留 P1-01 数据的迁移
 rpc/application.py   gRPC 与 AgentLoop 之间的轻量门面
 rpc/servicer.py      Unary 与有界 Queue Server Streaming 边界
 rpc/tool_gateway_client.py  长生命周期 Python→Java Unary Client
-tools/devpilot.py     三个只读 Remote Tool Adapter
+tools/devpilot.py     三个只读 Tool 与 task.create Proposal Adapter
 rpc/server.py        Server、真实 ToolRegistry 和 Channel 生命周期装配
 rpc/generated/       由共享 proto 生成，不手工修改
 ```
@@ -170,3 +170,15 @@ with grpc.insecure_channel("127.0.0.1:50051") as channel:
 重试继续消耗原预算，已完成 Tool 不重复执行。事件序号从本次流的 1 开始，不提供历史 replay。
 本次新增的是内部 Runtime RPC，没有增加浏览器或 Java 业务侧恢复入口；真实 Remote Tool 仍受 Java
 Run 状态和 RBAC 校验约束，详见 [Cancel / Resume 学习材料与集成边界](docs/cancel-resume.md)。
+
+## task.create Proposal / HITL
+
+`task.create` 的模型 schema 只含 Task 的真实字段：title、description、priority、assigneeUserId 和 dueAt。
+它的风险元数据是 `WRITE_REQUIRES_APPROVAL`，AgentLoop 不按工具名判断风险，也不会调用旧 ExecuteTool。
+Java 固化规范化参数、SHA-256、actor/scope、TTL 和 `proposal:{id}` 幂等键，并把两侧 Run 保存为
+WAITING_APPROVAL。审批页面只回传 proposalId 和 decision；批准时 Java 再做 RBAC，并在同一数据库事务中
+调用 TaskService、保存执行结果。随后 `ResumeApproval` 从原 Checkpoint 继续，已批准参数不会重新生成。
+
+默认 TTL 为 15 分钟，扫描周期 30 秒，可通过 `DEVPILOT_AGENT_PROPOSAL_TTL` 和
+`DEVPILOT_AGENT_PROPOSAL_SCAN_INTERVAL` 调整。完整设计、状态机和安全分析见
+[Write Tool / Proposal / HITL 学习材料](docs/write-tool-proposal-hitl.md)。

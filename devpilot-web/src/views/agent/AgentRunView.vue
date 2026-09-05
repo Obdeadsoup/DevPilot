@@ -71,6 +71,20 @@
           <el-descriptions-item label="流连接">{{ streamState }}</el-descriptions-item>
         </el-descriptions>
 
+        <el-card v-if="proposal" shadow="never" class="proposal-card">
+          <template #header><strong>待确认操作：{{ proposal.toolName }}</strong></template>
+          <el-descriptions :column="1" border>
+            <el-descriptions-item label="作用域">Workspace {{ workspaceId }} / Project {{ projectId }}</el-descriptions-item>
+            <el-descriptions-item label="状态">{{ proposal.status }}</el-descriptions-item>
+            <el-descriptions-item label="过期时间">{{ proposal.expiresAt }}</el-descriptions-item>
+            <el-descriptions-item label="固定参数"><pre>{{ JSON.stringify(proposal.arguments, null, 2) }}</pre></el-descriptions-item>
+          </el-descriptions>
+          <el-space v-if="proposal.status === 'PENDING_APPROVAL'" style="margin-top: 12px">
+            <el-button type="success" :loading="deciding" @click="decideProposal('APPROVE')">批准并执行</el-button>
+            <el-button type="danger" :loading="deciding" @click="decideProposal('REJECT')">拒绝该操作</el-button>
+          </el-space>
+        </el-card>
+
         <el-divider content-position="left">流式事件</el-divider>
         <el-empty v-if="events.length === 0" description="等待 Java Core 的 Agent SSE 事件…" />
         <el-timeline v-else>
@@ -114,10 +128,10 @@
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { type FormInstance, type FormRules } from 'element-plus'
-import { cancelAgentRunApi, getAgentRunApi, listAgentRunsApi, startAgentRunApi } from '@/api/modules/agent'
+import { cancelAgentRunApi, decideAgentProposalApi, getAgentProposalApi, getAgentRunApi, getPendingAgentProposalApi, listAgentRunsApi, startAgentRunApi } from '@/api/modules/agent'
 import { listRepositoriesApi, listRepositoryBranchesApi } from '@/api/modules/repository'
 import { connectAgentRunStream, type AgentRunStreamMessage } from '@/services/agentRunStream'
-import type { AgentRun, AgentRunHistoryItem, AgentRunStatus, GitHubBranch, GitHubRepositoryBinding, PageResponse } from '@/types/api'
+import type { AgentRun, AgentRunHistoryItem, AgentRunStatus, AgentToolProposal, GitHubBranch, GitHubRepositoryBinding, PageResponse } from '@/types/api'
 
 type TimelineItem = { key: string; timestamp: string; title: string; detail: string; type: 'primary' | 'success' | 'warning' | 'danger' | 'info' }
 
@@ -133,6 +147,8 @@ const errorMessage = ref('')
 const streamState = ref('未连接')
 const starting = ref(false)
 const cancelling = ref(false)
+const deciding = ref(false)
+const proposal = ref<AgentToolProposal | null>(null)
 const refreshing = ref(false)
 const historyLoading = ref(false)
 const historyError = ref('')
@@ -148,7 +164,7 @@ const lastEventId = ref<string | null>(null)
 let disconnectStream: (() => void) | null = null
 let reconnectAttempts = 0
 
-const isRunActive = computed(() => run.value?.status === 'PENDING' || run.value?.status === 'RUNNING')
+const isRunActive = computed(() => ['PENDING', 'RUNNING', 'WAITING_APPROVAL'].includes(run.value?.status || ''))
 const startDisabled = computed(() => isRunActive.value || repositoryLoading.value || branchesLoading.value
   || Boolean(branchesError.value) || Boolean(repositoryBinding.value && (!selectedBranch.value || branches.value.length === 0)))
 
@@ -157,6 +173,7 @@ async function startRun() {
   starting.value = true
   errorMessage.value = ''
   events.value = []
+  proposal.value = null
   lastEventId.value = null
   try {
     const result = await startAgentRunApi(workspaceId, projectId, {
@@ -250,6 +267,8 @@ async function openHistoryRun(runId: string) {
   disconnectStream?.()
   run.value = result.data
   events.value = []
+  proposal.value = null
+  if (run.value.status === 'WAITING_APPROVAL') void loadPendingProposal()
   if (isRunActive.value) openStream()
 }
 
@@ -274,7 +293,10 @@ async function refreshRun() {
   refreshing.value = true
   try {
     const result = await getAgentRunApi(workspaceId, projectId, run.value.runId)
-    if (result.success && result.data) run.value = result.data
+    if (result.success && result.data) {
+      run.value = result.data
+      if (run.value.status === 'WAITING_APPROVAL') void loadPendingProposal()
+    }
     else errorMessage.value = result.message || '无法读取 Agent Run 状态。'
   } finally {
     refreshing.value = false
@@ -311,9 +333,53 @@ function handleStreamEvent(message: AgentRunStreamMessage) {
     data?.toolName || data?.finalOutput || data?.failureKind || (data ? `步骤 ${data.step}` : ''),
     eventType(message.event),
   )
+  if (message.event === 'run-waiting-approval' && data?.proposalId) {
+    void loadProposal(data.proposalId)
+    void refreshRun()
+    streamState.value = '等待审批'
+  }
+  if (message.event === 'run-resumed') {
+    if (proposal.value) void loadProposal(proposal.value.proposalId)
+    void refreshRun()
+    streamState.value = '已恢复'
+  }
   if (message.event === 'run-succeeded' || message.event === 'run-failed' || message.event === 'run-cancelled') {
     void refreshRun()
     streamState.value = '已完成'
+  }
+}
+
+async function loadProposal(proposalId: string) {
+  if (!run.value) return
+  const result = await getAgentProposalApi(workspaceId, projectId, run.value.runId, proposalId)
+  if (result.success && result.data) proposal.value = result.data
+  else errorMessage.value = result.message || '无法读取待审批操作。'
+}
+
+async function loadPendingProposal() {
+  if (!run.value) return
+  const result = await getPendingAgentProposalApi(workspaceId, projectId, run.value.runId)
+  if (result.success && result.data) proposal.value = result.data
+}
+
+async function decideProposal(decision: 'APPROVE' | 'REJECT') {
+  if (!run.value || !proposal.value) return
+  deciding.value = true
+  try {
+    const result = await decideAgentProposalApi(
+      workspaceId, projectId, run.value.runId, proposal.value.proposalId, decision,
+    )
+    if (!result.success || !result.data) {
+      errorMessage.value = result.message || '审批失败。'
+      return
+    }
+    proposal.value = result.data
+    addEvent(`proposal-${Date.now()}`, decision === 'APPROVE' ? '操作已批准' : '操作已拒绝',
+      `${result.data.toolName} · ${result.data.status}`, decision === 'APPROVE' ? 'success' : 'warning')
+    openStream()
+    void refreshRun()
+  } finally {
+    deciding.value = false
   }
 }
 
@@ -340,6 +406,8 @@ function eventTitle(event: string) {
     'run-succeeded': 'Agent 执行成功',
     'run-failed': 'Agent 执行失败',
     'run-cancelled': 'Agent 已取消',
+    'run-waiting-approval': 'Agent 等待人工审批',
+    'run-resumed': 'Agent 已从审批点恢复',
   } as Record<string, string>)[event] || event
 }
 
@@ -347,6 +415,7 @@ function eventType(event: string): TimelineItem['type'] {
   if (event === 'run-succeeded') return 'success'
   if (event === 'run-failed') return 'danger'
   if (event === 'run-cancelled') return 'warning'
+  if (event === 'run-waiting-approval') return 'warning'
   return 'primary'
 }
 
@@ -354,6 +423,7 @@ function statusTagType(status: AgentRunStatus) {
   if (status === 'SUCCEEDED') return 'success'
   if (status === 'FAILED') return 'danger'
   if (status === 'CANCELLED') return 'warning'
+  if (status === 'WAITING_APPROVAL') return 'warning'
   return 'info'
 }
 
@@ -372,4 +442,6 @@ onUnmounted(() => disconnectStream?.())
 .history-pager { display: flex; justify-content: flex-end; margin-top: 16px; }
 .field-hint { margin-top: 6px; color: #909399; font-size: 12px; }
 .branch-option-sha { float: right; margin-left: 24px; color: #909399; font-family: monospace; }
+.proposal-card { margin-top: 16px; border-color: #e6a23c; }
+.proposal-card pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
 </style>

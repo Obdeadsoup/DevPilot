@@ -82,7 +82,8 @@ public class AgentRunPersistenceService implements AgentRunExecutionContextQuery
     @Transactional
     public Optional<AgentRunView> tryMarkSucceeded(long workspaceId, long projectId, String runId,
                                                    String finalOutput, LocalDateTime finishedAt) {
-        if (mapper.markSucceeded(workspaceId, projectId, runId, finalOutput, finishedAt, 0) != 1) {
+        long version = mapper.findByScope(workspaceId, projectId, runId).map(AgentRunEntity::getVersion).orElse(0L);
+        if (mapper.markSucceeded(workspaceId, projectId, runId, finalOutput, finishedAt, version) != 1) {
             return Optional.empty();
         }
         return Optional.of(requireByScope(workspaceId, projectId, runId));
@@ -92,7 +93,8 @@ public class AgentRunPersistenceService implements AgentRunExecutionContextQuery
     @Transactional
     public Optional<AgentRunView> tryMarkFailed(long workspaceId, long projectId, String runId,
                                                 AgentRunFailureKind failureKind, LocalDateTime finishedAt) {
-        if (mapper.markFailed(workspaceId, projectId, runId, failureKind.name(), finishedAt, 0) != 1) {
+        long version = mapper.findByScope(workspaceId, projectId, runId).map(AgentRunEntity::getVersion).orElse(0L);
+        if (mapper.markFailed(workspaceId, projectId, runId, failureKind.name(), finishedAt, version) != 1) {
             return Optional.empty();
         }
         return Optional.of(requireByScope(workspaceId, projectId, runId));
@@ -102,7 +104,8 @@ public class AgentRunPersistenceService implements AgentRunExecutionContextQuery
     @Transactional
     public Optional<AgentRunView> tryMarkCancelled(long workspaceId, long projectId, String runId,
                                                    LocalDateTime finishedAt) {
-        if (mapper.markCancelled(workspaceId, projectId, runId, finishedAt, 0) != 1) {
+        long version = mapper.findByScope(workspaceId, projectId, runId).map(AgentRunEntity::getVersion).orElse(0L);
+        if (mapper.markCancelled(workspaceId, projectId, runId, finishedAt, version) != 1) {
             return Optional.empty();
         }
         return Optional.of(requireByScope(workspaceId, projectId, runId));
@@ -132,6 +135,25 @@ public class AgentRunPersistenceService implements AgentRunExecutionContextQuery
     @Transactional(readOnly = true)
     public java.util.Optional<AgentRunExecutionContext> findByRunIdForRuntime(String runId) {
         return mapper.findByRunId(runId).map(AgentRunExecutionContext::from);
+    }
+
+    /** Proposal 与 Run 的等待状态在同一 Java 事务提交。 */
+    @Transactional
+    public AgentRunView markWaitingApproval(String runId, long expectedVersion) {
+        if (mapper.markWaitingApproval(runId, expectedVersion) != 1) {
+            throw new BusinessException(AgentRunErrorCode.AGENT_RUN_STATE_CONFLICT);
+        }
+        return mapper.findByRunId(runId).map(AgentRunView::from)
+                .orElseThrow(() -> new BusinessException(AgentRunErrorCode.AGENT_RUN_NOT_FOUND));
+    }
+
+    @Transactional
+    public AgentRunView markRunningAfterApproval(String runId, long expectedVersion) {
+        if (mapper.markRunningAfterApproval(runId, expectedVersion) != 1) {
+            throw new BusinessException(AgentRunErrorCode.AGENT_RUN_STATE_CONFLICT);
+        }
+        return mapper.findByRunId(runId).map(AgentRunView::from)
+                .orElseThrow(() -> new BusinessException(AgentRunErrorCode.AGENT_RUN_NOT_FOUND));
     }
 
     private AgentRunView requireByScope(long workspaceId, long projectId, String runId) {

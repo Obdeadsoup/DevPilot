@@ -94,7 +94,7 @@ public class AgentRunEventHub implements AgentRunEventPublisher {
                         return state;
                     }
                 }
-                boolean terminalKnown = state.buffer.stream().anyMatch(event -> event.type().isTerminal());
+                boolean terminalKnown = state.buffer.stream().anyMatch(event -> event.type().isRunTerminal());
                 if (terminalKnown) {
                     // Last-Event-ID 已经等于 terminal 时虽无需重放，也不能留下永远没有新事件的 live 连接。
                     emitter.complete();
@@ -123,13 +123,13 @@ public class AgentRunEventHub implements AgentRunEventPublisher {
                 state.buffer.removeFirst();
             }
             state.buffer.addLast(event);
-            if (event.type().isTerminal()) {
+            if (event.type().isRunTerminal()) {
                 state.terminalExpiresAt = now.get().plus(properties.terminalRetention());
             }
             emitters = state.connections.stream().map(Connection::emitter).toList();
         }
         emitters.forEach(emitter -> sendEvent(event.runId(), emitter, event));
-        if (event.type().isTerminal()) {
+        if (event.type().isRunTerminal()) {
             // Browser disconnect/流结束不是 Cancel；Python 已经完成，此处只释放 HTTP 连接。
             emitters.forEach(emitter -> {
                 emitter.complete();
@@ -241,6 +241,8 @@ public class AgentRunEventHub implements AgentRunEventPublisher {
             case RUN_SUCCEEDED -> "run-succeeded";
             case RUN_FAILED -> "run-failed";
             case RUN_CANCELLED -> "run-cancelled";
+            case RUN_WAITING_APPROVAL -> "run-waiting-approval";
+            case RUN_RESUMED -> "run-resumed";
         };
     }
 

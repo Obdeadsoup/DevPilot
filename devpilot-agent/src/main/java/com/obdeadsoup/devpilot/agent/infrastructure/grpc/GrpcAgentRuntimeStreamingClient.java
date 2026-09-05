@@ -1,15 +1,7 @@
 package com.obdeadsoup.devpilot.agent.infrastructure.grpc;
 
-import com.obdeadsoup.devpilot.agent.application.AgentRunCommand;
-import com.obdeadsoup.devpilot.agent.application.AgentRuntimeEventListener;
-import com.obdeadsoup.devpilot.agent.application.AgentRuntimeStreamHandle;
-import com.obdeadsoup.devpilot.agent.application.AgentRuntimeStreamFailureKind;
-import com.obdeadsoup.devpilot.agent.application.AgentRuntimeStreamingPort;
-import com.obdeadsoup.devpilot.agent.application.AgentStreamEvent;
-import com.obdeadsoup.devpilot.agent.application.AgentStreamEventType;
-import com.obdeadsoup.devpilot.agent.contract.v1.AgentEvent;
-import com.obdeadsoup.devpilot.agent.contract.v1.AgentRuntimeGrpc;
-import com.obdeadsoup.devpilot.agent.contract.v1.StreamRunRequest;
+import com.obdeadsoup.devpilot.agent.application.*;
+import com.obdeadsoup.devpilot.agent.contract.v1.*;
 import io.grpc.Status;
 import io.grpc.stub.ClientCallStreamObserver;
 import io.grpc.stub.ClientResponseObserver;
@@ -20,74 +12,62 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-/** async Stub Adapter：立即发起 Server Streaming，并把 StreamObserver callback 映射到 Core listener。 */
+/** async Stub Adapter：普通执行和审批恢复共用同一受校验的事件映射。 */
 public final class GrpcAgentRuntimeStreamingClient implements AgentRuntimeStreamingPort {
     private final AgentRuntimeGrpc.AgentRuntimeStub stub;
     private final Duration deadline;
 
     public GrpcAgentRuntimeStreamingClient(AgentRuntimeGrpc.AgentRuntimeStub stub, Duration deadline) {
-        this.stub = Objects.requireNonNull(stub, "stub must not be null");
-        this.deadline = Objects.requireNonNull(deadline, "deadline must not be null");
+        this.stub = Objects.requireNonNull(stub); this.deadline = Objects.requireNonNull(deadline);
     }
 
     @Override
     public AgentRuntimeStreamHandle stream(AgentRunCommand command, AgentRuntimeEventListener listener) {
-        Objects.requireNonNull(command, "command must not be null");
-        Objects.requireNonNull(listener, "listener must not be null");
-        StreamRunRequest request = StreamRunRequest.newBuilder()
-                .setRunId(command.runId())
-                .setRequestId(command.requestId())
-                .setUserInput(command.userInput())
-                .build();
-        AtomicBoolean adapterFailed = new AtomicBoolean();
-        AtomicReference<ClientCallStreamObserver<StreamRunRequest>> call = new AtomicReference<>();
-        try {
-            stub.withDeadlineAfter(deadline.toMillis(), TimeUnit.MILLISECONDS)
-                    .streamRun(request, new ClientResponseObserver<StreamRunRequest, AgentEvent>() {
-                    @Override
-                    public void beforeStart(ClientCallStreamObserver<StreamRunRequest> requestStream) {
-                        call.set(requestStream);
-                    }
+        StreamRunRequest request = StreamRunRequest.newBuilder().setRunId(command.runId())
+                .setRequestId(command.requestId()).setUserInput(command.userInput()).build();
+        return start(request, (value, observer) -> stub.withDeadlineAfter(deadline.toMillis(), TimeUnit.MILLISECONDS)
+                .streamRun(value, observer), listener);
+    }
 
-                    @Override
-                    public void onNext(AgentEvent value) {
-                        if (adapterFailed.get()) {
-                            return;
-                        }
-                        try {
-                            listener.onEvent(toInternal(value));
-                        } catch (RuntimeException exception) {
-                            // generated DTO/回调异常不能逃逸到 gRPC executor；统一收敛为协议失败一次。
-                            if (adapterFailed.compareAndSet(false, true)) {
-                                listener.onError(AgentRuntimeStreamFailureKind.PROTOCOL);
-                            }
-                        }
-                    }
+    @Override
+    public AgentRuntimeStreamHandle resumeApproval(AgentApprovalResumeCommand command,
+                                                   AgentRuntimeEventListener listener) {
+        ResumeApprovalRequest request = ResumeApprovalRequest.newBuilder().setRunId(command.runId())
+                .setRequestId(command.requestId()).setProposalId(command.proposalId()).build();
+        return start(request, (value, observer) -> stub.withDeadlineAfter(deadline.toMillis(), TimeUnit.MILLISECONDS)
+                .resumeApproval(value, observer), listener);
+    }
 
-                    @Override
-                    public void onError(Throwable error) {
-                        if (adapterFailed.compareAndSet(false, true)) {
-                            listener.onError(mapStatus(Status.fromThrowable(error).getCode()));
-                        }
-                    }
-
-                    @Override
-                    public void onCompleted() {
-                        if (!adapterFailed.get()) {
-                            listener.onCompleted();
-                        }
-                    }
-                    });
-        } catch (RuntimeException exception) {
-            if (adapterFailed.compareAndSet(false, true)) {
-                listener.onError(mapStatus(Status.fromThrowable(exception).getCode()));
+    private <T> AgentRuntimeStreamHandle start(T request, Starter<T> starter,
+                                               AgentRuntimeEventListener listener) {
+        Objects.requireNonNull(listener);
+        AtomicBoolean finished = new AtomicBoolean();
+        AtomicReference<ClientCallStreamObserver<T>> call = new AtomicReference<>();
+        ClientResponseObserver<T, AgentEvent> observer = new ClientResponseObserver<>() {
+            @Override public void beforeStart(ClientCallStreamObserver<T> stream) { call.set(stream); }
+            @Override public void onNext(AgentEvent value) {
+                if (finished.get()) return;
+                try { listener.onEvent(toInternal(value)); }
+                catch (RuntimeException exception) {
+                    if (finished.compareAndSet(false, true))
+                        listener.onError(AgentRuntimeStreamFailureKind.PROTOCOL);
+                }
             }
+            @Override public void onError(Throwable error) {
+                if (finished.compareAndSet(false, true))
+                    listener.onError(mapStatus(Status.fromThrowable(error).getCode()));
+            }
+            @Override public void onCompleted() { if (!finished.get()) listener.onCompleted(); }
+        };
+        try { starter.start(request, observer); }
+        catch (RuntimeException exception) {
+            if (finished.compareAndSet(false, true))
+                listener.onError(mapStatus(Status.fromThrowable(exception).getCode()));
         }
         return () -> {
-            ClientCallStreamObserver<StreamRunRequest> activeCall = call.get();
-            if (activeCall != null && adapterFailed.compareAndSet(false, true)) {
-                activeCall.cancel("cancelled by DevPilot Core", null);
-            }
+            ClientCallStreamObserver<T> active = call.get();
+            if (active != null && finished.compareAndSet(false, true))
+                active.cancel("cancelled by DevPilot Core", null);
         };
     }
 
@@ -100,12 +80,13 @@ public final class GrpcAgentRuntimeStreamingClient implements AgentRuntimeStream
             case AGENT_EVENT_TYPE_RUN_SUCCEEDED -> AgentStreamEventType.RUN_SUCCEEDED;
             case AGENT_EVENT_TYPE_RUN_FAILED -> AgentStreamEventType.RUN_FAILED;
             case AGENT_EVENT_TYPE_RUN_CANCELLED -> AgentStreamEventType.RUN_CANCELLED;
-            case AGENT_EVENT_TYPE_UNSPECIFIED, UNRECOGNIZED ->
-                    throw new IllegalArgumentException("unsupported AgentEvent type");
+            case AGENT_EVENT_TYPE_RUN_WAITING_APPROVAL -> AgentStreamEventType.RUN_WAITING_APPROVAL;
+            case AGENT_EVENT_TYPE_RUN_RESUMED -> AgentStreamEventType.RUN_RESUMED;
+            case AGENT_EVENT_TYPE_UNSPECIFIED, UNRECOGNIZED -> throw new IllegalArgumentException();
         };
-        return new AgentStreamEvent(
-                event.getEventId(), event.getRunId(), event.getSequence(), type, event.getStep(),
-                event.getToolName(), event.getFinalOutput(), event.getFailureKind());
+        return new AgentStreamEvent(event.getEventId(), event.getRunId(), event.getSequence(), type,
+                event.getStep(), event.getToolName(), event.getFinalOutput(), event.getFailureKind(),
+                event.getProposalId(), event.getProposalExpiresAt());
     }
 
     private AgentRuntimeStreamFailureKind mapStatus(Status.Code code) {
@@ -114,9 +95,13 @@ public final class GrpcAgentRuntimeStreamingClient implements AgentRuntimeStream
             case UNAVAILABLE -> AgentRuntimeStreamFailureKind.UNAVAILABLE;
             case INVALID_ARGUMENT -> AgentRuntimeStreamFailureKind.INVALID_ARGUMENT;
             case INTERNAL -> AgentRuntimeStreamFailureKind.INTERNAL;
-            case UNKNOWN -> AgentRuntimeStreamFailureKind.UNKNOWN;
             case CANCELLED -> AgentRuntimeStreamFailureKind.USER_CANCELLED;
             default -> AgentRuntimeStreamFailureKind.UNKNOWN;
         };
+    }
+
+    @FunctionalInterface
+    private interface Starter<T> {
+        void start(T request, ClientResponseObserver<T, AgentEvent> observer);
     }
 }

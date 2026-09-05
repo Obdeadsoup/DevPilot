@@ -30,6 +30,14 @@ class RunCancelled(AgentRuntimeError):
         super().__init__("agent run cancelled")
 
 
+class ApprovalRequired(Exception):
+    """持久 WAITING_APPROVAL 已提交；Servicer 结束本次流并释放 worker。"""
+
+    def __init__(self, proposal) -> None:
+        self.proposal = proposal
+        super().__init__("agent run is waiting for approval")
+
+
 class ModelInvocationError(AgentRuntimeError):
     stop_reason = StopReason.MODEL_ERROR
 

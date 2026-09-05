@@ -146,7 +146,7 @@ def test_v1_database_migration_preserves_rows_foreign_keys_and_audit_checkpoint(
         _ = repository.get_latest_checkpoint("run").state
     assert len(repository.list_steps("run")) == 1
     with sqlite3.connect(path) as connection:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
         assert (
             connection.execute("PRAGMA foreign_key_list(runtime_steps)").fetchone()[2]

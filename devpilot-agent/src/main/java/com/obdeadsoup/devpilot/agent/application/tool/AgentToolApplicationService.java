@@ -53,6 +53,10 @@ public class AgentToolApplicationService {
         }
         AgentToolName name = AgentToolName.fromWireName(command.toolName())
                 .orElseThrow(() -> new AgentToolException(AgentToolErrorKind.UNKNOWN_TOOL));
+        if (name.risk() != AgentToolRisk.READ_ONLY) {
+            // Write Tool 只能走 CreateProposal；即使模型或调用方直接请求 ExecuteTool 也不能越权。
+            throw new AgentToolException(AgentToolErrorKind.INVALID_ARGUMENT);
+        }
         AgentReadToolHandler handler = handlers.get(name);
         if (handler == null) {
             throw new AgentToolException(AgentToolErrorKind.UNKNOWN_TOOL);
