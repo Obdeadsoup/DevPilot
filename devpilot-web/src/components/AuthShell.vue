@@ -8,9 +8,9 @@
         <p>从 Workspace 到 GitHub 活动、任务和 Agent Run，关键状态始终由业务系统验证。</p>
       </div>
       <ol class="context-rail">
-        <li><span>01</span><div><strong>组织协作</strong><small>Workspace · Project · RBAC</small></div></li>
-        <li><span>02</span><div><strong>连接研发活动</strong><small>Repository · Task · Activity</small></div></li>
-        <li><span>03</span><div><strong>受控 Agent 执行</strong><small>Tool lifecycle · Audit · SSE</small></div></li>
+        <li><span>01</span><div><strong>组织协作</strong><small>工作区 · 项目 · 团队权限</small></div></li>
+        <li><span>02</span><div><strong>连接研发活动</strong><small>仓库 · 任务 · 活动</small></div></li>
+        <li><span>03</span><div><strong>受控 Agent 执行</strong><small>工具进度 · 人工审批 · 审计</small></div></li>
       </ol>
     </aside>
 

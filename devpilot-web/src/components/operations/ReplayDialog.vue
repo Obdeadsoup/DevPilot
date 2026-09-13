@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     v-model="visible"
-    :title="`高风险人工 Replay 重放确认 (${targetType})`"
+    :title="`确认恢复处理（${targetType}）`"
     width="520px"
     :close-on-click-modal="false"
   >
@@ -9,22 +9,21 @@
       type="warning"
       show-icon
       :closable="false"
-      title="高风险运维动作说明"
+      title="请确认恢复原因"
       style="margin-bottom: 16px;"
     >
       <template #default>
-        <div>此操作将重新触发终态失败 (DEAD) 资源的底层处理。请必须提供详细合规的重放原因。</div>
-        <div>目标 ID: <code>#{{ targetId }}</code> | 当前版本: <code>expectedVersion = {{ expectedVersion }}</code></div>
+        <div>系统会为这条失败记录创建一次新的处理。请填写清晰、可追溯的恢复原因。</div>
       </template>
     </el-alert>
 
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
-      <el-form-item label="重放原因说明 (reason, 必填 10-500 字符)" prop="reason">
+      <el-form-item label="恢复原因（必填，10–500 字）" prop="reason">
         <el-input
           v-model="form.reason"
           type="textarea"
           :rows="3"
-          placeholder="请输入本次 Replay 的真实运维原因（不少于 10 个字符，不能仅填写 retry 或纯标点）"
+          placeholder="请说明本次恢复处理的原因"
           maxlength="500"
           show-word-limit
         />
@@ -34,7 +33,7 @@
     <template #footer>
       <el-button @click="visible = false">取消</el-button>
       <el-button type="danger" :loading="submitting" @click="handleConfirm">
-        确认提交 Replay (HTTP 202)
+        确认恢复
       </el-button>
     </template>
   </el-dialog>

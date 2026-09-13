@@ -3,7 +3,7 @@
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>当前登录用户信息 (GET /api/v1/auth/me)</span>
+          <span>个人资料</span>
           <el-button type="primary" size="small" :loading="loading" @click="fetchProfile">
             刷新个人资料
           </el-button>
@@ -12,29 +12,26 @@
 
       <PageState :loading="loading" :error="hasError" :error-msg="errorMsg" @retry="fetchProfile">
         <el-descriptions :column="1" border v-if="user">
-          <el-descriptions-item label="User ID">
+          <el-descriptions-item label="用户编号">
             <code>{{ user.id }}</code>
           </el-descriptions-item>
-          <el-descriptions-item label="Username (用户名)">
+          <el-descriptions-item label="用户名">
             {{ user.username }}
           </el-descriptions-item>
-          <el-descriptions-item label="Display Name (显示名称)">
+          <el-descriptions-item label="显示名称">
             {{ user.displayName }}
           </el-descriptions-item>
-          <el-descriptions-item label="Email">
+          <el-descriptions-item label="邮箱">
             <span v-if="user.email">{{ user.email }}</span>
-            <el-tag v-else type="info" size="small">后端 Redis Session 未包含 Email（正常现象）</el-tag>
-          </el-descriptions-item>
-          <el-descriptions-item label="Access Token">
-            <code>Authorization: Bearer ***REDACTED***</code>
+            <span v-else class="text-muted">暂未提供</span>
           </el-descriptions-item>
         </el-descriptions>
 
         <div style="margin-top: 20px; text-align: right;">
-          <el-button type="danger" @click="handleLogout">退出登录 (POST /api/v1/auth/logout)</el-button>
+          <el-button type="danger" @click="handleLogout">退出登录</el-button>
         </div>
 
-        <RawJsonPanel :data="rawJson" title="GET /api/v1/auth/me 原始响应" />
+        <RawJsonPanel :data="rawJson" title="技术详情" />
       </PageState>
     </el-card>
   </div>
@@ -48,6 +45,7 @@ import { useAuthStore } from '@/stores/auth'
 import type { User } from '@/types/api'
 import PageState from '@/components/PageState.vue'
 import RawJsonPanel from '@/components/RawJsonPanel.vue'
+import { productErrorMessage, unexpectedErrorMessage } from '@/utils/productError'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -71,11 +69,11 @@ async function fetchProfile() {
       authStore.setUser(res.data)
     } else {
       hasError.value = true
-      errorMsg.value = res.message || '获取个人资料失败'
+      errorMsg.value = productErrorMessage(res, '暂时无法加载个人资料，请稍后重试。')
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     hasError.value = true
-    errorMsg.value = err.message || '网络连接异常'
+    errorMsg.value = unexpectedErrorMessage(err, '暂时无法加载个人资料，请稍后重试。')
   } finally {
     loading.value = false
   }
@@ -105,5 +103,8 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   font-weight: 600;
+}
+.text-muted {
+  color: var(--color-text-subtle);
 }
 </style>

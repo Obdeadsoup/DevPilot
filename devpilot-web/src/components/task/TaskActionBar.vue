@@ -1,6 +1,6 @@
 <template>
   <div class="task-action-bar">
-    <span class="action-label">状态流转动作: </span>
+    <span class="action-label">下一步</span>
     <template v-if="availableActions.length">
       <el-button
         v-for="act in availableActions"
@@ -18,21 +18,21 @@
     <!-- Action Confirmation Dialog -->
     <el-dialog
       v-model="dialogVisible"
-      :title="`确认执行: ${selectedAction?.label}`"
+      :title="`确认${selectedAction?.label || '更新任务'}`"
       width="480px"
       :close-on-click-modal="false"
     >
       <div style="margin-bottom: 12px;">
-        确定要执行此操作吗？当前版本号 <code>expectedVersion = {{ version }}</code>。
+        确定要对当前任务执行此操作吗？
       </div>
 
       <el-form label-position="top">
-        <el-form-item label="操作原因说明 (reason, 可选)">
+        <el-form-item label="原因说明（可选）">
           <el-input
             v-model="reasonInput"
             type="textarea"
             :rows="2"
-            placeholder="可选填写本次状态变更原因说明 (最多 1000 字符)"
+            placeholder="补充本次状态变更的原因（最多 1000 个字符）"
             maxlength="1000"
             show-word-limit
           />

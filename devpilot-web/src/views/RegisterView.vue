@@ -2,7 +2,7 @@
   <AuthShell>
     <template #eyebrow>CREATE ACCOUNT</template>
     <template #title>创建 DevPilot 账号</template>
-    <template #description>通过邮箱验证建立本地演示账号。</template>
+    <template #description>通过邮箱验证创建账号，开始团队协作。</template>
 
     <el-alert v-if="errorMessage" type="error" show-icon :title="errorTitle" :description="errorMessage" class="form-alert" />
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @keyup.enter="handleRegister">
@@ -47,6 +47,7 @@ import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { registerApi, sendEmailVerificationCodeApi } from '@/api/modules/auth'
 import AuthShell from '@/components/AuthShell.vue'
 import { normalizeReturnUrl } from '@/router/returnUrl'
+import { productErrorMessage } from '@/utils/productError'
 
 const router = useRouter()
 const route = useRoute()
@@ -100,10 +101,10 @@ async function sendCode() {
     const result = await sendEmailVerificationCodeApi(form.email.trim())
     if (!result.success) {
       errorTitle.value = '验证码发送失败'
-      errorMessage.value = result.message || '请稍后重试。'
+      errorMessage.value = productErrorMessage(result, '验证码发送失败，请稍后重试。')
       return
     }
-    ElMessage.success('验证码已发送，请检查 Mailpit 或邮箱。')
+    ElMessage.success('验证码已发送，请检查邮箱。')
     cooldownSeconds.value = 60
     cooldownTimer = window.setInterval(() => {
       cooldownSeconds.value -= 1
@@ -131,7 +132,7 @@ async function handleRegister() {
     })
     if (!result.success) {
       errorTitle.value = '注册失败'
-      errorMessage.value = result.message || '请检查输入后重试。'
+      errorMessage.value = productErrorMessage(result, '请检查输入后重试。')
       return
     }
     ElMessage.success('注册成功，请登录。')

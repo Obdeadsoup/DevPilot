@@ -4,12 +4,12 @@
       <template #header>
         <div class="card-header">
           <div>
-            <span>GitHub Issue 快照详情 (ID: {{ issueId }})</span>
+            <span>GitHub Issue</span>
             <StatusBadge v-if="issue" :status="issue.state" type="issue" style="margin-left: 12px;" />
           </div>
           <div>
             <el-button type="success" size="small" @click="createTaskDialogVisible = true">
-              创建为本地 Task (POST .../from-github-issue)
+              创建任务
             </el-button>
             <el-button link @click="$router.push(`/workspaces/${workspaceId}/projects/${projectId}/github/issues`)">
               返回列表
@@ -26,22 +26,16 @@
           </div>
 
           <el-descriptions :column="2" border class="mb-4">
-            <el-descriptions-item label="快照主键 ID">
-              <code>{{ issue.id }}</code>
-            </el-descriptions-item>
-            <el-descriptions-item label="GitHub 官方 Issue ID">
-              <code>{{ issue.githubIssueId }}</code>
-            </el-descriptions-item>
-            <el-descriptions-item label="提办人 (Author)">
+            <el-descriptions-item label="发起人">
               <code>@{{ issue.authorLogin }}</code>
             </el-descriptions-item>
-            <el-descriptions-item label="指派人 (Assignees)">
+            <el-descriptions-item label="负责人">
               <template v-if="assignees.length">
                 <el-tag v-for="a in assignees" :key="a" size="small" style="margin-right: 4px;">@{{ a }}</el-tag>
               </template>
               <span v-else class="text-muted">无</span>
             </el-descriptions-item>
-            <el-descriptions-item label="标签 (Labels)">
+            <el-descriptions-item label="标签">
               <template v-if="labels.length">
                 <el-tag v-for="l in labels" :key="l" size="small" type="info" style="margin-right: 4px;">{{ l }}</el-tag>
               </template>
@@ -58,31 +52,31 @@
             </el-descriptions-item>
           </el-descriptions>
 
-          <el-divider content-position="left">Issue 正文 (Body)</el-divider>
+          <el-divider content-position="left">问题描述</el-divider>
 
           <ExternalContent :content="issue.body" :untrusted="issue.externalUntrustedContent" />
 
-          <RawJsonPanel :data="rawJson" title="GET .../github/issues/{id} 原始响应" />
+          <RawJsonPanel :data="rawJson" title="技术详情" />
         </template>
       </PageState>
 
       <!-- Create Task Dialog -->
-      <el-dialog v-model="createTaskDialogVisible" title="从当前 GitHub Issue 显式创建 Task" width="480px">
+      <el-dialog v-model="createTaskDialogVisible" title="从 GitHub Issue 创建任务" width="480px">
         <el-form label-position="top">
-          <el-form-item label="优先级 (priority)">
+          <el-form-item label="优先级">
             <el-radio-group v-model="createTaskForm.priority">
-              <el-radio value="LOW">LOW</el-radio>
-              <el-radio value="MEDIUM">MEDIUM (默认)</el-radio>
-              <el-radio value="HIGH">HIGH</el-radio>
-              <el-radio value="URGENT">URGENT</el-radio>
+              <el-radio value="LOW">低</el-radio>
+              <el-radio value="MEDIUM">中（默认）</el-radio>
+              <el-radio value="HIGH">高</el-radio>
+              <el-radio value="URGENT">紧急</el-radio>
             </el-radio-group>
           </el-form-item>
 
-          <el-form-item label="分配负责人 User ID (可选)">
-            <el-input-number v-model="createTaskForm.assigneeUserId" :min="1" style="width: 100%;" placeholder="数字 User ID" />
+          <el-form-item label="负责人编号（可选）">
+            <el-input-number v-model="createTaskForm.assigneeUserId" :min="1" style="width: 100%;" placeholder="请输入成员编号" />
           </el-form-item>
 
-          <el-form-item label="截止时间 (dueAt, 可选)">
+          <el-form-item label="截止时间（可选）">
             <el-date-picker
               v-model="createTaskForm.dueAt"
               type="datetime"
@@ -96,7 +90,7 @@
         <template #footer>
           <el-button @click="createTaskDialogVisible = false">取消</el-button>
           <el-button type="primary" :loading="creatingTask" @click="handleCreateTaskFromIssue">
-            确认创建 Task
+            创建任务
           </el-button>
         </template>
       </el-dialog>
@@ -117,6 +111,7 @@ import StatusBadge from '@/components/StatusBadge.vue'
 import PageState from '@/components/PageState.vue'
 import ExternalContent from '@/components/ExternalContent.vue'
 import RawJsonPanel from '@/components/RawJsonPanel.vue'
+import { productErrorMessage, unexpectedErrorMessage } from '@/utils/productError'
 
 const route = useRoute()
 const router = useRouter()
@@ -154,11 +149,11 @@ async function fetchDetail() {
       issue.value = res.data
     } else {
       hasError.value = true
-      errorMsg.value = res.message || 'Issue 快照不存在'
+      errorMsg.value = productErrorMessage(res, '没有找到这个 GitHub Issue，请返回列表重试。')
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     hasError.value = true
-    errorMsg.value = err.message || '网络连接失败'
+    errorMsg.value = unexpectedErrorMessage(err, '暂时无法加载 GitHub Issue，请稍后重试。')
   } finally {
     loading.value = false
   }
@@ -174,16 +169,16 @@ async function handleCreateTaskFromIssue() {
     })
 
     if (res.success && res.data) {
-      ElMessage.success('从 Issue 创建 Task 成功')
+      ElMessage.success('任务已创建')
       createTaskDialogVisible.value = false
       router.push(`/workspaces/${workspaceId}/projects/${projectId}/tasks/${res.data.id}`)
     } else if (res.code === 'TASK_0504') {
-      ElMessage.warning('该 Issue 快照已经关联了有效 Task')
+      ElMessage.warning('这个 GitHub Issue 已有关联任务')
     } else {
-      ElMessage.error(`创建 Task 失败 [${res.code}]: ${res.message}`)
+      ElMessage.error(productErrorMessage(res, '暂时无法创建任务，请稍后重试。'))
     }
-  } catch (err: any) {
-    ElMessage.error(err.message || '网络请求错误')
+  } catch (err: unknown) {
+    ElMessage.error(unexpectedErrorMessage(err, '暂时无法创建任务，请稍后重试。'))
   } finally {
     creatingTask.value = false
   }

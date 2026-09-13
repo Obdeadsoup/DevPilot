@@ -5,12 +5,12 @@
         <span class="brand__mark">DP</span>
         <span>
           <strong>DevPilot</strong>
-          <small>Engineering workspace</small>
+          <small>项目协作平台</small>
         </span>
       </button>
       <AppNavigation />
       <div v-if="scopeStore.currentProjectId" class="scope-summary">
-        <span>ACTIVE CONTEXT</span>
+        <span>当前项目</span>
         <strong>{{ scopeStore.currentProjectKey }}</strong>
         <small>{{ scopeStore.currentProjectName }}</small>
       </div>
@@ -19,7 +19,7 @@
     <el-drawer v-model="mobileNavigationOpen" direction="ltr" size="min(84vw, 304px)" :with-header="false" class="mobile-navigation">
       <button class="brand" type="button" @click="navigateFromDrawer('/workspaces')">
         <span class="brand__mark">DP</span>
-        <span><strong>DevPilot</strong><small>Engineering workspace</small></span>
+        <span><strong>DevPilot</strong><small>项目协作平台</small></span>
       </button>
       <AppNavigation @navigate="mobileNavigationOpen = false" />
     </el-drawer>
@@ -60,8 +60,8 @@
               <el-dropdown-menu>
                 <el-dropdown-item command="profile">个人资料</el-dropdown-item>
                 <el-dropdown-item command="notifications">通知中心</el-dropdown-item>
-                <el-dropdown-item divided command="developer">开发工具</el-dropdown-item>
-                <el-dropdown-item command="health">系统状态 · {{ healthStatus }}</el-dropdown-item>
+                <el-dropdown-item divided command="developer">开发者工具</el-dropdown-item>
+                <el-dropdown-item command="health">系统诊断 · {{ healthStatus }}</el-dropdown-item>
                 <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -106,7 +106,7 @@ const devConsoleStore = useDeveloperConsoleStore()
 const notificationStore = useNotificationStore()
 const mobileNavigationOpen = ref(false)
 const viewportWidth = ref(window.innerWidth)
-const healthStatus = ref('UNKNOWN')
+const healthStatus = ref('检查中')
 
 const isCompact = computed(() => viewportWidth.value < 920)
 const isNarrow = computed(() => viewportWidth.value < 560)
@@ -122,7 +122,7 @@ function updateViewport() {
 onMounted(async () => {
   window.addEventListener('resize', updateViewport)
   const health = await getHealthApi()
-  healthStatus.value = health.success ? 'UP' : 'DOWN'
+  healthStatus.value = health.success ? '正常' : '异常'
   if (authStore.isAuthenticated) {
     void notificationStore.fetchUnreadCount()
     notificationStreamService.connect()

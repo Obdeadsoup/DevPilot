@@ -4,8 +4,8 @@
       <template #header>
         <div class="card-header">
           <div>
-            <h2>Project Activity 时间线 (GET .../activities)</h2>
-            <span class="sub-text">Project ID: {{ projectId }}</span>
+            <h2>项目活动</h2>
+            <span class="sub-text">最近的任务与 GitHub 动态</span>
           </div>
           <el-button @click="fetchData">刷新</el-button>
         </div>
@@ -34,7 +34,7 @@
                   <ExternalContent :content="item.summary" :untrusted="item.sourceType === 'GITHUB'" />
                 </div>
 
-                <RawJsonPanel v-if="item.metadataJson" :data="item.metadataJson" title="Activity 元数据 JSON" />
+                <RawJsonPanel v-if="item.metadataJson" :data="item.metadataJson" title="技术详情" />
               </el-card>
             </el-timeline-item>
           </el-timeline>
@@ -52,7 +52,7 @@
           />
         </div>
 
-        <RawJsonPanel :data="rawJson" title="GET .../activities 原始响应" />
+        <RawJsonPanel :data="rawJson" title="技术详情" />
       </PageState>
     </el-card>
   </div>
@@ -66,6 +66,7 @@ import type { ActivityResponse } from '@/types/api'
 import PageState from '@/components/PageState.vue'
 import ExternalContent from '@/components/ExternalContent.vue'
 import RawJsonPanel from '@/components/RawJsonPanel.vue'
+import { productErrorMessage, unexpectedErrorMessage } from '@/utils/productError'
 
 const route = useRoute()
 const workspaceId = Number(route.params.workspaceId)
@@ -94,11 +95,11 @@ async function fetchData() {
       total.value = res.data.total || 0
     } else {
       hasError.value = true
-      errorMsg.value = res.message || '获取 Activity 时间线失败'
+      errorMsg.value = productErrorMessage(res, '暂时无法加载项目活动，请稍后重试。')
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     hasError.value = true
-    errorMsg.value = err.message || '网络连接失败'
+    errorMsg.value = unexpectedErrorMessage(err, '暂时无法加载项目活动，请稍后重试。')
   } finally {
     loading.value = false
   }

@@ -4,59 +4,47 @@
       <template #header>
         <div class="card-header">
           <div>
-            <h2>DEAD 运维与人工重放 (Operations & Replay)</h2>
-            <span class="sub-text">Workspace ID: {{ workspaceId }} | Project ID: {{ projectId }}</span>
+            <h2>运行恢复</h2>
+            <span class="sub-text">处理已停止自动重试的项目事件与仓库同步</span>
           </div>
         </div>
       </template>
 
       <el-tabs v-model="activeTab" type="border-card">
-        <!-- Tab 1: Outbox DEAD Events -->
-        <el-tab-pane label="Outbox DEAD 事件运维" name="outbox">
+        <el-tab-pane label="失败事件" name="outbox">
           <el-alert
-            title="Outbox DEAD 事件说明"
+            title="项目事件恢复"
             type="info"
-            description="展示处理失败且达到重试上限进入 DEAD 状态的领域 Outbox 事件。后端刻意不暴露 payload，仅显示事件元数据与状态。"
+            description="这里展示处理失败且已停止自动重试的项目事件。恢复后，系统会创建一次新的处理记录。"
             show-icon
             :closable="false"
             style="margin-bottom: 16px;"
           />
 
           <div class="mb-3" style="text-align: right;">
-            <el-button @click="fetchOutboxData">刷新 Outbox DEAD 列表</el-button>
+            <el-button @click="fetchOutboxData">刷新失败事件</el-button>
           </div>
 
           <PageState :loading="outboxLoading" :error="outboxHasError" :error-msg="outboxErrorMsg" :empty="outboxItems.length === 0" @retry="fetchOutboxData">
             <el-table :data="outboxItems" stripe style="width: 100%;">
-              <el-table-column prop="id" label="Event ID" width="90" />
-              <el-table-column prop="eventType" label="事件类型 (EventType)" min-width="180">
+              <el-table-column prop="eventType" label="事件类型" min-width="180">
                 <template #default="{ row }">
                   <code>{{ row.eventType }}</code>
                 </template>
               </el-table-column>
-              <el-table-column prop="aggregateType" label="聚合根类型" min-width="140" />
-              <el-table-column prop="aggregateId" label="聚合根 ID" width="100">
+              <el-table-column prop="aggregateType" label="关联内容" min-width="140" />
+              <el-table-column prop="aggregateId" label="内容编号" width="100">
                 <template #default="{ row }">
                   <code>{{ row.aggregateId }}</code>
                 </template>
               </el-table-column>
               <el-table-column prop="retryCount" label="重试次数" width="90" />
-              <el-table-column prop="lastErrorCode" label="最后错误码" width="130">
-                <template #default="{ row }">
-                  <code>{{ row.lastErrorCode || 'DEAD' }}</code>
-                </template>
-              </el-table-column>
-              <el-table-column prop="version" label="Version" width="90">
-                <template #default="{ row }">
-                  <code>v{{ row.version }}</code>
-                </template>
-              </el-table-column>
               <el-table-column prop="updatedAt" label="更新时间" min-width="160" />
 
               <el-table-column label="操作" width="140" fixed="right">
                 <template #default="{ row }">
                   <el-button type="danger" size="small" @click="openReplayOutbox(row)">
-                    人工 Replay (202)
+                    恢复处理
                   </el-button>
                 </template>
               </el-table-column>
@@ -74,16 +62,15 @@
               />
             </div>
 
-            <RawJsonPanel :data="outboxRawJson" title="GET .../operations/outbox/dead 原始响应" />
+            <RawJsonPanel :data="outboxRawJson" title="技术详情" />
           </PageState>
         </el-tab-pane>
 
-        <!-- Tab 2: GitHub Sync DEAD Runs -->
-        <el-tab-pane label="GitHub Sync DEAD 运行运维" name="sync">
+        <el-tab-pane label="仓库同步失败" name="sync">
           <el-alert
-            title="GitHub Sync DEAD 说明"
+            title="仓库同步恢复"
             type="warning"
-            description="此处的列表必须选择特定的 Repository Binding，且固化参数 status=DEAD。重放将提交 Replay 理由，并由后端创建新 Run 异发执行。"
+            description="输入仓库绑定编号可查看已停止自动重试的同步记录。恢复后，系统会创建一次新的仓库同步。"
             show-icon
             :closable="false"
             style="margin-bottom: 16px;"
@@ -91,10 +78,10 @@
 
           <div class="filter-bar">
             <el-form :inline="true">
-              <el-form-item label="选择 Repository Binding ID" required>
-                <el-input-number v-model="bindingIdInput" :min="1" placeholder="Binding ID" style="width: 160px;" />
+              <el-form-item label="仓库绑定编号" required>
+                <el-input-number v-model="bindingIdInput" :min="1" placeholder="输入编号" style="width: 160px;" />
                 <el-button type="primary" style="margin-left: 12px;" @click="fetchSyncData">
-                  查询 DEAD Runs
+                  查询失败记录
                 </el-button>
               </el-form-item>
             </el-form>
@@ -102,30 +89,21 @@
 
           <PageState :loading="syncLoading" :error="syncHasError" :error-msg="syncErrorMsg" :empty="syncItems.length === 0" @retry="fetchSyncData">
             <el-table :data="syncItems" stripe style="width: 100%;">
-              <el-table-column prop="id" label="Run ID" width="90" />
               <el-table-column prop="resourceType" label="资源类型" width="130">
                 <template #default="{ row }">
-                  <el-tag size="small">{{ row.resourceType }}</el-tag>
+                  <el-tag size="small">{{ row.resourceType === 'COMMITS' ? '提交记录' : row.resourceType }}</el-tag>
                 </template>
               </el-table-column>
-              <el-table-column prop="triggerType" label="触发方式" width="110" />
+              <el-table-column prop="triggerType" label="触发方式" width="110">
+                <template #default="{ row }">{{ row.triggerType === 'MANUAL' ? '手动同步' : row.triggerType }}</template>
+              </el-table-column>
               <el-table-column prop="attemptCount" label="尝试次数" width="90" />
-              <el-table-column prop="lastErrorCode" label="最后错误码" width="130">
-                <template #default="{ row }">
-                  <code>{{ row.lastErrorCode || 'DEAD' }}</code>
-                </template>
-              </el-table-column>
-              <el-table-column prop="version" label="Version" width="90">
-                <template #default="{ row }">
-                  <code>v{{ row.version }}</code>
-                </template>
-              </el-table-column>
               <el-table-column prop="completedAt" label="完成/失败时间" min-width="160" />
 
               <el-table-column label="操作" width="140" fixed="right">
                 <template #default="{ row }">
                   <el-button type="danger" size="small" @click="openReplaySync(row)">
-                    人工 Replay (202)
+                    恢复同步
                   </el-button>
                 </template>
               </el-table-column>
@@ -143,7 +121,7 @@
               />
             </div>
 
-            <RawJsonPanel :data="syncRawJson" title="GET .../sync-runs?status=DEAD 原始响应" />
+            <RawJsonPanel :data="syncRawJson" title="技术详情" />
           </PageState>
         </el-tab-pane>
       </el-tabs>
@@ -170,6 +148,7 @@ import PageState from '@/components/PageState.vue'
 import RawJsonPanel from '@/components/RawJsonPanel.vue'
 import ConflictDialog from '@/components/ConflictDialog.vue'
 import ReplayDialog from '@/components/operations/ReplayDialog.vue'
+import { productErrorMessage, unexpectedErrorMessage } from '@/utils/productError'
 
 const route = useRoute()
 
@@ -222,11 +201,11 @@ async function fetchOutboxData() {
       outboxTotal.value = res.data.total || 0
     } else {
       outboxHasError.value = true
-      outboxErrorMsg.value = res.message || '获取 Outbox DEAD 列表失败'
+      outboxErrorMsg.value = productErrorMessage(res, '暂时无法加载失败事件，请稍后重试。')
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     outboxHasError.value = true
-    outboxErrorMsg.value = err.message || '网络连接失败'
+    outboxErrorMsg.value = unexpectedErrorMessage(err, '暂时无法加载失败事件，请稍后重试。')
   } finally {
     outboxLoading.value = false
   }
@@ -234,7 +213,7 @@ async function fetchOutboxData() {
 
 async function fetchSyncData() {
   if (!bindingIdInput.value) {
-    ElMessage.warning('请选择要查询的 Repository Binding ID')
+    ElMessage.warning('请输入仓库绑定编号')
     return
   }
   syncLoading.value = true
@@ -255,11 +234,11 @@ async function fetchSyncData() {
       syncTotal.value = res.data.total || 0
     } else {
       syncHasError.value = true
-      syncErrorMsg.value = res.message || '获取 Sync DEAD 列表失败'
+      syncErrorMsg.value = productErrorMessage(res, '暂时无法加载同步失败记录，请稍后重试。')
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     syncHasError.value = true
-    syncErrorMsg.value = err.message || '网络连接失败'
+    syncErrorMsg.value = unexpectedErrorMessage(err, '暂时无法加载同步失败记录，请稍后重试。')
   } finally {
     syncLoading.value = false
   }
@@ -271,7 +250,7 @@ function openReplayOutbox(event: DeadOutboxEventResponse) {
     id: event.id,
     version: event.version,
   }
-  replayDialogRef.value?.show('Outbox Event', event.id, event.version)
+  replayDialogRef.value?.show('项目事件', event.id, event.version)
 }
 
 function openReplaySync(run: DeadGitHubSyncRunResponse) {
@@ -281,7 +260,7 @@ function openReplaySync(run: DeadGitHubSyncRunResponse) {
     version: run.version,
     bindingId: bindingIdInput.value,
   }
-  replayDialogRef.value?.show('GitHub Sync Run', run.id, run.version)
+  replayDialogRef.value?.show('仓库同步', run.id, run.version)
 }
 
 async function handleExecuteReplay(reason: string, expectedVersion: number) {
@@ -304,17 +283,17 @@ async function handleExecuteReplay(reason: string, expectedVersion: number) {
     }
 
     if (res.httpStatus === 202 || (res.success && res.data)) {
-      ElMessage.success(`Replay 请求已接受 (Receipt ID: ${res.data?.replayId})`)
+      ElMessage.success('恢复请求已受理')
       replayDialogRef.value?.closeDialog()
       refreshActiveTab()
     } else if (res.httpStatus === 409) {
       replayDialogRef.value?.closeDialog()
       conflictDialogRef.value?.show(res.code, res.message)
     } else {
-      ElMessage.error(`Replay 拒绝 [${res.code}]: ${res.message}`)
+      ElMessage.error(productErrorMessage(res, '恢复请求未能提交，请稍后重试。'))
     }
-  } catch (err: any) {
-    ElMessage.error(err.message || '请求失败')
+  } catch (err: unknown) {
+    ElMessage.error(unexpectedErrorMessage(err, '恢复请求未能提交，请稍后重试。'))
   } finally {
     replayDialogRef.value?.setSubmitting(false)
   }

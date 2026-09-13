@@ -4,9 +4,9 @@
       <template #header>
         <div class="card-header">
           <div>
-            <span>GitHub Pull Request 详情 (ID: {{ pullRequestId }})</span>
+            <span>GitHub Pull Request</span>
             <StatusBadge v-if="pr" :status="pr.status" type="pr" style="margin-left: 12px;" />
-            <el-tag v-if="pr && pr.draft" type="info" size="small" style="margin-left: 8px;">Draft</el-tag>
+            <el-tag v-if="pr && pr.draft" type="info" size="small" style="margin-left: 8px;">草稿</el-tag>
           </div>
           <div>
             <el-button link @click="$router.push(`/workspaces/${workspaceId}/projects/${projectId}/github/pull-requests`)">
@@ -24,34 +24,28 @@
           </div>
 
           <el-descriptions :column="2" border class="mb-4">
-            <el-descriptions-item label="PR 快照主键 ID">
-              <code>{{ pr.id }}</code>
-            </el-descriptions-item>
-            <el-descriptions-item label="GitHub 官方 PR ID">
-              <code>{{ pr.githubPullRequestId }}</code>
-            </el-descriptions-item>
-            <el-descriptions-item label="作者 (Author)">
+            <el-descriptions-item label="作者">
               <code>@{{ pr.authorLogin }}</code>
             </el-descriptions-item>
-            <el-descriptions-item label="Head Ref / SHA">
+            <el-descriptions-item label="来源分支 / Commit">
               <code>{{ pr.headRef }}</code> (<code>{{ pr.headSha.substring(0, 7) }}</code>)
             </el-descriptions-item>
-            <el-descriptions-item label="Base Ref / SHA">
+            <el-descriptions-item label="目标分支 / Commit">
               <code>{{ pr.baseRef }}</code> (<code>{{ pr.baseSha.substring(0, 7) }}</code>)
             </el-descriptions-item>
             <el-descriptions-item label="合并/关闭时间">
               <span v-if="pr.mergedAt">合并于 {{ pr.mergedAt }}</span>
               <span v-else-if="pr.closedAt">关闭于 {{ pr.closedAt }}</span>
-              <span v-else class="text-muted">OPEN 未合并</span>
+              <span v-else class="text-muted">尚未合并</span>
             </el-descriptions-item>
           </el-descriptions>
 
-          <el-divider content-position="left">PR 正文 (Body)</el-divider>
+          <el-divider content-position="left">变更说明</el-divider>
           <ExternalContent :content="pr.body" :untrusted="pr.externalUntrustedContent" />
 
           <!-- Reviews Section -->
           <el-divider content-position="left">
-            Reviews 评审列表 (GET .../pull-requests/{{ pullRequestId }}/reviews)
+            评审记录
           </el-divider>
 
           <div v-if="reviewsLoading" class="p-3">
@@ -59,7 +53,7 @@
           </div>
 
           <div v-else-if="reviews.length === 0" class="empty-reviews">
-            <el-empty description="暂无 Review 记录" :image-size="60" />
+            <el-empty description="暂无评审记录" :image-size="60" />
           </div>
 
           <div v-else class="reviews-list">
@@ -77,7 +71,7 @@
             </el-card>
           </div>
 
-          <RawJsonPanel :data="rawJson" title="GET .../pull-requests/{id} 原始响应" />
+          <RawJsonPanel :data="rawJson" title="技术详情" />
         </template>
       </PageState>
     </el-card>
@@ -93,6 +87,7 @@ import StatusBadge from '@/components/StatusBadge.vue'
 import PageState from '@/components/PageState.vue'
 import ExternalContent from '@/components/ExternalContent.vue'
 import RawJsonPanel from '@/components/RawJsonPanel.vue'
+import { productErrorMessage, unexpectedErrorMessage } from '@/utils/productError'
 
 const route = useRoute()
 const workspaceId = Number(route.params.workspaceId)
@@ -121,11 +116,11 @@ async function fetchData() {
       fetchReviews()
     } else {
       hasError.value = true
-      errorMsg.value = res.message || 'Pull Request 快照不存在'
+      errorMsg.value = productErrorMessage(res, '没有找到这个 Pull Request，请返回列表重试。')
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     hasError.value = true
-    errorMsg.value = err.message || '网络连接失败'
+    errorMsg.value = unexpectedErrorMessage(err, '暂时无法加载 Pull Request，请稍后重试。')
   } finally {
     loading.value = false
   }

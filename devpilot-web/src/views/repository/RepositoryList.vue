@@ -2,10 +2,10 @@
   <div class="repository-list-container">
     <el-card>
       <template #header>
-        <PageHeader title="Repository" description="管理项目使用的 GitHub 仓库与同步状态。">
+        <PageHeader title="GitHub 仓库" description="管理项目关联的仓库、凭据与同步状态。">
           <template #actions>
             <el-button type="primary" @click="$router.push(`/workspaces/${workspaceId}/projects/${projectId}/repositories/new`)">
-              绑定 Repository
+              绑定仓库
             </el-button>
             <el-button @click="fetchData">刷新</el-button>
           </template>
@@ -17,8 +17,8 @@
         <el-form :inline="true">
           <el-form-item label="绑定状态">
             <el-select v-model="statusFilter" placeholder="全部状态" clearable style="width: 140px;" @change="handleFilterChange">
-              <el-option label="ACTIVE" value="ACTIVE" />
-              <el-option label="DISABLED" value="DISABLED" />
+              <el-option label="启用" value="ACTIVE" />
+              <el-option label="已禁用" value="DISABLED" />
             </el-select>
           </el-form-item>
         </el-form>
@@ -49,14 +49,14 @@
               <StatusBadge :status="row.bindingStatus" type="binding" />
             </template>
           </el-table-column>
-          <el-table-column prop="hasApiCredential" label="访问凭据" width="100">
+          <el-table-column prop="hasApiCredential" label="访问凭据" width="110">
             <template #default="{ row }">
               <el-tag :type="row.hasApiCredential ? 'success' : 'danger'" size="small">
                 {{ row.hasApiCredential ? '已配置' : '缺失' }}
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="hasWebhookSecret" label="Webhook Secret" width="120">
+          <el-table-column prop="hasWebhookSecret" label="Webhook 密钥" width="120">
             <template #default="{ row }">
               <el-tag :type="row.hasWebhookSecret ? 'success' : 'info'" size="small">
                 {{ row.hasWebhookSecret ? '已配置' : '未配置' }}
@@ -75,7 +75,7 @@
                 size="small"
                 @click="triggerSync(row)"
               >
-                触发 Commit 同步
+                同步提交
               </el-button>
             </template>
           </el-table-column>
@@ -108,6 +108,7 @@ import type { GitHubRepositoryBinding } from '@/types/api'
 import StatusBadge from '@/components/StatusBadge.vue'
 import PageState from '@/components/PageState.vue'
 import PageHeader from '@/components/PageHeader.vue'
+import { productErrorMessage, unexpectedErrorMessage } from '@/utils/productError'
 
 const route = useRoute()
 const router = useRouter()
@@ -141,11 +142,11 @@ async function fetchData() {
       total.value = res.data.total || 0
     } else {
       hasError.value = true
-      errorMsg.value = res.message || '获取仓库绑定列表失败'
+      errorMsg.value = productErrorMessage(res, '无法加载 GitHub 仓库，请稍后重试。')
     }
   } catch (err: any) {
     hasError.value = true
-    errorMsg.value = err.message || '网络连接失败'
+    errorMsg.value = unexpectedErrorMessage(err, '暂时无法加载 GitHub 仓库，请稍后重试。')
   } finally {
     loading.value = false
   }
@@ -164,13 +165,13 @@ async function triggerSync(binding: GitHubRepositoryBinding) {
   try {
     const res = await triggerCommitSyncApi(workspaceId, projectId, binding.id)
     if (res.success && res.data) {
-      ElMessage.success(`Commit 同步已触发 (Run ID: ${res.data.runId})`)
+      ElMessage.success('提交同步已开始')
       router.push(`/workspaces/${workspaceId}/projects/${projectId}/sync-runs/${binding.id}/${res.data.runId}`)
     } else {
-      ElMessage.error(`触发失败 [${res.code}]: ${res.message}`)
+      ElMessage.error(productErrorMessage(res, '无法开始提交同步，请稍后重试。'))
     }
   } catch (err: any) {
-    ElMessage.error(err.message || '网络请求错误')
+    ElMessage.error(unexpectedErrorMessage(err, '无法开始提交同步，请稍后重试。'))
   }
 }
 

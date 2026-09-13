@@ -17,16 +17,16 @@
         <el-form class="filter-form" label-position="top">
           <el-form-item label="状态">
             <el-select v-model="statusFilter" placeholder="全部状态" clearable style="width: 140px;" @change="handleFilterChange">
-              <el-option label="PLANNING" value="PLANNING" />
-              <el-option label="ACTIVE" value="ACTIVE" />
-              <el-option label="ARCHIVED" value="ARCHIVED" />
+              <el-option label="规划中" value="PLANNING" />
+              <el-option label="进行中" value="ACTIVE" />
+              <el-option label="已归档" value="ARCHIVED" />
             </el-select>
           </el-form-item>
 
           <el-form-item label="可见性">
             <el-select v-model="visibilityFilter" placeholder="全部" clearable style="width: 140px;" @change="handleFilterChange">
-              <el-option label="PRIVATE" value="PRIVATE" />
-              <el-option label="INTERNAL" value="INTERNAL" />
+              <el-option label="仅项目成员" value="PRIVATE" />
+              <el-option label="工作区成员" value="INTERNAL" />
             </el-select>
           </el-form-item>
         </el-form>
@@ -38,7 +38,7 @@
         </template>
 
         <el-table :data="items" stripe style="width: 100%;">
-          <el-table-column prop="projectKey" label="Project Key" width="130">
+          <el-table-column prop="projectKey" label="项目标识" width="130">
             <template #default="{ row }">
               <el-tag type="info" effect="plain">
                 <code>{{ row.projectKey }}</code>
@@ -49,7 +49,7 @@
           <el-table-column prop="visibility" label="可见性" width="110">
             <template #default="{ row }">
               <el-tag size="small" :type="row.visibility === 'PRIVATE' ? 'danger' : 'info'">
-                {{ row.visibility }}
+                {{ row.visibility === 'PRIVATE' ? '仅项目成员' : '工作区成员' }}
               </el-tag>
             </template>
           </el-table-column>
@@ -65,7 +65,7 @@
                 概览与管理
               </el-button>
               <el-button type="success" link size="small" @click="goToRepositories(row)">
-                仓库绑定
+                GitHub 仓库
               </el-button>
             </template>
           </el-table-column>
@@ -97,6 +97,7 @@ import type { Project } from '@/types/api'
 import StatusBadge from '@/components/StatusBadge.vue'
 import PageState from '@/components/PageState.vue'
 import PageHeader from '@/components/PageHeader.vue'
+import { productErrorMessage, unexpectedErrorMessage } from '@/utils/productError'
 
 const route = useRoute()
 const router = useRouter()
@@ -133,11 +134,11 @@ async function fetchData() {
       total.value = res.data.total || 0
     } else {
       hasError.value = true
-      errorMsg.value = res.message || '获取项目列表失败'
+      errorMsg.value = productErrorMessage(res, '暂时无法加载项目，请稍后重试。')
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     hasError.value = true
-    errorMsg.value = err.message || '网络连接失败'
+    errorMsg.value = unexpectedErrorMessage(err, '暂时无法加载项目，请稍后重试。')
   } finally {
     loading.value = false
   }

@@ -19,7 +19,7 @@
 
         <el-table :data="items" stripe style="width: 100%;">
           <el-table-column prop="name" label="名称" min-width="180" />
-          <el-table-column prop="slug" label="Slug" min-width="120">
+          <el-table-column prop="slug" label="访问标识" min-width="120">
             <template #default="{ row }">
               <code>{{ row.slug }}</code>
             </template>
@@ -68,6 +68,7 @@ import type { Workspace } from '@/types/api'
 import StatusBadge from '@/components/StatusBadge.vue'
 import PageState from '@/components/PageState.vue'
 import PageHeader from '@/components/PageHeader.vue'
+import { productErrorMessage, unexpectedErrorMessage } from '@/utils/productError'
 
 const router = useRouter()
 const scopeStore = useScopeStore()
@@ -93,11 +94,11 @@ async function fetchData() {
       total.value = res.data.total || 0
     } else {
       hasError.value = true
-      errorMsg.value = res.message || '获取 Workspace 列表失败'
+      errorMsg.value = productErrorMessage(res, '暂时无法加载工作区，请稍后重试。')
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     hasError.value = true
-    errorMsg.value = err.message || '网络连接失败'
+    errorMsg.value = unexpectedErrorMessage(err, '暂时无法加载工作区，请稍后重试。')
   } finally {
     loading.value = false
   }

@@ -4,13 +4,13 @@
       <template #header>
         <div class="card-header">
           <div>
-            <span>Task 详情 (Key: {{ task?.displayKey || `#${taskId}` }})</span>
+            <span>任务 {{ task?.displayKey || `#${taskId}` }}</span>
             <StatusBadge v-if="task" :status="task.status" type="task" style="margin-left: 10px;" />
             <StatusBadge v-if="task" :status="task.priority" type="priority" style="margin-left: 6px;" />
           </div>
           <div>
             <el-button link @click="$router.push(`/workspaces/${workspaceId}/projects/${projectId}/tasks`)">
-              返回 Task 列表
+              返回任务列表
             </el-button>
             <el-button size="small" @click="fetchDetail">刷新</el-button>
           </div>
@@ -34,18 +34,15 @@
           </div>
 
           <el-descriptions :column="2" border class="mb-4">
-            <el-descriptions-item label="Task ID">
-              <code>{{ task.id }}</code>
-            </el-descriptions-item>
-            <el-descriptions-item label="Display Key">
+            <el-descriptions-item label="任务编号">
               <code>{{ task.displayKey }}</code>
             </el-descriptions-item>
-            <el-descriptions-item label="创建者 (Reporter)">
-              <code>User #{{ task.reporterUserId }}</code>
+            <el-descriptions-item label="创建者">
+              <code>用户 #{{ task.reporterUserId }}</code>
             </el-descriptions-item>
-            <el-descriptions-item label="当前负责人 (Assignee)">
+            <el-descriptions-item label="当前负责人">
               <span v-if="task.assigneeUserId">
-                <code>User #{{ task.assigneeUserId }}</code>
+                <code>用户 #{{ task.assigneeUserId }}</code>
                 <el-button type="danger" link size="small" style="margin-left: 8px;" @click="handleUnassign">取消分配</el-button>
               </span>
               <span v-else class="text-muted">
@@ -53,7 +50,7 @@
                 <el-button type="primary" link size="small" style="margin-left: 8px;" @click="assignDialogVisible = true">分配负责人</el-button>
               </span>
             </el-descriptions-item>
-            <el-descriptions-item label="截止时间 (dueAt)">
+            <el-descriptions-item label="截止时间">
               {{ task.dueAt || '无' }}
             </el-descriptions-item>
             <el-descriptions-item label="完成 / 取消时间">
@@ -61,16 +58,13 @@
               <span v-else-if="task.canceledAt">取消于 {{ task.canceledAt }}</span>
               <span v-else class="text-muted">未完成</span>
             </el-descriptions-item>
-            <el-descriptions-item label="当前 Version">
-              <code>v{{ task.version }}</code>
-            </el-descriptions-item>
             <el-descriptions-item label="更新时间">
               {{ task.updatedAt }}
             </el-descriptions-item>
           </el-descriptions>
 
           <!-- Description Section -->
-          <el-divider content-position="left">任务描述 (Description)</el-divider>
+          <el-divider content-position="left">任务描述</el-divider>
 
           <div class="description-body mb-4">
             <pre v-if="task.description">{{ task.description }}</pre>
@@ -80,12 +74,12 @@
           <!-- Edit Profile Dialog Trigger & Drawer -->
           <div class="mb-4" style="text-align: right;">
             <el-button type="primary" plain size="small" @click="openEditDialog">
-              编辑 Task 资料 (PUT .../tasks/{id})
+              编辑任务
             </el-button>
           </div>
 
           <!-- GitHub Links Section -->
-          <el-divider content-position="left">关联 GitHub 快照 (GitHub Links)</el-divider>
+          <el-divider content-position="left">关联 GitHub 工作项</el-divider>
           <TaskGitHubLinks
             :workspace-id="workspaceId"
             :project-id="projectId"
@@ -97,30 +91,30 @@
           />
 
           <!-- Status History Timeline -->
-          <el-divider content-position="left">状态变更历史记录 (Status History)</el-divider>
+          <el-divider content-position="left">状态变更记录</el-divider>
           <TaskHistoryTimeline :history="history" />
 
-          <RawJsonPanel :data="rawJson" title="GET .../tasks/{id} 原始响应" />
+          <RawJsonPanel :data="{ taskId: task.id, version: task.version, response: rawJson }" title="技术详情" />
         </template>
       </PageState>
 
       <!-- Edit Task Profile Dialog -->
-      <el-dialog v-model="editDialogVisible" title="编辑 Task 资料" width="600px" :close-on-click-modal="false">
+      <el-dialog v-model="editDialogVisible" title="编辑任务" width="600px" :close-on-click-modal="false">
         <el-form label-position="top">
-          <el-form-item label="标题 (title)" required>
+          <el-form-item label="标题" required>
             <el-input v-model="editForm.title" maxlength="255" show-word-limit />
           </el-form-item>
 
-          <el-form-item label="优先级 (priority)" required>
+          <el-form-item label="优先级" required>
             <el-radio-group v-model="editForm.priority">
-              <el-radio value="LOW">LOW</el-radio>
-              <el-radio value="MEDIUM">MEDIUM</el-radio>
-              <el-radio value="HIGH">HIGH</el-radio>
-              <el-radio value="URGENT">URGENT</el-radio>
+              <el-radio value="LOW">低</el-radio>
+              <el-radio value="MEDIUM">中</el-radio>
+              <el-radio value="HIGH">高</el-radio>
+              <el-radio value="URGENT">紧急</el-radio>
             </el-radio-group>
           </el-form-item>
 
-          <el-form-item label="截止时间 (dueAt)">
+          <el-form-item label="截止时间">
             <el-date-picker
               v-model="editForm.dueAt"
               type="datetime"
@@ -130,7 +124,7 @@
             />
           </el-form-item>
 
-          <el-form-item label="详细描述 (description)">
+          <el-form-item label="详细描述">
             <el-input v-model="editForm.description" type="textarea" :rows="4" maxlength="10000" show-word-limit />
           </el-form-item>
         </el-form>
@@ -146,9 +140,9 @@
       <!-- Assign User Dialog -->
       <el-dialog v-model="assignDialogVisible" title="分配任务负责人" width="400px">
         <el-form label-position="top">
-          <el-form-item label="负责人 User ID" required>
-            <el-input-number v-model="assigneeUserIdInput" :min="1" style="width: 100%;" placeholder="数字 User ID" />
-            <div class="field-hint">提示：后端未开放成员列表 API，请直接输入有效的数字 User ID。</div>
+          <el-form-item label="负责人编号" required>
+            <el-input-number v-model="assigneeUserIdInput" :min="1" style="width: 100%;" placeholder="用户编号" />
+            <div class="field-hint">请输入当前项目成员的用户编号。</div>
           </el-form-item>
         </el-form>
         <template #footer>
@@ -189,6 +183,7 @@ import ConflictDialog from '@/components/ConflictDialog.vue'
 import TaskActionBar from '@/components/task/TaskActionBar.vue'
 import TaskHistoryTimeline from '@/components/task/TaskHistoryTimeline.vue'
 import TaskGitHubLinks from '@/components/task/TaskGitHubLinks.vue'
+import { productErrorMessage, unexpectedErrorMessage } from '@/utils/productError'
 
 const route = useRoute()
 const workspaceId = Number(route.params.workspaceId)
@@ -238,7 +233,7 @@ async function fetchDetail() {
       history.value = res.data.history || []
     } else {
       hasError.value = true
-      errorMsg.value = res.message || 'Task 不存在或无访问权限'
+      errorMsg.value = productErrorMessage(res, '无法加载任务，请稍后重试。')
     }
 
     if (linksRes.success && linksRes.data) {
@@ -246,7 +241,7 @@ async function fetchDetail() {
     }
   } catch (err: any) {
     hasError.value = true
-    errorMsg.value = err.message || '网络连接失败'
+    errorMsg.value = unexpectedErrorMessage(err, '暂时无法加载任务，请稍后重试。')
   } finally {
     loading.value = false
   }
@@ -289,16 +284,16 @@ async function handleUpdateProfile() {
     })
 
     if (res.success && res.data) {
-      ElMessage.success('Task 资料更新成功')
+      ElMessage.success('任务资料已更新')
       editDialogVisible.value = false
       fetchDetail()
     } else if (res.httpStatus === 409) {
       conflictDialogRef.value?.show(res.code, res.message)
     } else {
-      ElMessage.error(`更新失败 [${res.code}]: ${res.message}`)
+      ElMessage.error(productErrorMessage(res, '任务资料更新失败，请稍后重试。'))
     }
   } catch (err: any) {
-    ElMessage.error(err.message || '请求失败')
+    ElMessage.error(unexpectedErrorMessage(err, '任务资料更新失败，请稍后重试。'))
   } finally {
     updating.value = false
   }
@@ -321,10 +316,10 @@ async function handleAssign() {
     } else if (res.httpStatus === 409) {
       conflictDialogRef.value?.show(res.code, res.message)
     } else {
-      ElMessage.error(`分配失败 [${res.code}]: ${res.message}`)
+      ElMessage.error(productErrorMessage(res, '负责人分配失败，请确认成员后重试。'))
     }
   } catch (err: any) {
-    ElMessage.error(err.message || '网络请求错误')
+    ElMessage.error(unexpectedErrorMessage(err, '负责人分配失败，请稍后重试。'))
   } finally {
     assigning.value = false
   }
@@ -333,7 +328,7 @@ async function handleAssign() {
 async function handleUnassign() {
   if (!task.value) return
   try {
-    await ElMessageBox.confirm('确定要取消该 Task 的负责人分配吗？', '取消分配确认', {
+    await ElMessageBox.confirm('确定要取消该任务的负责人分配吗？', '取消分配确认', {
       type: 'warning',
       confirmButtonText: '确定取消',
     })
@@ -348,10 +343,10 @@ async function handleUnassign() {
     } else if (res.httpStatus === 409) {
       conflictDialogRef.value?.show(res.code, res.message)
     } else {
-      ElMessage.error(`操作失败 [${res.code}]: ${res.message}`)
+      ElMessage.error(productErrorMessage(res, '取消负责人分配失败，请稍后重试。'))
     }
   } catch (err: any) {
-    if (err !== 'cancel') ElMessage.error(err.message || '操作异常')
+    if (err !== 'cancel') ElMessage.error(unexpectedErrorMessage(err, '取消负责人分配失败，请稍后重试。'))
   }
 }
 
@@ -394,17 +389,17 @@ async function handleExecuteWorkflowAction(endpoint: string, reason?: string) {
     }
 
     if (res && res.success) {
-      ElMessage.success('状态流转动作执行成功')
+      ElMessage.success('任务状态已更新')
       fetchDetail()
     } else if (res && res.httpStatus === 409) {
       conflictDialogRef.value?.show(res.code, res.message)
     } else if (res && res.httpStatus === 403) {
-      ElMessage.error(`权限不足 [${res.code}]: ${res.message}`)
+      ElMessage.error('你没有权限更新此任务。')
     } else if (res) {
-      ElMessage.error(`动作失败 [${res.code}]: ${res.message}`)
+      ElMessage.error(productErrorMessage(res, '任务状态更新失败，请稍后重试。'))
     }
   } catch (err: any) {
-    ElMessage.error(err.message || '请求失败')
+    ElMessage.error(unexpectedErrorMessage(err, '任务状态更新失败，请稍后重试。'))
   } finally {
     executingEndpoint.value = null
   }

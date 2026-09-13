@@ -17,30 +17,30 @@
         <el-form class="filter-form" label-position="top">
           <el-form-item label="状态">
             <el-select v-model="filter.status" placeholder="全部状态" clearable style="width: 140px;" @change="handleFilterChange">
-              <el-option label="BACKLOG" value="BACKLOG" />
-              <el-option label="TODO" value="TODO" />
-              <el-option label="IN_PROGRESS" value="IN_PROGRESS" />
-              <el-option label="IN_REVIEW" value="IN_REVIEW" />
-              <el-option label="DONE" value="DONE" />
-              <el-option label="CANCELED" value="CANCELED" />
+              <el-option label="待规划" value="BACKLOG" />
+              <el-option label="待处理" value="TODO" />
+              <el-option label="进行中" value="IN_PROGRESS" />
+              <el-option label="审核中" value="IN_REVIEW" />
+              <el-option label="已完成" value="DONE" />
+              <el-option label="已取消" value="CANCELED" />
             </el-select>
           </el-form-item>
 
           <el-form-item label="优先级">
             <el-select v-model="filter.priority" placeholder="全部优先级" clearable style="width: 130px;" @change="handleFilterChange">
-              <el-option label="LOW" value="LOW" />
-              <el-option label="MEDIUM" value="MEDIUM" />
-              <el-option label="HIGH" value="HIGH" />
-              <el-option label="URGENT" value="URGENT" />
+              <el-option label="低" value="LOW" />
+              <el-option label="中" value="MEDIUM" />
+              <el-option label="高" value="HIGH" />
+              <el-option label="紧急" value="URGENT" />
             </el-select>
           </el-form-item>
 
-          <el-form-item label="负责人 User ID">
-            <el-input-number v-model="filter.assigneeUserId" :min="1" placeholder="ID" style="width: 120px;" controls-position="right" @change="handleFilterChange" />
+          <el-form-item label="负责人编号">
+            <el-input-number v-model="filter.assigneeUserId" :min="1" placeholder="成员编号" style="width: 120px;" controls-position="right" @change="handleFilterChange" />
           </el-form-item>
 
-          <el-form-item label="创建者 User ID">
-            <el-input-number v-model="filter.reporterUserId" :min="1" placeholder="ID" style="width: 120px;" controls-position="right" @change="handleFilterChange" />
+          <el-form-item label="创建者编号">
+            <el-input-number v-model="filter.reporterUserId" :min="1" placeholder="成员编号" style="width: 120px;" controls-position="right" @change="handleFilterChange" />
           </el-form-item>
 
           <el-form-item label="截止时间">
@@ -59,7 +59,7 @@
       <PageState :loading="loading" :error="hasError" :error-msg="errorMsg" :empty="items.length === 0" @retry="fetchData">
         <template #empty-action>
           <el-button type="primary" @click="$router.push(`/workspaces/${workspaceId}/projects/${projectId}/tasks/new`)">
-            创建首个 Task
+            创建首个任务
           </el-button>
         </template>
 
@@ -97,7 +97,7 @@
 
           <el-table-column prop="assigneeUserId" label="负责人" width="120">
             <template #default="{ row }">
-              <span v-if="row.assigneeUserId">User #{{ row.assigneeUserId }}</span>
+              <span v-if="row.assigneeUserId">成员 #{{ row.assigneeUserId }}</span>
               <span v-else class="text-muted">未分配</span>
             </template>
           </el-table-column>
@@ -148,6 +148,7 @@ import type { TaskResponse, TaskStatus, TaskPriority } from '@/types/task'
 import StatusBadge from '@/components/StatusBadge.vue'
 import PageState from '@/components/PageState.vue'
 import PageHeader from '@/components/PageHeader.vue'
+import { productErrorMessage, unexpectedErrorMessage } from '@/utils/productError'
 
 const route = useRoute()
 const workspaceId = Number(route.params.workspaceId)
@@ -190,11 +191,11 @@ async function fetchData() {
       total.value = res.data.total || 0
     } else {
       hasError.value = true
-      errorMsg.value = res.message || '获取 Task 列表失败'
+      errorMsg.value = productErrorMessage(res, '暂时无法加载任务，请稍后重试。')
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     hasError.value = true
-    errorMsg.value = err.message || '网络连接失败'
+    errorMsg.value = unexpectedErrorMessage(err, '暂时无法加载任务，请稍后重试。')
   } finally {
     loading.value = false
   }

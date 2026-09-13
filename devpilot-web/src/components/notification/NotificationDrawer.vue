@@ -1,15 +1,15 @@
 <template>
   <el-drawer
     v-model="notificationStore.drawerVisible"
-    title="消息通知 (Notifications)"
+    title="通知"
     size="520px"
     direction="rtl"
   >
     <div class="drawer-header-meta">
       <div class="stream-status">
-        <span>SSE 实时推送: </span>
+        <span>实时更新</span>
         <el-tag :type="streamTagType" size="small">
-          {{ notificationStore.streamState }}
+          {{ streamStateLabel }}
         </el-tag>
       </div>
       <div>
@@ -55,7 +55,7 @@
 
           <div class="notif-footer">
             <el-button type="primary" link size="small" @click="navigateToTarget(item)">
-              查看关联{{ item.targetType }}
+              查看相关内容
             </el-button>
             <el-button
               v-if="item.status === 'UNREAD'"
@@ -80,6 +80,7 @@ import { ElMessage } from 'element-plus'
 import { useNotificationStore } from '@/stores/notification'
 import type { NotificationResponse } from '@/types/notification'
 import PageState from '@/components/PageState.vue'
+import { productErrorMessage } from '@/utils/productError'
 
 const router = useRouter()
 const notificationStore = useNotificationStore()
@@ -97,6 +98,14 @@ const streamTagType = computed(() => {
   }
 })
 
+const streamStateLabel = computed(() => ({
+  open: '已连接',
+  connecting: '连接中',
+  retrying: '重新连接中',
+  closed: '未连接',
+  idle: '未连接',
+}[notificationStore.streamState] || '未连接'))
+
 async function handleMarkRead(item: NotificationResponse) {
   const res = await notificationStore.markRead(item.id, item.version)
   if (res.success) {
@@ -105,7 +114,7 @@ async function handleMarkRead(item: NotificationResponse) {
     ElMessage.warning('版本已变化，已自动刷新')
     notificationStore.fetchNotifications('UNREAD', 1, 20)
   } else {
-    ElMessage.error(res.message || '标记已读失败')
+    ElMessage.error(productErrorMessage(res, '暂时无法更新通知，请重试。'))
   }
 }
 
@@ -114,7 +123,7 @@ async function handleMarkAllRead() {
   if (res.success) {
     ElMessage.success(`已将所有未读通知标为已读`)
   } else {
-    ElMessage.error(res.message || '操作失败')
+    ElMessage.error(productErrorMessage(res, '暂时无法更新通知，请重试。'))
   }
 }
 

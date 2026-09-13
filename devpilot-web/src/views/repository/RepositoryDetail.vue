@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <div>
-            <span>GitHub 仓库绑定详情 (ID: {{ bindingId }})</span>
+            <span>{{ binding?.fullName || 'GitHub 仓库' }}</span>
             <StatusBadge v-if="binding" :status="binding.bindingStatus" type="binding" style="margin-left: 12px;" />
           </div>
           <div>
@@ -14,7 +14,7 @@
               size="small"
               @click="triggerSync"
             >
-              手工触发 Commit 同步
+              同步提交
             </el-button>
             <el-button size="small" @click="fetchDetail">刷新</el-button>
           </div>
@@ -24,13 +24,7 @@
       <PageState :loading="loading" :error="hasError" :error-msg="errorMsg" @retry="fetchDetail">
         <template v-if="binding">
           <el-descriptions :column="2" border class="mb-4">
-            <el-descriptions-item label="Binding ID">
-              <code>{{ binding.id }}</code>
-            </el-descriptions-item>
-            <el-descriptions-item label="GitHub 官方 ID">
-              <code>{{ binding.githubRepositoryId }}</code>
-            </el-descriptions-item>
-            <el-descriptions-item label="仓库全名 (FullName)">
+            <el-descriptions-item label="GitHub 仓库">
               <a :href="binding.htmlUrl" target="_blank" rel="noopener noreferrer" style="color: #409eff; text-decoration: none;">
                 {{ binding.fullName }}
               </a>
@@ -38,18 +32,15 @@
             <el-descriptions-item label="默认分支">
               <code>{{ binding.defaultBranch }}</code>
             </el-descriptions-item>
-            <el-descriptions-item label="可见性 (Visibility)">
+            <el-descriptions-item label="可见性">
               {{ binding.visibility }}
             </el-descriptions-item>
-            <el-descriptions-item label="当前 Version">
-              <code>v{{ binding.version }}</code>
-            </el-descriptions-item>
-            <el-descriptions-item label="API凭据关联">
+            <el-descriptions-item label="访问凭据">
               <el-tag :type="binding.hasApiCredential ? 'success' : 'danger'" size="small">
                 {{ binding.hasApiCredential ? '已关联' : '未关联' }}
               </el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="Webhook Secret 关联">
+            <el-descriptions-item label="Webhook 密钥">
               <el-tag :type="binding.hasWebhookSecret ? 'success' : 'info'" size="small">
                 {{ binding.hasWebhookSecret ? '已关联' : '未关联' }}
               </el-tag>
@@ -57,19 +48,18 @@
             <el-descriptions-item label="上次 GitHub 校验时间">
               {{ binding.lastVerifiedAt || '未校验' }}
             </el-descriptions-item>
-            <el-descriptions-item label="上次 Commit 同步时间">
+            <el-descriptions-item label="上次提交同步">
               {{ binding.lastSyncedAt || '从未同步' }}
-              <span class="field-hint" style="display: block;">(后端缺口: 当前成功写路径可能尚未推进该字段)</span>
             </el-descriptions-item>
           </el-descriptions>
 
-          <el-divider content-position="left">Branches</el-divider>
+          <el-divider content-position="left">分支</el-divider>
           <el-alert v-if="branchesError" type="error" show-icon :title="branchesError" style="margin-bottom: 12px;" />
-          <el-table v-loading="branchesLoading" :data="branches" empty-text="GitHub 当前没有返回可用 Branch">
-            <el-table-column prop="name" label="Branch" min-width="260">
+          <el-table v-loading="branchesLoading" :data="branches" empty-text="当前没有可用分支">
+            <el-table-column prop="name" label="分支" min-width="260">
               <template #default="scope">
                 <code>{{ scope.row.name }}</code>
-                <el-tag v-if="scope.row.name === binding.defaultBranch" size="small" type="success" style="margin-left: 8px;">Default</el-tag>
+                <el-tag v-if="scope.row.name === binding.defaultBranch" size="small" type="success" style="margin-left: 8px;">默认</el-tag>
               </template>
             </el-table-column>
             <el-table-column label="HEAD" min-width="220">
@@ -77,33 +67,33 @@
             </el-table-column>
           </el-table>
 
-          <el-divider content-position="left">绑定动作与状态流转</el-divider>
+          <el-divider content-position="left">仓库设置</el-divider>
 
           <div class="action-bar">
             <!-- Refresh Metadata -->
             <el-button type="primary" :loading="actionLoading" @click="handleAction('refresh')">
-              刷新 GitHub 元数据 (POST .../refresh)
+              刷新仓库信息
             </el-button>
 
             <!-- Disable / Reactivate -->
             <template v-if="binding.bindingStatus === 'ACTIVE'">
               <el-button type="warning" :loading="actionLoading" @click="handleAction('disable')">
-                禁用绑定 (POST .../disable)
+                禁用绑定
               </el-button>
             </template>
             <template v-else-if="binding.bindingStatus === 'DISABLED'">
               <el-button type="success" :loading="actionLoading" @click="handleAction('reactivate')">
-                重新启用绑定 (POST .../reactivate)
+                重新启用绑定
               </el-button>
             </template>
 
             <!-- Unbind -->
             <el-button type="danger" :loading="actionLoading" @click="handleAction('unbind')">
-              解绑仓库 (POST .../unbind)
+              解绑仓库
             </el-button>
           </div>
 
-          <RawJsonPanel :data="rawJson" title="GET .../github-repositories/{id} 原始响应" />
+          <RawJsonPanel :data="{ bindingId: binding.id, githubRepositoryId: binding.githubRepositoryId, version: binding.version, response: rawJson }" title="技术详情" />
         </template>
       </PageState>
 
@@ -130,6 +120,7 @@ import StatusBadge from '@/components/StatusBadge.vue'
 import PageState from '@/components/PageState.vue'
 import RawJsonPanel from '@/components/RawJsonPanel.vue'
 import ConflictDialog from '@/components/ConflictDialog.vue'
+import { productErrorMessage, unexpectedErrorMessage } from '@/utils/productError'
 
 const route = useRoute()
 const router = useRouter()
@@ -163,11 +154,11 @@ async function fetchDetail() {
       void fetchBranches()
     } else {
       hasError.value = true
-      errorMsg.value = res.message || '仓库绑定不存在或已移除'
+      errorMsg.value = productErrorMessage(res, '无法加载 GitHub 仓库，请稍后重试。')
     }
   } catch (err: any) {
     hasError.value = true
-    errorMsg.value = err.message || '网络连接失败'
+    errorMsg.value = unexpectedErrorMessage(err, '暂时无法加载 GitHub 仓库，请稍后重试。')
   } finally {
     loading.value = false
   }
@@ -180,9 +171,9 @@ async function fetchBranches() {
   try {
     const res = await listRepositoryBranchesApi(workspaceId, projectId, binding.value.id)
     if (res.success && res.data) branches.value = res.data
-    else branchesError.value = res.message || '无法加载 Repository Branches'
+    else branchesError.value = productErrorMessage(res, '无法加载仓库分支，请稍后重试。')
   } catch (err: any) {
-    branchesError.value = err.message || '无法加载 Repository Branches'
+    branchesError.value = unexpectedErrorMessage(err, '暂时无法加载仓库分支，请稍后重试。')
   } finally {
     branchesLoading.value = false
   }
@@ -199,7 +190,7 @@ async function handleAction(action: 'refresh' | 'disable' | 'reactivate' | 'unbi
   if (action === 'unbind') {
     try {
       await ElMessageBox.confirm(
-        `解绑后该仓库将移出当前项目。同步的历史 Activity/Snapshot 将会保留。确定解绑吗？(expectedVersion = ${version})`,
+        '解绑后，该仓库将移出当前项目；历史活动与快照仍会保留。确定继续吗？',
         '解绑确认',
         { confirmButtonText: '确定解绑', cancelButtonText: '取消', type: 'warning' }
       )
@@ -226,17 +217,18 @@ async function handleAction(action: 'refresh' | 'disable' | 'reactivate' | 'unbi
         ElMessage.success('仓库解绑成功')
         router.push(`/workspaces/${workspaceId}/projects/${projectId}/repositories`)
       } else {
-        ElMessage.success(`操作成功 [${action}]`)
+        const actionLabel = action === 'refresh' ? '仓库信息已刷新' : action === 'disable' ? '仓库绑定已禁用' : '仓库绑定已重新启用'
+        ElMessage.success(actionLabel)
         if (res.data) binding.value = res.data
         else fetchDetail()
       }
     } else if (res.httpStatus === 409) {
       conflictDialogRef.value?.show(res.code, res.message)
     } else {
-      ElMessage.error(`操作失败 [${res.code}]: ${res.message}`)
+      ElMessage.error(productErrorMessage(res, '仓库设置更新失败，请稍后重试。'))
     }
   } catch (err: any) {
-    ElMessage.error(err.message || '网络请求异常')
+    ElMessage.error(unexpectedErrorMessage(err, '仓库设置更新失败，请稍后重试。'))
   } finally {
     actionLoading.value = false
   }
@@ -247,13 +239,13 @@ async function triggerSync() {
   try {
     const res = await triggerCommitSyncApi(workspaceId, projectId, binding.value.id)
     if (res.success && res.data) {
-      ElMessage.success(`Commit 同步已触发 (Run ID: ${res.data.runId})`)
+      ElMessage.success('提交同步已开始')
       router.push(`/workspaces/${workspaceId}/projects/${projectId}/sync-runs/${binding.value.id}/${res.data.runId}`)
     } else {
-      ElMessage.error(`触发失败 [${res.code}]: ${res.message}`)
+      ElMessage.error(productErrorMessage(res, '无法开始提交同步，请稍后重试。'))
     }
   } catch (err: any) {
-    ElMessage.error(err.message || '网络请求错误')
+    ElMessage.error(unexpectedErrorMessage(err, '无法开始提交同步，请稍后重试。'))
   }
 }
 

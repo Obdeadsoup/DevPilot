@@ -2,7 +2,7 @@
   <AuthShell>
     <template #eyebrow>WELCOME BACK</template>
     <template #title>登录 DevPilot</template>
-    <template #description>继续处理团队项目、研发活动与 Agent Run。</template>
+    <template #description>继续处理团队项目、研发活动与 Agent 协作。</template>
 
     <el-alert v-if="errorMessage" type="error" show-icon :title="errorTitle" :description="errorMessage" class="form-alert" />
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @keyup.enter="handleLogin">
@@ -31,6 +31,7 @@ import { loginApi } from '@/api/modules/auth'
 import AuthShell from '@/components/AuthShell.vue'
 import { normalizeReturnUrl } from '@/router/returnUrl'
 import { useAuthStore } from '@/stores/auth'
+import { productErrorMessage, unexpectedErrorMessage } from '@/utils/productError'
 
 const router = useRouter()
 const route = useRoute()
@@ -58,14 +59,14 @@ async function handleLogin() {
     const result = await loginApi({ login: form.login.trim(), password: form.password })
     if (!result.success || !result.data) {
       errorTitle.value = '登录失败'
-      errorMessage.value = result.message || '用户名或密码不正确。'
+      errorMessage.value = productErrorMessage(result, '用户名或密码不正确。')
       return
     }
     authStore.setAuth(result.data)
     await router.push(normalizeReturnUrl(route.query.returnUrl))
   } catch (error: any) {
     errorTitle.value = '暂时无法登录'
-    errorMessage.value = error.message || '请检查网络连接后重试。'
+    errorMessage.value = unexpectedErrorMessage(error, '暂时无法登录，请稍后重试。')
   } finally {
     loading.value = false
   }

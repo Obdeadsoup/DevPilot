@@ -4,8 +4,8 @@
       <template #header>
         <div class="card-header">
           <div>
-            <h2>GitHub Issue 快照 (GET .../github/issues)</h2>
-            <span class="sub-text">Project ID: {{ projectId }}</span>
+            <h2>GitHub Issues</h2>
+            <span class="sub-text">同步到当前项目的问题快照</span>
           </div>
           <el-button @click="fetchData">刷新列表</el-button>
         </div>
@@ -18,7 +18,7 @@
               <el-tag type="info">#{{ row.number }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="title" label="标题 (Title)" min-width="200">
+          <el-table-column prop="title" label="标题" min-width="200">
             <template #default="{ row }">
               <router-link
                 :to="`/workspaces/${workspaceId}/projects/${projectId}/github/issues/${row.id}`"
@@ -33,7 +33,7 @@
               <StatusBadge :status="row.state" type="issue" />
             </template>
           </el-table-column>
-          <el-table-column prop="authorLogin" label="提办人 (Author)" width="140">
+          <el-table-column prop="authorLogin" label="发起人" width="140">
             <template #default="{ row }">
               <code>@{{ row.authorLogin }}</code>
             </template>
@@ -47,7 +47,7 @@
                 size="small"
                 @click="$router.push(`/workspaces/${workspaceId}/projects/${projectId}/github/issues/${row.id}`)"
               >
-                查看快照详情
+                查看详情
               </el-button>
             </template>
           </el-table-column>
@@ -65,7 +65,7 @@
           />
         </div>
 
-        <RawJsonPanel :data="rawJson" title="GET .../github/issues 原始响应" />
+        <RawJsonPanel :data="rawJson" title="技术详情" />
       </PageState>
     </el-card>
   </div>
@@ -79,6 +79,7 @@ import type { GitHubIssue } from '@/types/api'
 import StatusBadge from '@/components/StatusBadge.vue'
 import PageState from '@/components/PageState.vue'
 import RawJsonPanel from '@/components/RawJsonPanel.vue'
+import { productErrorMessage, unexpectedErrorMessage } from '@/utils/productError'
 
 const route = useRoute()
 const workspaceId = Number(route.params.workspaceId)
@@ -107,11 +108,11 @@ async function fetchData() {
       total.value = res.data.total || 0
     } else {
       hasError.value = true
-      errorMsg.value = res.message || '获取 Issue 列表失败'
+      errorMsg.value = productErrorMessage(res, '暂时无法加载 GitHub Issues，请稍后重试。')
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     hasError.value = true
-    errorMsg.value = err.message || '网络连接失败'
+    errorMsg.value = unexpectedErrorMessage(err, '暂时无法加载 GitHub Issues，请稍后重试。')
   } finally {
     loading.value = false
   }

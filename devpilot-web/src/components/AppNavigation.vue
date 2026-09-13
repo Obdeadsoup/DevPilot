@@ -6,14 +6,10 @@
     </el-menu-item>
 
     <template v-if="scopeStore.currentWorkspaceId">
-      <el-menu-item-group title="WORKSPACE">
+      <el-menu-item-group title="工作区">
         <el-menu-item :index="workspacePath('/projects')">
           <el-icon><Folder /></el-icon>
           <span>项目</span>
-        </el-menu-item>
-        <el-menu-item :index="workspacePath('/audit-logs')">
-          <el-icon><Postcard /></el-icon>
-          <span>审计记录</span>
         </el-menu-item>
       </el-menu-item-group>
     </template>
@@ -30,7 +26,7 @@
         </el-menu-item>
         <el-menu-item :index="projectPath('/repositories')">
           <el-icon><Connection /></el-icon>
-          <span>Repository</span>
+          <span>GitHub 仓库</span>
         </el-menu-item>
         <el-menu-item :index="projectPath('/activities')">
           <el-icon><List /></el-icon>
@@ -48,10 +44,6 @@
           <el-icon><MagicStick /></el-icon>
           <span>Agent</span>
         </el-menu-item>
-        <el-menu-item :index="projectPath('/operations')">
-          <el-icon><Tools /></el-icon>
-          <span>运行恢复</span>
-        </el-menu-item>
       </el-menu-item-group>
     </template>
 
@@ -59,13 +51,28 @@
       <el-icon><Bell /></el-icon>
       <span>通知</span>
     </el-menu-item>
+
+    <el-sub-menu v-if="scopeStore.currentWorkspaceId" index="administration">
+      <template #title>
+        <el-icon><Setting /></el-icon>
+        <span>管理</span>
+      </template>
+      <el-menu-item :index="workspacePath('/audit-logs')">
+        <el-icon><Postcard /></el-icon>
+        <span>审计记录</span>
+      </el-menu-item>
+      <el-menu-item v-if="scopeStore.currentProjectId" :index="projectPath('/operations')">
+        <el-icon><Tools /></el-icon>
+        <span>运行恢复</span>
+      </el-menu-item>
+    </el-sub-menu>
   </el-menu>
 </template>
 
 <script setup lang="ts">
 import { useRoute } from 'vue-router'
 import { useScopeStore } from '@/stores/scope'
-import { Bell, Checked, Connection, DataLine, Document, Folder, Grid, List, MagicStick, Postcard, Tools } from '@element-plus/icons-vue'
+import { Bell, Checked, Connection, DataLine, Document, Folder, Grid, List, MagicStick, Postcard, Setting, Tools } from '@element-plus/icons-vue'
 
 defineEmits<{ navigate: [] }>()
 

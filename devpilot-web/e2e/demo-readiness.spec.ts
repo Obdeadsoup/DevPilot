@@ -97,6 +97,9 @@ async function mockApi(page: Page, options: { workspaceStatus?: number; projectS
     }
     if (path === '/api/v1/auth/logout') return fulfillJson(route, envelope(null))
     if (path === '/api/v1/notifications/unread-count') return fulfillJson(route, envelope({ count: 0 }))
+    if (path === '/api/v1/notifications') {
+      return fulfillJson(route, envelope({ page: 1, size: 20, total: 0, items: [] }))
+    }
     if (path === '/api/v1/notifications/stream') {
       return route.fulfill({ status: 200, contentType: 'text/event-stream', body: ': connected\n\n' })
     }
@@ -134,6 +137,15 @@ async function mockApi(page: Page, options: { workspaceStatus?: number; projectS
           updatedAt: '2026-09-12T09:00:00Z',
         }],
       }))
+    }
+    if (path === '/api/v1/workspaces/1/projects/10/activities') {
+      return fulfillJson(route, envelope({ page: 1, size: 20, total: 0, items: [] }))
+    }
+    if (path === '/api/v1/workspaces/1/projects/10/github/issues') {
+      return fulfillJson(route, envelope({ page: 1, size: 20, total: 0, items: [] }))
+    }
+    if (path === '/api/v1/workspaces/1/projects/10/github/pull-requests') {
+      return fulfillJson(route, envelope({ page: 1, size: 20, total: 0, items: [] }))
     }
     if (path === '/api/v1/workspaces/1/projects/10/github-repositories') {
       return fulfillJson(route, envelope({ page: 1, size: 20, total: repositories.length, items: repositories }))
@@ -187,6 +199,8 @@ test('deep-link refresh and browser history keep route scope authoritative', asy
   await mockApi(page)
   await page.goto('/workspaces/1/projects/10/tasks')
   await expect(page.getByRole('link', { name: 'Stabilize interview demo' })).toBeVisible()
+  await expect(page.locator('.el-table').getByText('进行中', { exact: true })).toBeVisible()
+  await expect(page.locator('.el-table').getByText('高', { exact: true })).toBeVisible()
 
   await page.reload()
   await expect(page.getByText('Platform Engineering', { exact: true })).toBeVisible()
@@ -195,7 +209,7 @@ test('deep-link refresh and browser history keep route scope authoritative', asy
     await page.screenshot({ path: '../docs/interview-demo-artifacts/authenticated-desktop.png', fullPage: true })
   }
 
-  await page.getByText('Repository', { exact: true }).click()
+  await page.getByText('GitHub 仓库', { exact: true }).click()
   await expect(page).toHaveURL('/workspaces/1/projects/10/repositories')
   await page.goBack()
   await expect(page).toHaveURL('/workspaces/1/projects/10/tasks')
@@ -255,8 +269,8 @@ test('Agent Run sends the selected repository binding and branch explicitly', as
   await expect(page.locator('.agent-run-view').getByText('acme/devpilot', { exact: true }).first()).toBeVisible()
   await page.locator('.agent-run-view .el-select').first().click()
   await page.getByRole('option', { name: /acme\/docs/ }).click()
-  await page.getByLabel('Agent 输入').fill('Summarize risk')
-  await page.getByRole('button', { name: '启动 Agent' }).click()
+  await page.getByLabel('请求内容').fill('Summarize risk')
+  await page.getByRole('button', { name: '启动运行' }).click()
 
   await expect.poll(() => submitted).toEqual({
     input: 'Summarize risk',
@@ -291,6 +305,54 @@ test('logout clears the session and returns to login', async ({ page }) => {
   await page.getByText('退出登录', { exact: true }).click()
   await expect(page).toHaveURL('/login')
   await expect(page.evaluate(() => sessionStorage.getItem('devpilot_access_token'))).resolves.toBeNull()
+})
+
+test('business pages do not render transport or endpoint copy', async ({ page }) => {
+  await seedSession(page)
+  await mockApi(page)
+
+  const businessPaths = [
+    '/workspaces',
+    '/workspaces/1/projects/10/tasks',
+    '/workspaces/1/projects/10/repositories',
+    '/workspaces/1/projects/10/activities',
+    '/workspaces/1/projects/10/github/issues',
+    '/workspaces/1/projects/10/github/pull-requests',
+    '/workspaces/1/projects/10/agent',
+    '/notifications',
+  ]
+
+  for (const path of businessPaths) {
+    await page.goto(path)
+    await expect(page.locator('.main-content')).toBeVisible()
+    const renderedText = await page.locator('body').innerText()
+    expect(renderedText, `${path} rendered a private endpoint`).not.toMatch(/\/api\/v1/i)
+    expect(renderedText, `${path} rendered an HTTP method and endpoint`).not.toMatch(/\b(?:GET|POST)\s+\/api/i)
+  }
+
+  await page.getByRole('button', { name: '打开账号菜单' }).click()
+  await page.getByText('开发者工具', { exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Developer console' })).toBeVisible()
+  await expect(page.getByText('/api/v1/github/webhooks', { exact: false })).toBeVisible()
+})
+
+test('business errors keep raw endpoint details out of the primary UI', async ({ page }) => {
+  await seedSession(page)
+  await mockApi(page)
+  await page.route('**/api/v1/workspaces/1/projects/10/github-repositories/31/sync/commits', route => (
+    fulfillJson(route, {
+      code: 'REPOSITORY_0409',
+      message: 'POST /api/v1/workspaces/1/projects/10/github-repositories/31/sync/commits returned 409',
+      data: null,
+    }, 409)
+  ))
+
+  await page.goto('/workspaces/1/projects/10/repositories')
+  await page.getByRole('button', { name: '同步提交' }).first().click()
+  await expect(page.getByText('内容已发生变化，请刷新后重试。', { exact: true })).toBeVisible()
+  const renderedText = await page.locator('body').innerText()
+  expect(renderedText).not.toContain('/api/v1')
+  expect(renderedText).not.toContain('HTTP 409')
 })
 
 test.describe('mobile shell', () => {

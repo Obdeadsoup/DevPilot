@@ -1,6 +1,6 @@
 <template>
   <el-tag :type="tagType" :effect="effect" size="small">
-    {{ status }}
+    {{ displayLabel }}
   </el-tag>
 </template>
 
@@ -14,6 +14,19 @@ const props = defineProps<{
 }>()
 
 const effect = 'light'
+
+const displayLabel = computed(() => {
+  const labels: Record<string, string> = {
+    ACTIVE: '启用', DISABLED: '已禁用', PLANNING: '规划中', ARCHIVED: '已归档',
+    PENDING: '等待中', RUNNING: '运行中', RETRY_WAIT: '等待重试', SUCCEEDED: '已完成', DEAD: '需处理',
+    OPEN: '开放', CLOSED: '已关闭', MERGED: '已合并', APPROVED: '已批准', COMMENTED: '已评论',
+    CHANGES_REQUESTED: '需修改', DISMISSED: '已撤销', BACKLOG: '待规划', TODO: '待处理',
+    IN_PROGRESS: '进行中', IN_REVIEW: '待审核', DONE: '已完成', CANCELED: '已取消', CANCELLED: '已取消',
+    LOW: '低', MEDIUM: '中', HIGH: '高', URGENT: '紧急', SUCCESS: '成功', FAILURE: '失败',
+    DENIED: '已拒绝', ACCEPTED: '已受理', REPLAYING: '恢复中', UP: '正常', DOWN: '异常',
+  }
+  return labels[props.status.toUpperCase()] || props.status
+})
 
 const tagType = computed(() => {
   const s = props.status.toUpperCase()
