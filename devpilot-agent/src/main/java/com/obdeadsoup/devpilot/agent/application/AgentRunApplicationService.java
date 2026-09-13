@@ -47,13 +47,18 @@ public class AgentRunApplicationService {
     /**
      * 提交 RUNNING 后启动异步流并立即返回初态；终态由 Coordinator callback 的另一短事务写入。
      */
-    public AgentRunView start(long workspaceId, long projectId, String input, String branchName) {
+    public AgentRunView start(long workspaceId, long projectId, String input,
+                              Long repositoryBindingId, String branchName) {
         long userId = currentUserProvider.requireUserId();
         authorizationService.requirePermission(userId, workspaceId, projectId, ProjectPermission.AGENT_PROPOSE);
         String normalizedInput = normalizeInput(input);
         String normalizedBranchName = normalizeBranchName(branchName);
+        if (repositoryBindingId == null && normalizedBranchName != null) {
+            throw new BusinessException(AgentRunErrorCode.INVALID_AGENT_INPUT);
+        }
         AgentRunCodeSnapshot codeSnapshot = repositoryBindingService
-                .resolveActiveBranchSnapshotForAgentRun(workspaceId, projectId, normalizedBranchName)
+                .resolveBranchSnapshotForAgentRun(
+                        workspaceId, projectId, repositoryBindingId, normalizedBranchName)
                 .map(this::toCodeSnapshot)
                 .orElseGet(AgentRunCodeSnapshot::none);
         AgentRunIdentity identity = identityFactory.create();
@@ -65,9 +70,9 @@ public class AgentRunApplicationService {
         return running;
     }
 
-    /** 兼容同进程旧调用方；HTTP 契约仍可省略 branchName 并回退 Repository defaultBranch。 */
+    /** 兼容不需要 Repository 上下文的同进程旧调用方；不会猜测项目内的 Binding。 */
     public AgentRunView start(long workspaceId, long projectId, String input) {
-        return start(workspaceId, projectId, input, null);
+        return start(workspaceId, projectId, input, null, null);
     }
 
     /** 查询始终携带 workspace/project scope，并复用 AGENT_READ 权限。 */
@@ -124,7 +129,14 @@ public class AgentRunApplicationService {
     }
 
     private String normalizeBranchName(String branchName) {
-        return branchName == null ? null : branchName.strip();
+        if (branchName == null) {
+            return null;
+        }
+        String normalized = branchName.strip();
+        if (normalized.isEmpty()) {
+            throw new BusinessException(AgentRunErrorCode.INVALID_AGENT_INPUT);
+        }
+        return normalized;
     }
 
     private AgentRunCodeSnapshot toCodeSnapshot(GitHubRepositoryBranchSnapshot snapshot) {

@@ -104,9 +104,10 @@ services:
     environment:
       AGENT_GRPC_HOST: 0.0.0.0
       AGENT_GRPC_PORT: 50051
-      # Full Stack 永远使用真实 Provider；fake 仅保留给自动化测试和显式 smoke。
-      AGENT_MODEL_MODE: deepseek
-      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?Set DEEPSEEK_API_KEY in .env}
+      # 默认使用真实 Provider；只有显式覆盖为 fake 时才进入可识别的离线/自动化路径。
+      AGENT_MODEL_MODE: ${AGENT_MODEL_MODE:-deepseek}
+      AGENT_FAKE_TOOL_NAME: ${AGENT_FAKE_TOOL_NAME:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
       DEEPSEEK_CONNECT_TIMEOUT_SECONDS: ${DEEPSEEK_CONNECT_TIMEOUT_SECONDS:-2}

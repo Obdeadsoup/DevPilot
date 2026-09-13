@@ -1,6 +1,7 @@
 # DevPilot Web 前端工程 (devpilot-web)
 
-DevPilot 项目的专用前端工程，基于 Vue 3 + TypeScript + Vite + Element Plus 构建，用于本地接口测试与开发联调。
+DevPilot 的用户入口，基于 Vue 3 + TypeScript + Vite + Element Plus 构建；开发诊断信息收纳在二级开发工具中，
+主路径聚焦 Workspace、Project、Repository、Task 与 Agent Run。
 
 ## 前置环境要求
 
@@ -33,6 +34,9 @@ npm run typecheck
 
 # 构建生产环境产物
 npm run build
+
+# Chrome 浏览器回归：登录回跳、深链作用域、Repository 选择、错误路由与移动端
+npm run test:e2e
 ```
 
 ---
@@ -79,6 +83,8 @@ server: {
 首次运行不再需要手工写入 `dp_user`。浏览器可通过 `/register` 创建本地 ACTIVE 用户，服务端使用现有 Spring
 `DelegatingPasswordEncoder` 写入 `{bcrypt}...` 密码 Hash；注册成功后跳转到 `/login`，登录支持用户名或邮箱。
 Access Token 统一由 Pinia Auth Store 保存于 `sessionStorage`，每次页面恢复都会请求 `/api/v1/auth/me` 复核，失效时清理本地状态并回到登录页。
+受保护深链会在登录/注册间保留安全的 app-relative `returnUrl`；路由参数是 Workspace/Project scope 的事实来源，
+刷新与前进/后退会重新校验并补齐导航上下文。无效 ID、403、404 和临时加载失败进入不同的明确页面，不猜测资源 ID。
 
 ---
 

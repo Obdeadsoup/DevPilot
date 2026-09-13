@@ -3,6 +3,10 @@ param()
 
 $ErrorActionPreference = "Stop"
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+$mode = if ($env:AGENT_MODEL_MODE) { $env:AGENT_MODEL_MODE } else { "deepseek" }
+& (Join-Path $PSScriptRoot "Test-DevPilotDemoPreflight.ps1") -Mode $mode
+if ($LASTEXITCODE -ne 0) { throw "Full Stack preflight failed." }
+
 Push-Location $repositoryRoot
 try {
     docker compose --profile full config --quiet

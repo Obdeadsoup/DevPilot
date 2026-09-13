@@ -12,6 +12,7 @@ from devpilot_agent_service.rpc.server import (
     create_application,
     create_server,
 )
+from devpilot_agent_service.runtime.context import RunContext
 
 
 def test_server_config_uses_safe_defaults_and_environment_overrides() -> None:
@@ -21,6 +22,7 @@ def test_server_config_uses_safe_defaults_and_environment_overrides() -> None:
             "AGENT_GRPC_HOST": "127.0.0.1",
             "AGENT_GRPC_PORT": "55051",
             "AGENT_MODEL_MODE": "FAKE",
+            "AGENT_FAKE_TOOL_NAME": "project.get_summary",
         }
     )
 
@@ -31,6 +33,7 @@ def test_server_config_uses_safe_defaults_and_environment_overrides() -> None:
     )
     assert overridden.bind_address == "127.0.0.1:55051"
     assert overridden.model_mode == "fake"
+    assert overridden.fake_tool_name == "project.get_summary"
 
 
 @pytest.mark.parametrize(
@@ -40,6 +43,7 @@ def test_server_config_uses_safe_defaults_and_environment_overrides() -> None:
         {"AGENT_GRPC_PORT": "0"},
         {"AGENT_GRPC_PORT": "65536"},
         {"AGENT_MODEL_MODE": "unknown"},
+        {"AGENT_MODEL_MODE": "fake", "AGENT_FAKE_TOOL_NAME": "unknown.tool"},
         {"AGENT_GRPC_HOST": " "},
     ],
 )
@@ -53,6 +57,37 @@ def test_fake_mode_is_deterministic_and_still_uses_agent_loop() -> None:
 
     assert result.final_answer == "fake:hello"
     assert len(result.trace) == 1
+
+
+def test_fake_tool_mode_exercises_remote_gateway_before_final_output(monkeypatch) -> None:
+    class FakeGatewayClient:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str]] = []
+            self.closed = False
+
+        def execute(self, context, call_id, name, arguments):
+            self.calls.append((context.run_id, name))
+            return {"project": "DP", "external_untrusted_content": True}
+
+        def close(self) -> None:
+            self.closed = True
+
+    client = FakeGatewayClient()
+    monkeypatch.setenv("DEVPILOT_AGENT_TOOL_SERVICE_KEY", "fake-test-service-key")
+    application = create_application(
+        RpcServerConfig(model_mode="fake", fake_tool_name="project.get_summary"),
+        tool_client_factory=lambda _config: client,
+    )
+    result = application.start_run(
+        "summarize",
+        run_context=RunContext("run-1", "request-1"),
+    )
+    application.close()
+
+    assert result.final_answer == "fake-tool:project.get_summary:ok"
+    assert [step.tool_names for step in result.trace] == [("project.get_summary",), ()]
+    assert client.calls == [("run-1", "project.get_summary")]
+    assert client.closed is True
 
 
 def test_server_bootstrap_registers_real_tcp_server() -> None:

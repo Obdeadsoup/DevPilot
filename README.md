@@ -87,8 +87,8 @@ sequenceDiagram
     participant J as Java Core
     participant P as Python Agent Runtime
     participant D as DeepSeek
-    B->>J: create AgentRun (Bearer Token)
-    J->>J: RBAC + freeze branch/commit + commit RUNNING
+    B->>J: create AgentRun (Bearer Token + explicit repository/branch)
+    J->>J: RBAC + validate binding + freeze branch/commit + commit RUNNING
     J-->>B: 202 + runId
     J->>P: gRPC StreamRun
     P->>D: model request
@@ -204,7 +204,7 @@ key、key version 与 rotation metadata；业务表仍只保存 credential ID/re
 ### Requirements
 
 - Docker Desktop / Docker Engine 与 Docker Compose
-- 一个真实的 DeepSeek API Key
+- 真实演示路径需要一个 DeepSeek API Key；确定性离线验收可显式使用 `AGENT_MODEL_MODE=fake`
 - GitHub Repository 集成时需要测试仓库的 fine-grained PAT 与独立 Webhook secret
 
 仅开发 Java Core 时仍可只启动基础设施：
@@ -234,7 +234,26 @@ DEEPSEEK_API_KEY=<real-key>
 
 `.env` 已排除版本控制，Dockerfile 也不会复制它；但 `docker compose config` 会展开环境变量，分享其输出前必须脱敏。
 
-### 2. 启动完整本地全栈
+### 2. 运行启动前检查
+
+预检只报告变量是否配置，不打印 Secret 值；同时检查 Docker Engine、端口占用和完整 Compose 配置。
+
+```powershell
+.\ops\fullstack\Test-DevPilotDemoPreflight.ps1
+```
+
+真实面试演示保持默认 `AGENT_MODEL_MODE=deepseek`。只有在明确说明“确定性测试/离线兜底”时，才使用：
+
+```powershell
+$env:AGENT_MODEL_MODE = "fake"
+$env:AGENT_FAKE_TOOL_NAME = "project.get_summary"
+.\ops\fullstack\Test-DevPilotDemoPreflight.ps1 -Mode fake
+```
+
+fake 模式会真实经过 Python AgentLoop、Java Tool Gateway、RBAC 与只读 Application Service，但不访问 LLM，
+不能作为 DeepSeek 已连通的证据。
+
+### 3. 启动完整本地全栈
 
 ```powershell
 docker compose --profile full up -d --build
@@ -242,9 +261,10 @@ docker compose --profile full ps
 ```
 
 `nacos-config-init` 会等待 Nacos Healthy，自动发布 `devpilot-core.yml` 和 `devpilot-gateway.yml` 后以 0 退出；Core 与
-Gateway 只有在配置发布成功后才启动。Full Profile 固定 `AGENT_MODEL_MODE=deepseek`，不会以 FakeModel 冒充完整部署。
+Gateway 只有在配置发布成功后才启动。Full Profile 默认使用 `deepseek`；运行日志会明确标记 real provider 或
+deterministic fake，避免把两类证据混为一谈。
 
-### 3. 入口与端口
+### 4. 入口与端口
 
 | 入口 | 默认地址 | 用途 |
 |---|---|---|
@@ -258,18 +278,28 @@ Gateway 只有在配置发布成功后才启动。Full Profile 固定 `AGENT_MOD
 
 Agent `:50051` 与 Java Tool Gateway `:50052` 仅暴露在 Compose 网络内。
 
-### 4. First-use workflow
+### 5. First-use workflow
 
 1. 在 Web 注册页申请验证码。
 2. 打开 Mailpit，读取 SMTP 收件箱中的真实验证码并完成注册。
 3. 登录并通过 `/auth/me` 验证会话，创建 Workspace 与 Project。
 4. 可选：用 ENV credential reference 绑定真实 GitHub 测试仓库，验证 metadata、Branch HEAD 与 API sync。
-5. 准备 Project/Task/Activity 后发起 Agent Run，观察 Tool lifecycle、SSE terminal 与历史权威状态。
+5. 准备 Project/Task/Activity 后，显式选择 Repository 与 Branch 再发起 Agent Run，观察 Tool lifecycle、SSE terminal 与历史权威状态。
 6. 通过真实业务动作检查 Outbox terminal、Notification DB 与 SSE delivery。
 
 容器 Healthy 只证明依赖就绪，不等于上述应用链路已经通过。
 
-### 5. GitHub Webhook 的公网 HTTPS
+完成账号与项目准备后，可用本地 Token 执行一条不会输出 Token 的分层 smoke：
+
+```powershell
+$env:DEVPILOT_SMOKE_ACCESS_TOKEN = "<local-session-token>"
+.\ops\fullstack\Invoke-DevPilotAgentSmoke.ps1 `
+  -WorkspaceId 1 -ProjectId 1 -RepositoryBindingId 1 -BranchName main
+```
+
+它通过 Web/Nginx → Gateway → Java Core 发起 Run，并验证 MySQL 权威投影、SSE、Python gRPC 与完整 Tool lifecycle。
+
+### 6. GitHub Webhook 的公网 HTTPS
 
 本地 Full Stack 可真实调用 GitHub API，但 GitHub.com 不能访问 localhost。完整 Webhook Internet E2E 需要部署域名、
 Cloudflare Tunnel 或 ngrok 等公网 HTTPS 入口，将 Webhook URL 指向：
@@ -280,7 +310,7 @@ https://<public-host>/api/v1/github/webhooks
 
 在 GitHub Delivery 页面确认真实请求获得 2xx。不要用本地伪 payload 代替这项验收，也不要把临时 tunnel 当作生产设计。
 
-### 6. 停止
+### 7. 停止
 
 ```powershell
 docker compose --profile full down

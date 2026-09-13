@@ -2,24 +2,20 @@
   <div class="project-list-container">
     <el-card>
       <template #header>
-        <div class="card-header">
-          <div>
-            <h2>项目列表 (GET /api/v1/workspaces/{workspaceId}/projects)</h2>
-            <span class="sub-text">Workspace ID: {{ workspaceId }}</span>
-          </div>
-          <div>
+        <PageHeader title="项目" description="聚合任务、仓库活动与 Agent 运行上下文。">
+          <template #actions>
             <el-button type="primary" @click="$router.push(`/workspaces/${workspaceId}/projects/new`)">
               创建项目
             </el-button>
             <el-button @click="fetchData">刷新</el-button>
-          </div>
-        </div>
+          </template>
+        </PageHeader>
       </template>
 
       <!-- Filter Controls -->
       <div class="filter-bar">
-        <el-form :inline="true">
-          <el-form-item label="状态 (status)">
+        <el-form class="filter-form" label-position="top">
+          <el-form-item label="状态">
             <el-select v-model="statusFilter" placeholder="全部状态" clearable style="width: 140px;" @change="handleFilterChange">
               <el-option label="PLANNING" value="PLANNING" />
               <el-option label="ACTIVE" value="ACTIVE" />
@@ -27,7 +23,7 @@
             </el-select>
           </el-form-item>
 
-          <el-form-item label="可见性 (visibility)">
+          <el-form-item label="可见性">
             <el-select v-model="visibilityFilter" placeholder="全部" clearable style="width: 140px;" @change="handleFilterChange">
               <el-option label="PRIVATE" value="PRIVATE" />
               <el-option label="INTERNAL" value="INTERNAL" />
@@ -42,7 +38,6 @@
         </template>
 
         <el-table :data="items" stripe style="width: 100%;">
-          <el-table-column prop="id" label="ID" width="80" />
           <el-table-column prop="projectKey" label="Project Key" width="130">
             <template #default="{ row }">
               <el-tag type="info" effect="plain">
@@ -61,11 +56,6 @@
           <el-table-column prop="status" label="状态" width="120">
             <template #default="{ row }">
               <StatusBadge :status="row.status" type="project" />
-            </template>
-          </el-table-column>
-          <el-table-column prop="version" label="Version" width="100">
-            <template #default="{ row }">
-              <code>v{{ row.version }}</code>
             </template>
           </el-table-column>
           <el-table-column prop="updatedAt" label="更新时间" min-width="160" />
@@ -93,7 +83,6 @@
           />
         </div>
 
-        <RawJsonPanel :data="rawJson" title="GET /api/v1/workspaces/{id}/projects 原始响应" />
       </PageState>
     </el-card>
   </div>
@@ -107,7 +96,7 @@ import { useScopeStore } from '@/stores/scope'
 import type { Project } from '@/types/api'
 import StatusBadge from '@/components/StatusBadge.vue'
 import PageState from '@/components/PageState.vue'
-import RawJsonPanel from '@/components/RawJsonPanel.vue'
+import PageHeader from '@/components/PageHeader.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -126,7 +115,6 @@ const page = ref(1)
 const size = ref(20)
 const total = ref(0)
 const items = ref<Project[]>([])
-const rawJson = ref<any>(null)
 
 async function fetchData() {
   loading.value = true
@@ -140,7 +128,6 @@ async function fetchData() {
       status: statusFilter.value || undefined,
       visibility: visibilityFilter.value || undefined,
     })
-    rawJson.value = res.rawJson
     if (res.success && res.data) {
       items.value = res.data.items || []
       total.value = res.data.total || 0
@@ -181,26 +168,14 @@ onMounted(() => {
   max-width: 1100px;
   margin: 0 auto;
 }
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.card-header h2 {
-  margin: 0;
-  font-size: 18px;
-  color: #303133;
-}
-.sub-text {
-  font-size: 12px;
-  color: #909399;
-}
 .filter-bar {
   margin-bottom: 16px;
   padding: 12px;
   background-color: #fafafa;
   border-radius: 6px;
 }
+.filter-form { display: grid; grid-template-columns: repeat(2, minmax(140px, 220px)); gap: 0 var(--space-4); }
+.filter-form :deep(.el-form-item) { margin-bottom: 0; }
 .pagination-bar {
   margin-top: 16px;
   display: flex;

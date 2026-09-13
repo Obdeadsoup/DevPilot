@@ -22,7 +22,8 @@ generated code 不承载手工业务逻辑，也不作为 Application Core DTO�
 
 `StreamRun` 已用于正式 Browser 链路：Java 提交 request/run/input，Python 以 Server Streaming 返回带严格
 sequence/eventId 的类型化生命周期事件。事件只含 step、tool name、final output 和稳定 failure kind；不承载
-reasoning、Prompt、Tool 参数/结果、Provider body 或凭据。`CancelRun` 仍保持 `UNIMPLEMENTED`。
+reasoning、Prompt、Tool 参数/结果、Provider body 或凭据。`CancelRun` 已实现：Java 取消权威 Run 后向 Python
+传播取消请求；重复取消与终态竞争由稳定状态语义收敛。
 
 `DevPilotToolGateway.ExecuteTool` 已形成 Python→Java 的 Unary v1 契约：Python 只提交
 `request_id/run_id/tool_call_id/tool_name/Struct arguments`，不提交 userId、Workspace、Project、角色或权限。

@@ -35,6 +35,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class GitHubRepositoryBindingServiceTest {
@@ -251,14 +252,14 @@ class GitHubRepositoryBindingServiceTest {
     @Test
     void resolvesExplicitAgentBranchToItsAuthoritativeHeadSnapshot() {
         GitHubRepositoryEntity active = binding("ACTIVE", 0, 123456L, "octo", "demo");
-        when(repositoryMapper.findActiveByProject(WORKSPACE_ID, PROJECT_ID)).thenReturn(Optional.of(active));
+        when(repositoryMapper.findByScope(WORKSPACE_ID, PROJECT_ID, BINDING_ID)).thenReturn(Optional.of(active));
         when(branchClient.listBranches("octo", "demo", API_REFERENCE)).thenReturn(List.of(
                 new GitHubBranch("main", "a".repeat(40)),
                 new GitHubBranch("agent", "b".repeat(40))
         ));
 
         GitHubRepositoryBranchSnapshot snapshot = service
-                .resolveActiveBranchSnapshotForAgentRun(WORKSPACE_ID, PROJECT_ID, "agent")
+                .resolveBranchSnapshotForAgentRun(WORKSPACE_ID, PROJECT_ID, BINDING_ID, "agent")
                 .orElseThrow();
 
         assertThat(snapshot.repositoryFullName()).isEqualTo("octo/demo");
@@ -269,12 +270,12 @@ class GitHubRepositoryBindingServiceTest {
     @Test
     void missingBranchFallsBackOnlyToBindingDefaultBranch() {
         GitHubRepositoryEntity active = binding("ACTIVE", 0, 123456L, "octo", "demo");
-        when(repositoryMapper.findActiveByProject(WORKSPACE_ID, PROJECT_ID)).thenReturn(Optional.of(active));
+        when(repositoryMapper.findByScope(WORKSPACE_ID, PROJECT_ID, BINDING_ID)).thenReturn(Optional.of(active));
         when(branchClient.listBranches("octo", "demo", API_REFERENCE)).thenReturn(List.of(
                 new GitHubBranch("main", "a".repeat(40)), new GitHubBranch("agent", "b".repeat(40))));
 
         GitHubRepositoryBranchSnapshot snapshot = service
-                .resolveActiveBranchSnapshotForAgentRun(WORKSPACE_ID, PROJECT_ID, null)
+                .resolveBranchSnapshotForAgentRun(WORKSPACE_ID, PROJECT_ID, BINDING_ID, null)
                 .orElseThrow();
 
         assertThat(snapshot.branchName()).isEqualTo("main");
@@ -284,12 +285,12 @@ class GitHubRepositoryBindingServiceTest {
     @Test
     void rejectsInvalidBranchInsteadOfSilentlyUsingDefaultBranch() {
         GitHubRepositoryEntity active = binding("ACTIVE", 0, 123456L, "octo", "demo");
-        when(repositoryMapper.findActiveByProject(WORKSPACE_ID, PROJECT_ID)).thenReturn(Optional.of(active));
+        when(repositoryMapper.findByScope(WORKSPACE_ID, PROJECT_ID, BINDING_ID)).thenReturn(Optional.of(active));
         when(branchClient.listBranches("octo", "demo", API_REFERENCE))
                 .thenReturn(List.of(new GitHubBranch("main", "a".repeat(40))));
 
-        assertThatThrownBy(() -> service.resolveActiveBranchSnapshotForAgentRun(
-                WORKSPACE_ID, PROJECT_ID, "this-branch-does-not-exist"
+        assertThatThrownBy(() -> service.resolveBranchSnapshotForAgentRun(
+                WORKSPACE_ID, PROJECT_ID, BINDING_ID, "this-branch-does-not-exist"
         )).isInstanceOfSatisfying(BusinessException.class,
                 exception -> assertThat(exception.errorCode()).isEqualTo(GitHubRepositoryErrorCode.GITHUB_BRANCH_NOT_FOUND));
     }
@@ -297,14 +298,47 @@ class GitHubRepositoryBindingServiceTest {
     @Test
     void mapsGitHubBranchReadFailureToStableBusinessError() {
         GitHubRepositoryEntity active = binding("ACTIVE", 0, 123456L, "octo", "demo");
-        when(repositoryMapper.findActiveByProject(WORKSPACE_ID, PROJECT_ID)).thenReturn(Optional.of(active));
+        when(repositoryMapper.findByScope(WORKSPACE_ID, PROJECT_ID, BINDING_ID)).thenReturn(Optional.of(active));
         when(branchClient.listBranches("octo", "demo", API_REFERENCE)).thenThrow(new GitHubApiException(
                 GitHubApiFailureType.NETWORK_ERROR, true, null, null, "safe", null, null
         ));
 
-        assertThatThrownBy(() -> service.resolveActiveBranchSnapshotForAgentRun(WORKSPACE_ID, PROJECT_ID, "main"))
+        assertThatThrownBy(() -> service.resolveBranchSnapshotForAgentRun(
+                WORKSPACE_ID, PROJECT_ID, BINDING_ID, "main"))
                 .isInstanceOfSatisfying(BusinessException.class,
                         exception -> assertThat(exception.errorCode()).isEqualTo(GitHubRepositoryErrorCode.GITHUB_API_UNAVAILABLE));
+    }
+
+    @Test
+    void noBindingIdMeansNoRepositoryContextEvenWhenProjectHasActiveBindings() {
+        assertThat(service.resolveBranchSnapshotForAgentRun(
+                WORKSPACE_ID, PROJECT_ID, null, null)).isEmpty();
+        verifyNoInteractions(repositoryMapper, branchClient);
+    }
+
+    @Test
+    void rejectsBindingOutsideRequestedProject() {
+        when(repositoryMapper.findByScope(WORKSPACE_ID, PROJECT_ID, BINDING_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.resolveBranchSnapshotForAgentRun(
+                WORKSPACE_ID, PROJECT_ID, BINDING_ID, "main"))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.errorCode())
+                                .isEqualTo(GitHubRepositoryErrorCode.REPOSITORY_BINDING_NOT_FOUND));
+        verifyNoInteractions(branchClient);
+    }
+
+    @Test
+    void rejectsDisabledBinding() {
+        when(repositoryMapper.findByScope(WORKSPACE_ID, PROJECT_ID, BINDING_ID))
+                .thenReturn(Optional.of(binding("DISABLED", 0, 123456L, "octo", "demo")));
+
+        assertThatThrownBy(() -> service.resolveBranchSnapshotForAgentRun(
+                WORKSPACE_ID, PROJECT_ID, BINDING_ID, "main"))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.errorCode())
+                                .isEqualTo(GitHubRepositoryErrorCode.REPOSITORY_BINDING_DISABLED));
+        verifyNoInteractions(branchClient);
     }
 
     private GitHubRepositoryEntity binding(

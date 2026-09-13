@@ -3,7 +3,7 @@
 import time
 from collections.abc import Callable, Sequence
 
-from devpilot_agent_service.model.types import ModelResponse
+from devpilot_agent_service.model.types import ModelResponse, ToolCall
 from devpilot_agent_service.runtime.agent_loop import AgentLoop, RunResult
 from devpilot_agent_service.runtime.cancellation import CancellationToken
 from devpilot_agent_service.runtime.context import RunContext
@@ -44,12 +44,13 @@ class AgentRuntimeApplication:
 
 
 class DeterministicFakeModel:
-    """跨语言 smoke 专用的无网络 Model；固定返回最后一条 User Message。"""
+    """跨语言 smoke 专用的无网络 Model；可选地强制经过一次只读 Tool。"""
 
-    def __init__(self, delay_seconds: float = 0.0) -> None:
+    def __init__(self, delay_seconds: float = 0.0, tool_name: str | None = None) -> None:
         if delay_seconds < 0:
             raise ValueError("fake model delay must not be negative")
         self._delay_seconds = delay_seconds
+        self._tool_name = tool_name
 
     def generate(
         self,
@@ -64,4 +65,13 @@ class DeterministicFakeModel:
         ]
         if not user_messages:
             raise ValueError("fake model requires a user message")
+        if self._tool_name and not any(
+            message.role is MessageRole.TOOL for message in messages
+        ):
+            arguments = {} if self._tool_name == "project.get_summary" else {"limit": 5}
+            return ModelResponse.request_tools(
+                [ToolCall("fake-tool-call-1", self._tool_name, arguments)]
+            )
+        if self._tool_name:
+            return ModelResponse.final(f"fake-tool:{self._tool_name}:ok")
         return ModelResponse.final(f"fake:{user_messages[-1]}")

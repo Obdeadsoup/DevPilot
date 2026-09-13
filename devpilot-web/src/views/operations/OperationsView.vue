@@ -165,7 +165,6 @@ import {
   listDeadGitHubSyncRunsApi,
   replayGitHubSyncRunApi,
 } from '@/api/modules/operations'
-import { useScopeStore } from '@/stores/scope'
 import type { DeadOutboxEventResponse, DeadGitHubSyncRunResponse } from '@/types/operations'
 import PageState from '@/components/PageState.vue'
 import RawJsonPanel from '@/components/RawJsonPanel.vue'
@@ -173,10 +172,9 @@ import ConflictDialog from '@/components/ConflictDialog.vue'
 import ReplayDialog from '@/components/operations/ReplayDialog.vue'
 
 const route = useRoute()
-const scopeStore = useScopeStore()
 
-const workspaceId = Number(route.params.workspaceId || scopeStore.currentWorkspaceId || 1)
-const projectId = Number(route.params.projectId || scopeStore.currentProjectId || 1)
+const workspaceId = Number(route.params.workspaceId)
+const projectId = Number(route.params.projectId)
 
 const activeTab = ref<'outbox' | 'sync'>('outbox')
 
