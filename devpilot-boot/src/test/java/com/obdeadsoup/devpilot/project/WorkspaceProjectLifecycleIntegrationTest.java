@@ -280,6 +280,111 @@ class WorkspaceProjectLifecycleIntegrationTest {
     }
 
     @Test
+    void invitedUserCanDiscoverAndAcceptOwnInvitationWithoutPrematureWorkspaceAccess() throws Exception {
+        mockMvc.perform(post("/api/v1/workspaces/" + WORKSPACE_ID + "/members/invitations")
+                        .with(authentication(testAuthentication(OWNER_ID, "owner")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"outsider@example.com","role":"VIEWER"}
+                                """))
+                .andExpect(status().isOk());
+
+        assertThat(membershipStatus(WORKSPACE_ID, OUTSIDER_ID)).isEqualTo("INVITED");
+        assertThat(membershipVersion(WORKSPACE_ID, OUTSIDER_ID)).isZero();
+
+        mockMvc.perform(get("/api/v1/me/workspace-invitations")
+                        .with(authentication(testAuthentication(OUTSIDER_ID, "outsider"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].workspaceId").value(WORKSPACE_ID))
+                .andExpect(jsonPath("$.data[0].workspaceName").value("main-workspace"))
+                .andExpect(jsonPath("$.data[0].workspaceSlug").value("main-workspace"))
+                .andExpect(jsonPath("$.data[0].role").value("VIEWER"))
+                .andExpect(jsonPath("$.data[0].status").value("INVITED"))
+                .andExpect(jsonPath("$.data[0].invitedBy").value(OWNER_ID))
+                .andExpect(jsonPath("$.data[0].version").value(0));
+
+        mockMvc.perform(get("/api/v1/me/workspace-invitations")
+                        .with(authentication(testAuthentication(MEMBER_ID, "member"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(0));
+
+        mockMvc.perform(get("/api/v1/workspaces/" + WORKSPACE_ID)
+                        .with(authentication(testAuthentication(OUTSIDER_ID, "outsider"))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("IDENTITY_0404"));
+        mockMvc.perform(get("/api/v1/workspaces")
+                        .with(authentication(testAuthentication(OUTSIDER_ID, "outsider"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.total").value(0));
+
+        mockMvc.perform(post("/api/v1/workspaces/" + WORKSPACE_ID + "/members/invitations/accept")
+                        .with(authentication(testAuthentication(OUTSIDER_ID, "outsider")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"expectedVersion\":99}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("IDENTITY_0502"));
+
+        mockMvc.perform(post("/api/v1/workspaces/" + WORKSPACE_ID + "/members/invitations/accept")
+                        .with(authentication(testAuthentication(MEMBER_ID, "member")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"expectedVersion\":0}"))
+                .andExpect(status().isConflict());
+        mockMvc.perform(post("/api/v1/workspaces/" + WORKSPACE_ID + "/members/invitations/reject")
+                        .with(authentication(testAuthentication(MEMBER_ID, "member")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"expectedVersion\":0}"))
+                .andExpect(status().isConflict());
+        assertThat(membershipStatus(WORKSPACE_ID, OUTSIDER_ID)).isEqualTo("INVITED");
+
+        mockMvc.perform(post("/api/v1/workspaces/" + WORKSPACE_ID + "/members/invitations/accept")
+                        .with(authentication(testAuthentication(OUTSIDER_ID, "outsider")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"expectedVersion\":0}"))
+                .andExpect(status().isOk());
+
+        assertThat(membershipStatus(WORKSPACE_ID, OUTSIDER_ID)).isEqualTo("ACTIVE");
+        assertThat(membershipVersion(WORKSPACE_ID, OUTSIDER_ID)).isEqualTo(1L);
+        mockMvc.perform(get("/api/v1/me/workspace-invitations")
+                        .with(authentication(testAuthentication(OUTSIDER_ID, "outsider"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(0));
+        mockMvc.perform(get("/api/v1/workspaces")
+                        .with(authentication(testAuthentication(OUTSIDER_ID, "outsider"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.items[0].id").value(WORKSPACE_ID));
+    }
+
+    @Test
+    void invitedUserCanRejectAndInvitationNeverAppearsAsWorkspace() throws Exception {
+        mockMvc.perform(post("/api/v1/workspaces/" + WORKSPACE_ID + "/members/invitations")
+                        .with(authentication(testAuthentication(OWNER_ID, "owner")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"outsider@example.com","role":"MEMBER"}
+                                """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/workspaces/" + WORKSPACE_ID + "/members/invitations/reject")
+                        .with(authentication(testAuthentication(OUTSIDER_ID, "outsider")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"expectedVersion\":0}"))
+                .andExpect(status().isOk());
+
+        assertThat(membershipStatus(WORKSPACE_ID, OUTSIDER_ID)).isEqualTo("REJECTED");
+        assertThat(membershipVersion(WORKSPACE_ID, OUTSIDER_ID)).isEqualTo(1L);
+        mockMvc.perform(get("/api/v1/me/workspace-invitations")
+                        .with(authentication(testAuthentication(OUTSIDER_ID, "outsider"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(0));
+        mockMvc.perform(get("/api/v1/workspaces")
+                        .with(authentication(testAuthentication(OUTSIDER_ID, "outsider"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.total").value(0));
+    }
+
+    @Test
     void internalProjectIsVisibleAndReadableToActiveWorkspaceMember() throws Exception {
         mockMvc.perform(get(projectPath(INTERNAL_PROJECT_ID))
                         .with(authentication(testAuthentication(MEMBER_ID, "member"))))
@@ -343,6 +448,10 @@ class WorkspaceProjectLifecycleIntegrationTest {
     @Test
     void unauthenticatedLifecycleEndpointReturnsJson401() throws Exception {
         mockMvc.perform(get(projectCollectionPath()))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("IDENTITY_0401"));
+
+        mockMvc.perform(get("/api/v1/me/workspace-invitations"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("IDENTITY_0401"));
     }
@@ -562,6 +671,20 @@ class WorkspaceProjectLifecycleIntegrationTest {
                 SELECT role FROM dp_project_member
                 WHERE project_id = ? AND user_id = ?
                 """, String.class, projectId, userId);
+    }
+
+    private String membershipStatus(long workspaceId, long userId) {
+        return jdbcTemplate.queryForObject("""
+                SELECT status FROM dp_workspace_member
+                WHERE workspace_id = ? AND user_id = ?
+                """, String.class, workspaceId, userId);
+    }
+
+    private long membershipVersion(long workspaceId, long userId) {
+        return jdbcTemplate.queryForObject("""
+                SELECT version FROM dp_workspace_member
+                WHERE workspace_id = ? AND user_id = ?
+                """, Long.class, workspaceId, userId);
     }
 
     private int activityCount(String deliveryId) {

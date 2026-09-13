@@ -103,6 +103,7 @@ async function mockApi(page: Page, options: { workspaceStatus?: number; projectS
     if (path === '/api/v1/notifications/stream') {
       return route.fulfill({ status: 200, contentType: 'text/event-stream', body: ': connected\n\n' })
     }
+    if (path === '/api/v1/me/workspace-invitations') return fulfillJson(route, envelope([]))
     if (path === '/api/v1/workspaces/1') {
       if (options.workspaceStatus) {
         return fulfillJson(route, { code: 'AUTH_0403', message: 'Forbidden', data: null }, options.workspaceStatus)
@@ -165,6 +166,104 @@ async function mockApi(page: Page, options: { workspaceStatus?: number; projectS
     return fulfillJson(route, envelope(null))
   })
 }
+
+test('owner invite becomes invitee pending invitation and accepted workspace', async ({ page }) => {
+  await seedSession(page)
+  const invitedUser = { id: 8, username: 'member', email: 'member@example.com', displayName: 'Invited Member' }
+  let currentUser = user
+  let membership: null | {
+    workspaceId: number
+    userId: number
+    role: 'MEMBER'
+    status: 'INVITED' | 'ACTIVE'
+    invitedBy: number
+    version: number
+  } = null
+
+  await page.route('**/actuator/health', route => fulfillJson(route, { status: 'UP' }))
+  await page.route('**/api/v1/**', async route => {
+    const request = route.request()
+    const path = new URL(request.url()).pathname
+
+    if (path === '/api/v1/auth/me') return fulfillJson(route, envelope(currentUser))
+    if (path === '/api/v1/notifications/unread-count') return fulfillJson(route, envelope({ count: 0 }))
+    if (path === '/api/v1/notifications/stream') {
+      return route.fulfill({ status: 200, contentType: 'text/event-stream', body: ': connected\n\n' })
+    }
+    if (path === '/api/v1/workspaces/1' && request.method() === 'GET') {
+      return fulfillJson(route, envelope(workspace))
+    }
+    if (path === '/api/v1/workspaces/1/members' && request.method() === 'GET') {
+      return fulfillJson(route, envelope(membership ? [{
+        id: 41,
+        userId: membership.userId,
+        role: membership.role,
+        status: membership.status,
+        invitedBy: membership.invitedBy,
+        joinedAt: membership.status === 'ACTIVE' ? '2026-09-14T10:00:00Z' : null,
+        version: membership.version,
+      }] : []))
+    }
+    if (path === '/api/v1/workspaces/1/members/invitations' && request.method() === 'POST') {
+      const body = request.postDataJSON() as { email: string; role: string }
+      expect(currentUser.id).toBe(user.id)
+      expect(body).toEqual({ email: invitedUser.email, role: 'MEMBER' })
+      membership = {
+        workspaceId: workspace.id,
+        userId: invitedUser.id,
+        role: 'MEMBER',
+        status: 'INVITED',
+        invitedBy: user.id,
+        version: 0,
+      }
+      return fulfillJson(route, envelope(null))
+    }
+    if (path === '/api/v1/me/workspace-invitations') {
+      const invitations = currentUser.id === invitedUser.id && membership?.status === 'INVITED'
+        ? [{
+            workspaceId: workspace.id,
+            workspaceName: workspace.name,
+            workspaceSlug: workspace.slug,
+            role: membership.role,
+            status: membership.status,
+            invitedBy: membership.invitedBy,
+            version: membership.version,
+          }]
+        : []
+      return fulfillJson(route, envelope(invitations))
+    }
+    if (path === '/api/v1/workspaces/1/members/invitations/accept' && request.method() === 'POST') {
+      const body = request.postDataJSON() as { expectedVersion: number }
+      if (currentUser.id !== invitedUser.id || membership?.status !== 'INVITED' || membership.version !== body.expectedVersion) {
+        return fulfillJson(route, { code: 'IDENTITY_0502', message: 'Membership version conflict', data: null }, 409)
+      }
+      membership = { ...membership, status: 'ACTIVE', version: membership.version + 1 }
+      return fulfillJson(route, envelope(null))
+    }
+    if (path === '/api/v1/workspaces') {
+      const canSeeWorkspace = currentUser.id === user.id || membership?.status === 'ACTIVE'
+      const items = canSeeWorkspace ? [workspace] : []
+      return fulfillJson(route, envelope({ page: 1, size: 20, total: items.length, items }))
+    }
+    return fulfillJson(route, envelope(null))
+  })
+
+  await page.goto('/workspaces/1')
+  await page.getByLabel('已注册邮箱').fill(invitedUser.email)
+  await page.getByRole('button', { name: '发送邀请' }).click()
+  await expect(page.getByText('邀请已创建，等待对方接受')).toBeVisible()
+  expect(membership).toMatchObject({ userId: invitedUser.id, status: 'INVITED', version: 0 })
+
+  currentUser = invitedUser
+  await page.goto('/workspaces')
+  const invitationRow = page.getByRole('row').filter({ hasText: workspace.name })
+  await expect(invitationRow).toContainText('成员')
+  await invitationRow.getByRole('button', { name: '接受' }).click()
+
+  await expect(page.getByText('暂无待处理邀请')).toBeVisible()
+  await expect(page.getByRole('row').filter({ hasText: workspace.name })).toContainText(workspace.slug)
+  expect(membership).toMatchObject({ status: 'ACTIVE', version: 1 })
+})
 
 test('login preserves an authenticated project deep link', async ({ page }) => {
   await mockApi(page)

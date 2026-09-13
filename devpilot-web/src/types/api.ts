@@ -133,6 +133,16 @@ export interface WorkspaceMember {
   version: number
 }
 
+export interface WorkspaceInvitation {
+  workspaceId: number
+  workspaceName: string
+  workspaceSlug: string
+  role: WorkspaceMember['role']
+  status: 'INVITED'
+  invitedBy: number
+  version: number
+}
+
 export interface CreateWorkspaceRequest {
   name: string
   slug: string
