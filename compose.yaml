@@ -1,5 +1,12 @@
 name: devpilot
 
+x-devpilot-build-proxy: &devpilot-build-proxy
+  HTTP_PROXY: ${DEVPILOT_BUILD_HTTP_PROXY:-}
+  HTTPS_PROXY: ${DEVPILOT_BUILD_HTTPS_PROXY:-}
+  NO_PROXY: ${DEVPILOT_BUILD_NO_PROXY:-localhost,127.0.0.1,::1}
+  DEVPILOT_MAVEN_PROXY_HOST: ${DEVPILOT_MAVEN_PROXY_HOST:-}
+  DEVPILOT_MAVEN_PROXY_PORT: ${DEVPILOT_MAVEN_PROXY_PORT:-}
+
 services:
   mysql:
     image: mysql:8.4
@@ -99,6 +106,7 @@ services:
     build:
       context: ./agent-service
       dockerfile: Dockerfile
+      args: *devpilot-build-proxy
     image: devpilot-agent-service:local
     restart: unless-stopped
     environment:
@@ -137,6 +145,7 @@ services:
     build:
       context: .
       dockerfile: ops/docker/core.Dockerfile
+      args: *devpilot-build-proxy
     image: devpilot-core:local
     restart: unless-stopped
     environment:
@@ -200,6 +209,7 @@ services:
     build:
       context: .
       dockerfile: ops/docker/gateway.Dockerfile
+      args: *devpilot-build-proxy
     image: devpilot-gateway:local
     restart: unless-stopped
     environment:
@@ -228,6 +238,7 @@ services:
     build:
       context: ./devpilot-web
       dockerfile: Dockerfile
+      args: *devpilot-build-proxy
     image: devpilot-web:local
     restart: unless-stopped
     ports:
