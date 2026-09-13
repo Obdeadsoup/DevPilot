@@ -76,19 +76,22 @@ public class GitHubRepositoryBindingService {
     /**
      * 为已通过 AGENT_PROPOSE 授权的 Run 解析 ACTIVE Repository 的代码快照。
      *
-     * <p>没有 ACTIVE Binding 时返回 empty，保持原有无 GitHub 上下文的 Agent Run 能力；请求显式
-     * branch 时不会回退到默认分支，只有 branchName 缺失才使用 Binding 的 defaultBranch。commit SHA
+     * <p>调用方没有提供 Binding ID 时返回 empty，保持无 GitHub 上下文的 Agent Run 能力且不猜测项目仓库；
+     * 请求显式 branch 时不会回退到默认分支，只有 branchName 缺失才使用 Binding 的 defaultBranch。commit SHA
      * 在此刻解析并由调用方冻结，后续 Tool Gateway 不会重新读取 branch HEAD。</p>
      */
     @Transactional(readOnly = true)
-    public Optional<GitHubRepositoryBranchSnapshot> resolveActiveBranchSnapshotForAgentRun(
-            long workspaceId, long projectId, String requestedBranchName
+    public Optional<GitHubRepositoryBranchSnapshot> resolveBranchSnapshotForAgentRun(
+            long workspaceId, long projectId, Long bindingId, String requestedBranchName
     ) {
-        Optional<GitHubRepositoryEntity> activeBinding = repositoryMapper.findActiveByProject(workspaceId, projectId);
-        if (activeBinding.isEmpty()) {
+        if (bindingId == null) {
             return Optional.empty();
         }
-        GitHubRepositoryEntity binding = activeBinding.get();
+        GitHubRepositoryEntity binding = requireBinding(workspaceId, projectId, bindingId);
+        requireKnownStatus(binding);
+        if (!GitHubRepositoryStatus.ACTIVE.name().equals(binding.bindingStatus())) {
+            throw new BusinessException(GitHubRepositoryErrorCode.REPOSITORY_BINDING_DISABLED);
+        }
         String branchName = requestedBranchName == null ? binding.defaultBranch() : requestedBranchName;
         GitHubBranch branch = listBranches(binding).stream()
                 .filter(candidate -> candidate.name().equals(branchName))

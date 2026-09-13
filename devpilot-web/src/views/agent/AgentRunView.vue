@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <div>
-            <span>Agent Run</span>
+            <span>项目 Agent</span>
             <el-tag v-if="run" :type="statusTagType(run.status)" effect="dark" style="margin-left: 10px;">
               {{ run.status }}
             </el-tag>
@@ -16,17 +16,35 @@
       <el-alert
         type="info"
         :closable="false"
-        title="请求会发送至 Java Core；Java 再通过既有 gRPC 调用 Python Agent。浏览器不会直接访问 Python 服务。"
+        title="仓库上下文必须由你明确选择；运行时使用已授权的只读工具，写操作只生成待人工确认的 Proposal，并冻结 Branch 与 Commit SHA。"
         style="margin-bottom: 20px;"
       />
 
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
-        <el-form-item label="Repository">
-          <span v-if="repositoryLoading">正在加载 GitHub Repository…</span>
-          <code v-else-if="repositoryBinding">{{ repositoryBinding.fullName }}</code>
-          <span v-else>当前项目尚未绑定 GitHub Repository</span>
+        <el-form-item label="Repository 上下文">
+          <el-select
+            v-model="selectedRepositoryId"
+            placeholder="选择运行上下文"
+            :loading="repositoryLoading"
+            :disabled="repositoryLoading || isRunActive"
+            style="width: 100%;"
+            @change="selectRepository"
+          >
+            <el-option
+              v-for="repository in repositories"
+              :key="repository.id"
+              :label="repository.fullName"
+              :value="repository.id"
+            >
+              <span>{{ repository.fullName }}</span>
+              <span class="branch-option-sha">{{ repository.defaultBranch }}</span>
+            </el-option>
+          </el-select>
+          <div v-if="!repositoryLoading && repositories.length === 0" class="field-hint">
+            当前项目没有 ACTIVE Repository；本次 Run 将不附带代码上下文。
+          </div>
         </el-form-item>
-        <el-form-item label="Branch">
+        <el-form-item label="Branch 快照">
           <el-select v-model="selectedBranch" placeholder="选择 Branch" :loading="branchesLoading"
             :disabled="!repositoryBinding || branchesLoading || Boolean(branchesError) || isRunActive" style="width: 100%;">
             <el-option v-for="branch in branches" :key="branch.name" :label="branch.name" :value="branch.name">
@@ -35,7 +53,7 @@
             </el-option>
           </el-select>
           <div v-if="repositoryBinding && !branchesLoading && !branchesError && branches.length === 0" class="field-hint">Repository 没有可选择的 Branch。</div>
-          <div v-if="!repositoryBinding && !repositoryLoading" class="field-hint">当前项目尚未绑定 GitHub Repository；将沿用既有无 GitHub 上下文运行能力。</div>
+          <div v-if="repositories.length > 0 && !repositoryBinding && !repositoryLoading" class="field-hint">选择 Repository 后即可加载 Branch。</div>
         </el-form-item>
         <el-alert v-if="branchesError" type="error" show-icon title="无法加载 Repository Branches" :description="branchesError" style="margin-bottom: 16px;" />
         <el-form-item label="Agent 输入" prop="input">
@@ -154,7 +172,10 @@ const historyLoading = ref(false)
 const historyError = ref('')
 const historyStatus = ref('')
 const history = ref<PageResponse<AgentRunHistoryItem>>({ page: 0, size: 20, total: 0, items: [] })
-const repositoryBinding = ref<GitHubRepositoryBinding | null>(null)
+const repositories = ref<GitHubRepositoryBinding[]>([])
+const selectedRepositoryId = ref<number | undefined>()
+const repositoryBinding = computed(() =>
+  repositories.value.find(repository => repository.id === selectedRepositoryId.value) || null)
 const repositoryLoading = ref(false)
 const branches = ref<GitHubBranch[]>([])
 const branchesLoading = ref(false)
@@ -178,7 +199,10 @@ async function startRun() {
   try {
     const result = await startAgentRunApi(workspaceId, projectId, {
       input: form.input.trim(),
-      ...(repositoryBinding.value ? { branchName: selectedBranch.value } : {}),
+      ...(repositoryBinding.value ? {
+        repositoryBindingId: repositoryBinding.value.id,
+        branchName: selectedBranch.value,
+      } : {}),
     })
     if (!result.success || !result.data) {
       errorMessage.value = result.message || 'Agent Run 创建失败。'
@@ -197,12 +221,13 @@ async function loadRepositoryContext() {
   repositoryLoading.value = true
   branchesError.value = ''
   try {
-    const repositories = await listRepositoriesApi(workspaceId, projectId, { page: 1, size: 20, status: 'ACTIVE' })
-    if (!repositories.success || !repositories.data) {
-      branchesError.value = repositories.message || '无法加载项目 GitHub Repository'
+    const result = await listRepositoriesApi(workspaceId, projectId, { page: 1, size: 20, status: 'ACTIVE' })
+    if (!result.success || !result.data) {
+      branchesError.value = result.message || '无法加载项目 GitHub Repository'
       return
     }
-    repositoryBinding.value = repositories.data.items[0] || null
+    repositories.value = result.data.items
+    selectedRepositoryId.value = repositories.value[0]?.id
     if (!repositoryBinding.value) return
     await loadBranches()
   } catch (err: any) {
@@ -232,6 +257,13 @@ async function loadBranches() {
   } finally {
     branchesLoading.value = false
   }
+}
+
+async function selectRepository() {
+  branches.value = []
+  selectedBranch.value = undefined
+  branchesError.value = ''
+  if (repositoryBinding.value) await loadBranches()
 }
 
 function shortSha(sha: string) {

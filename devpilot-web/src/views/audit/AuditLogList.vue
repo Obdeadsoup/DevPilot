@@ -166,7 +166,7 @@ import RawJsonPanel from '@/components/RawJsonPanel.vue'
 const route = useRoute()
 const scopeStore = useScopeStore()
 
-const workspaceId = Number(route.params.workspaceId || scopeStore.currentWorkspaceId || 1)
+const workspaceId = Number(route.params.workspaceId)
 
 const loading = ref(false)
 const hasError = ref(false)

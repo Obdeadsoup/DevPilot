@@ -60,6 +60,8 @@ DeepSeek 配置只从环境变量读取：
 DEEPSEEK_API_KEY      必填，不写入日志或异常
 DEEPSEEK_BASE_URL     可选，默认 https://api.deepseek.com
 DEEPSEEK_MODEL        可选，默认 deepseek-v4-flash
+AGENT_MODEL_MODE      可选，默认 deepseek；fake 只用于显式测试/离线兜底
+AGENT_FAKE_TOOL_NAME  fake 模式可选的确定性只读 Tool 名称
 DEVPILOT_JAVA_TOOL_GRPC_TARGET             默认 127.0.0.1:50052
 DEVPILOT_AGENT_TOOL_SERVICE_KEY             必填，不写入 proto/日志/Prompt
 DEVPILOT_JAVA_TOOL_GRPC_DEADLINE_SECONDS    默认 3
@@ -84,12 +86,16 @@ python agent-service/scripts/generate_grpc.py
 ```powershell
 # 确定性本地联调，不访问 LLM
 $env:AGENT_MODEL_MODE = "fake"
+$env:AGENT_FAKE_TOOL_NAME = "project.get_summary"
 python -m devpilot_agent_service.rpc.server
 
 # 默认 DeepSeek 路径，需要 DEEPSEEK_API_KEY
 Remove-Item Env:AGENT_MODEL_MODE -ErrorAction SilentlyContinue
 python -m devpilot_agent_service.rpc.server
 ```
+
+当 `AGENT_FAKE_TOOL_NAME` 设置为三个 allowlist Tool 之一时，FakeModel 只替代模型响应，ToolCall 仍会穿过真实
+Python→Java gRPC Tool Gateway；启动日志会把该路径明确标记为 deterministic fake，不能冒充真实 Provider。
 
 默认绑定 `AGENT_GRPC_HOST=0.0.0.0`、`AGENT_GRPC_PORT=50051`。当前 Server 是无服务身份的 plaintext 边界，
 只适合本地/受控网络；TLS、Service-to-Service Auth 和部署发现留待后续章节。

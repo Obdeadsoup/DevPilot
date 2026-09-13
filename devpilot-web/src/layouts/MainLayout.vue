@@ -1,318 +1,255 @@
 <template>
-  <el-container class="layout-container">
-    <!-- Top Header -->
-    <el-header class="top-header">
-      <div class="header-left">
-        <span class="app-title">DevPilot Console</span>
-        <el-divider direction="vertical" />
-        <el-breadcrumb separator="/">
-          <el-breadcrumb-item :to="{ path: '/workspaces' }">Workspaces</el-breadcrumb-item>
-          <el-breadcrumb-item v-if="scopeStore.currentWorkspaceId">
-            <router-link :to="`/workspaces/${scopeStore.currentWorkspaceId}`">
-              {{ scopeStore.currentWorkspaceName || `Workspace #${scopeStore.currentWorkspaceId}` }}
-            </router-link>
-          </el-breadcrumb-item>
-          <el-breadcrumb-item v-if="scopeStore.currentProjectId">
-            <router-link :to="`/workspaces/${scopeStore.currentWorkspaceId}/projects/${scopeStore.currentProjectId}/overview`">
-              {{ scopeStore.currentProjectKey || `Project #${scopeStore.currentProjectId}` }}
-            </router-link>
-          </el-breadcrumb-item>
-        </el-breadcrumb>
+  <el-container class="app-shell">
+    <el-aside v-if="!isCompact" width="248px" class="app-sidebar">
+      <button class="brand" type="button" @click="router.push('/workspaces')">
+        <span class="brand__mark">DP</span>
+        <span>
+          <strong>DevPilot</strong>
+          <small>Engineering workspace</small>
+        </span>
+      </button>
+      <AppNavigation />
+      <div v-if="scopeStore.currentProjectId" class="scope-summary">
+        <span>ACTIVE CONTEXT</span>
+        <strong>{{ scopeStore.currentProjectKey }}</strong>
+        <small>{{ scopeStore.currentProjectName }}</small>
       </div>
+    </el-aside>
 
-      <div class="header-right">
-        <!-- Health Indicator -->
-        <el-tag
-          :type="healthStatus === 'UP' ? 'success' : 'danger'"
-          size="small"
-          effect="dark"
-          style="cursor: pointer;"
-          @click="$router.push('/health')"
-        >
-          Backend: {{ healthStatus }}
-        </el-tag>
+    <el-drawer v-model="mobileNavigationOpen" direction="ltr" size="min(84vw, 304px)" :with-header="false" class="mobile-navigation">
+      <button class="brand" type="button" @click="navigateFromDrawer('/workspaces')">
+        <span class="brand__mark">DP</span>
+        <span><strong>DevPilot</strong><small>Engineering workspace</small></span>
+      </button>
+      <AppNavigation @navigate="mobileNavigationOpen = false" />
+    </el-drawer>
 
-        <!-- Notification Bell -->
-        <el-badge
-          :value="notificationStore.unreadCount"
-          :hidden="notificationStore.unreadCount === 0"
-          :max="99"
-          class="bell-badge"
-        >
-          <el-button type="info" size="small" circle @click="notificationStore.toggleDrawer">
-            <el-icon><Bell /></el-icon>
+    <el-container class="app-stage">
+      <el-header class="topbar">
+        <div class="topbar__context">
+          <el-button v-if="isCompact" text circle aria-label="打开导航" @click="mobileNavigationOpen = true">
+            <el-icon :size="20"><Menu /></el-icon>
           </el-button>
-        </el-badge>
+          <el-breadcrumb separator="/" class="breadcrumbs">
+            <el-breadcrumb-item :to="{ path: '/workspaces' }">工作区</el-breadcrumb-item>
+            <el-breadcrumb-item v-if="scopeStore.currentWorkspaceId" :to="{ path: `/workspaces/${scopeStore.currentWorkspaceId}` }">
+              {{ scopeStore.currentWorkspaceName }}
+            </el-breadcrumb-item>
+            <el-breadcrumb-item v-if="scopeStore.currentProjectId" :to="{ path: projectOverviewPath }">
+              {{ scopeStore.currentProjectKey }}
+            </el-breadcrumb-item>
+          </el-breadcrumb>
+        </div>
 
-        <!-- Developer Console Toggle -->
-        <el-button type="info" size="small" link @click="devConsoleStore.toggleDrawer">
-          开发者控制台 ({{ devConsoleStore.logs.length }})
-        </el-button>
+        <div class="topbar__actions">
+          <el-tooltip content="通知" placement="bottom">
+            <el-badge :value="notificationStore.unreadCount" :hidden="notificationStore.unreadCount === 0" :max="99">
+              <el-button text circle aria-label="打开通知" @click="notificationStore.toggleDrawer">
+                <el-icon :size="18"><Bell /></el-icon>
+              </el-button>
+            </el-badge>
+          </el-tooltip>
 
-        <el-divider direction="vertical" />
-
-        <!-- User Dropdown / Me -->
-        <template v-if="authStore.user">
-          <el-dropdown @command="handleUserCommand">
-            <span class="user-info">
-              <el-avatar :size="24" class="avatar">{{ authStore.user.displayName[0] || 'U' }}</el-avatar>
-              <span>{{ authStore.user.displayName }}</span>
-            </span>
+          <el-dropdown v-if="authStore.user" @command="handleUserCommand">
+            <button class="user-menu" type="button" aria-label="打开账号菜单">
+              <el-avatar :size="30" class="user-menu__avatar">{{ userInitial }}</el-avatar>
+              <span v-if="!isNarrow" class="user-menu__label">{{ authStore.user.displayName }}</span>
+              <el-icon><ArrowDown /></el-icon>
+            </button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="profile">当前用户详情</el-dropdown-item>
-                <el-dropdown-item command="notifications">消息通知中心</el-dropdown-item>
+                <el-dropdown-item command="profile">个人资料</el-dropdown-item>
+                <el-dropdown-item command="notifications">通知中心</el-dropdown-item>
+                <el-dropdown-item divided command="developer">开发工具</el-dropdown-item>
+                <el-dropdown-item command="health">系统状态 · {{ healthStatus }}</el-dropdown-item>
                 <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
-        </template>
-        <template v-else>
-          <el-button type="primary" size="small" @click="$router.push('/login')">登录</el-button>
-        </template>
-      </div>
-    </el-header>
+          <el-button v-else type="primary" @click="router.push('/login')">登录</el-button>
+        </div>
+      </el-header>
 
-    <el-container class="body-container">
-      <!-- Left Sidebar Navigation -->
-      <el-aside width="220px" class="sidebar">
-        <el-menu
-          :default-active="$route.path"
-          router
-          class="sidebar-menu"
-        >
-          <el-menu-item index="/workspaces">
-            <el-icon><MenuIcon /></el-icon>
-            <span>Workspace 列表</span>
-          </el-menu-item>
-
-          <template v-if="scopeStore.currentWorkspaceId">
-            <el-menu-item :index="`/workspaces/${scopeStore.currentWorkspaceId}/projects`">
-              <el-icon><Folder /></el-icon>
-              <span>项目列表</span>
-            </el-menu-item>
-            <el-menu-item :index="`/workspaces/${scopeStore.currentWorkspaceId}/audit-logs`">
-              <el-icon><Postcard /></el-icon>
-              <span>审计日志 (Audit)</span>
-            </el-menu-item>
-          </template>
-
-          <template v-if="scopeStore.currentWorkspaceId && scopeStore.currentProjectId">
-            <el-menu-item-group title="当前项目 (Project)">
-              <el-menu-item :index="`/workspaces/${scopeStore.currentWorkspaceId}/projects/${scopeStore.currentProjectId}/overview`">
-                <el-icon><InfoFilled /></el-icon>
-                <span>项目概览</span>
-              </el-menu-item>
-              <el-menu-item :index="`/workspaces/${scopeStore.currentWorkspaceId}/projects/${scopeStore.currentProjectId}/tasks`">
-                <el-icon><Checked /></el-icon>
-                <span>Task 任务管理</span>
-              </el-menu-item>
-              <el-menu-item :index="`/workspaces/${scopeStore.currentWorkspaceId}/projects/${scopeStore.currentProjectId}/repositories`">
-                <el-icon><Connection /></el-icon>
-                <span>GitHub 仓库绑定</span>
-              </el-menu-item>
-              <el-menu-item :index="`/workspaces/${scopeStore.currentWorkspaceId}/projects/${scopeStore.currentProjectId}/activities`">
-                <el-icon><List /></el-icon>
-                <span>Activity 时间线</span>
-              </el-menu-item>
-
-              <el-sub-menu index="github-snapshots">
-                <template #title>
-                  <el-icon><Document /></el-icon>
-                  <span>GitHub 快照</span>
-                </template>
-                <el-menu-item :index="`/workspaces/${scopeStore.currentWorkspaceId}/projects/${scopeStore.currentProjectId}/github/issues`">
-                  <span>Issue 列表</span>
-                </el-menu-item>
-                <el-menu-item :index="`/workspaces/${scopeStore.currentWorkspaceId}/projects/${scopeStore.currentProjectId}/github/pull-requests`">
-                  <span>Pull Request 列表</span>
-                </el-menu-item>
-              </el-sub-menu>
-
-              <el-menu-item :index="`/workspaces/${scopeStore.currentWorkspaceId}/projects/${scopeStore.currentProjectId}/operations`">
-                <el-icon><Tools /></el-icon>
-                <span>DEAD 运维与 Replay</span>
-              </el-menu-item>
-              <el-menu-item :index="`/workspaces/${scopeStore.currentWorkspaceId}/projects/${scopeStore.currentProjectId}/agent`">
-                <el-icon><MagicStick /></el-icon>
-                <span>Agent Run</span>
-              </el-menu-item>
-            </el-menu-item-group>
-          </template>
-
-          <el-divider style="margin: 12px 0;" />
-
-          <el-menu-item index="/notifications">
-            <el-icon><Bell /></el-icon>
-            <span>消息通知中心</span>
-          </el-menu-item>
-          <el-menu-item index="/developer-console">
-            <el-icon><Monitor /></el-icon>
-            <span>开发者控制台</span>
-          </el-menu-item>
-          <el-menu-item index="/health">
-            <el-icon><Cpu /></el-icon>
-            <span>后端 Health 检查</span>
-          </el-menu-item>
-        </el-menu>
-      </el-aside>
-
-      <!-- Main Content Area -->
       <el-main class="main-content">
-        <router-view />
+        <router-view :key="route.fullPath" />
       </el-main>
     </el-container>
 
-    <!-- Developer Console Drawer -->
-    <el-drawer
-      v-model="devConsoleStore.drawerVisible"
-      title="开发者联调控制台 (Developer Inspector)"
-      size="650px"
-      direction="rtl"
-    >
+    <el-drawer v-model="devConsoleStore.drawerVisible" title="Developer console" size="min(92vw, 680px)" direction="rtl">
       <DeveloperConsoleView embedded />
     </el-drawer>
-
-    <!-- Notification Drawer -->
     <NotificationDrawer />
   </el-container>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
-import { useScopeStore } from '@/stores/scope'
-import { useDeveloperConsoleStore } from '@/stores/developerConsole'
-import { useNotificationStore } from '@/stores/notification'
-import { notificationStreamService } from '@/services/notificationStream'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ArrowDown, Bell, Menu } from '@element-plus/icons-vue'
+
 import { getHealthApi } from '@/api/modules/health'
 import { logoutApi } from '@/api/modules/auth'
-import DeveloperConsoleView from '@/views/DeveloperConsoleView.vue'
+import AppNavigation from '@/components/AppNavigation.vue'
 import NotificationDrawer from '@/components/notification/NotificationDrawer.vue'
+import { notificationStreamService } from '@/services/notificationStream'
+import { useAuthStore } from '@/stores/auth'
+import { useDeveloperConsoleStore } from '@/stores/developerConsole'
+import { useNotificationStore } from '@/stores/notification'
+import { useScopeStore } from '@/stores/scope'
+import DeveloperConsoleView from '@/views/DeveloperConsoleView.vue'
 
-import {
-  Menu as MenuIcon,
-  Folder,
-  InfoFilled,
-  Checked,
-  Connection,
-  List,
-  Document,
-  Tools,
-  Postcard,
-  Bell,
-  Monitor,
-  Cpu,
-  MagicStick,
-} from '@element-plus/icons-vue'
-
+const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const scopeStore = useScopeStore()
 const devConsoleStore = useDeveloperConsoleStore()
 const notificationStore = useNotificationStore()
+const mobileNavigationOpen = ref(false)
+const viewportWidth = ref(window.innerWidth)
+const healthStatus = ref('UNKNOWN')
 
-const healthStatus = ref<string>('UNKNOWN')
+const isCompact = computed(() => viewportWidth.value < 920)
+const isNarrow = computed(() => viewportWidth.value < 560)
+const projectOverviewPath = computed(() =>
+  `/workspaces/${scopeStore.currentWorkspaceId}/projects/${scopeStore.currentProjectId}/overview`)
+const userInitial = computed(() => authStore.user?.displayName?.trim().charAt(0).toUpperCase() || 'U')
+
+function updateViewport() {
+  viewportWidth.value = window.innerWidth
+  if (!isCompact.value) mobileNavigationOpen.value = false
+}
 
 onMounted(async () => {
-  try {
-    const res = await getHealthApi()
-    healthStatus.value = res.code || (res.success ? 'UP' : 'DOWN')
-  } catch {
-    healthStatus.value = 'DOWN'
-  }
-
+  window.addEventListener('resize', updateViewport)
+  const health = await getHealthApi()
+  healthStatus.value = health.success ? 'UP' : 'DOWN'
   if (authStore.isAuthenticated) {
-    notificationStore.fetchUnreadCount()
+    void notificationStore.fetchUnreadCount()
     notificationStreamService.connect()
   }
 })
 
 onUnmounted(() => {
+  window.removeEventListener('resize', updateViewport)
   notificationStreamService.disconnect()
 })
 
+function navigateFromDrawer(path: string) {
+  mobileNavigationOpen.value = false
+  void router.push(path)
+}
+
 async function handleUserCommand(command: string) {
-  if (command === 'profile') {
-    router.push('/me')
-  } else if (command === 'notifications') {
-    router.push('/notifications')
-  } else if (command === 'logout') {
-    try {
-      await logoutApi()
-    } finally {
-      notificationStreamService.disconnect()
-      notificationStore.clearNotifications()
-      authStore.clearAuth()
-      scopeStore.clearAll()
-      router.push('/login')
-    }
+  if (command === 'profile') return router.push('/me')
+  if (command === 'notifications') return router.push('/notifications')
+  if (command === 'developer') return devConsoleStore.toggleDrawer()
+  if (command === 'health') return router.push('/health')
+  if (command !== 'logout') return
+  try {
+    await logoutApi()
+  } finally {
+    notificationStreamService.disconnect()
+    notificationStore.clearNotifications()
+    authStore.clearAuth()
+    scopeStore.clearAll()
+    await router.push('/login')
   }
 }
 </script>
 
 <style scoped>
-.layout-container {
-  height: 100vh;
+.app-shell { min-height: 100vh; background: var(--color-canvas); }
+.app-stage { min-width: 0; min-height: 100vh; }
+
+.app-sidebar {
+  position: relative;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
+  background: var(--color-sidebar);
+  color: #fff;
 }
-.top-header {
-  height: 56px;
-  background-color: #ffffff;
-  border-bottom: 1px solid #e4e7ed;
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 70px;
+  padding: var(--space-4) var(--space-5);
+  color: inherit;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.brand__mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: var(--radius-sm);
+  color: #fff;
+  background: var(--color-accent);
+  font: 700 12px/1 var(--font-mono);
+  letter-spacing: 0.04em;
+}
+
+.brand strong, .brand small { display: block; }
+.brand strong { font-size: 15px; letter-spacing: 0.01em; }
+.brand small { margin-top: 2px; color: var(--color-sidebar-muted); font-size: 11px; }
+
+.scope-summary {
+  margin: auto var(--space-4) var(--space-4);
+  padding: var(--space-4);
+  border-top: 1px solid rgba(255, 255, 255, 0.11);
+}
+
+.scope-summary span, .scope-summary strong, .scope-summary small { display: block; }
+.scope-summary span { color: #647086; font: 700 10px/1 var(--font-mono); letter-spacing: 0.13em; }
+.scope-summary strong { margin-top: var(--space-3); font-family: var(--font-mono); }
+.scope-summary small { margin-top: var(--space-1); color: var(--color-sidebar-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.topbar {
+  height: 64px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
+  gap: var(--space-4);
+  padding: 0 var(--space-6);
+  background: color-mix(in srgb, var(--color-surface) 96%, transparent);
+  border-bottom: 1px solid var(--color-border);
 }
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.app-title {
-  font-weight: 700;
-  font-size: 16px;
-  color: #303133;
-}
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.bell-badge {
-  display: flex;
-  align-items: center;
-}
-.user-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+
+.topbar__context, .topbar__actions, .user-menu { display: flex; align-items: center; }
+.topbar__context { min-width: 0; gap: var(--space-2); }
+.topbar__actions { gap: var(--space-3); }
+.breadcrumbs { min-width: 0; }
+
+.user-menu {
+  gap: var(--space-2);
+  min-height: 40px;
+  padding: var(--space-1) var(--space-2);
+  color: var(--color-text);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 14px;
 }
-.avatar {
-  background-color: #409eff;
-  color: #fff;
-  font-weight: 600;
-}
-.body-container {
-  flex: 1;
-  overflow: hidden;
-}
-.sidebar {
-  background-color: #f8f9fa;
-  border-right: 1px solid #e4e7ed;
-}
-.sidebar-menu {
-  border-right: none;
-  background-color: transparent;
-}
-.main-content {
-  background-color: #f5f7fa;
-  padding: 20px;
-  overflow-y: auto;
+.user-menu:hover { background: var(--color-surface-subtle); }
+.user-menu__avatar { color: #fff; background: #334155; font-weight: 700; }
+.user-menu__label { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-size-sm); }
+
+.main-content { min-width: 0; padding: var(--space-6); overflow-x: hidden; }
+
+.mobile-navigation :deep(.el-drawer__body) { padding: 0; background: var(--color-sidebar); color: #fff; }
+
+@media (max-width: 720px) {
+  .topbar { height: 58px; padding-inline: var(--space-3); }
+  .breadcrumbs :deep(.el-breadcrumb__item:not(:last-child)) { display: none; }
+  .main-content { padding: var(--space-3); }
 }
 </style>

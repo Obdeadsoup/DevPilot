@@ -2,18 +2,14 @@
   <div class="repository-list-container">
     <el-card>
       <template #header>
-        <div class="card-header">
-          <div>
-            <h2>GitHub 仓库绑定 (GET .../github-repositories)</h2>
-            <span class="sub-text">Project ID: {{ projectId }}</span>
-          </div>
-          <div>
+        <PageHeader title="Repository" description="管理项目使用的 GitHub 仓库与同步状态。">
+          <template #actions>
             <el-button type="primary" @click="$router.push(`/workspaces/${workspaceId}/projects/${projectId}/repositories/new`)">
-              绑定新 GitHub 仓库
+              绑定 Repository
             </el-button>
             <el-button @click="fetchData">刷新</el-button>
-          </div>
-        </div>
+          </template>
+        </PageHeader>
       </template>
 
       <!-- Filter Controls -->
@@ -36,7 +32,6 @@
         </template>
 
         <el-table :data="items" stripe style="width: 100%;">
-          <el-table-column prop="id" label="ID" width="70" />
           <el-table-column prop="fullName" label="仓库全名" min-width="160">
             <template #default="{ row }">
               <a :href="row.htmlUrl" target="_blank" rel="noopener noreferrer" style="color: #409eff; text-decoration: none;">
@@ -54,7 +49,7 @@
               <StatusBadge :status="row.bindingStatus" type="binding" />
             </template>
           </el-table-column>
-          <el-table-column prop="hasApiCredential" label="API凭据" width="90">
+          <el-table-column prop="hasApiCredential" label="访问凭据" width="100">
             <template #default="{ row }">
               <el-tag :type="row.hasApiCredential ? 'success' : 'danger'" size="small">
                 {{ row.hasApiCredential ? '已配置' : '缺失' }}
@@ -66,11 +61,6 @@
               <el-tag :type="row.hasWebhookSecret ? 'success' : 'info'" size="small">
                 {{ row.hasWebhookSecret ? '已配置' : '未配置' }}
               </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="version" label="Version" width="90">
-            <template #default="{ row }">
-              <code>v{{ row.version }}</code>
             </template>
           </el-table-column>
           <el-table-column label="操作" width="220" fixed="right">
@@ -103,7 +93,6 @@
           />
         </div>
 
-        <RawJsonPanel :data="rawJson" title="GET .../github-repositories 原始响应" />
       </PageState>
     </el-card>
   </div>
@@ -118,7 +107,7 @@ import { triggerCommitSyncApi } from '@/api/modules/sync'
 import type { GitHubRepositoryBinding } from '@/types/api'
 import StatusBadge from '@/components/StatusBadge.vue'
 import PageState from '@/components/PageState.vue'
-import RawJsonPanel from '@/components/RawJsonPanel.vue'
+import PageHeader from '@/components/PageHeader.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -135,7 +124,6 @@ const page = ref(1)
 const size = ref(20)
 const total = ref(0)
 const items = ref<GitHubRepositoryBinding[]>([])
-const rawJson = ref<any>(null)
 
 async function fetchData() {
   loading.value = true
@@ -148,7 +136,6 @@ async function fetchData() {
       size: size.value,
       status: statusFilter.value || undefined,
     })
-    rawJson.value = res.rawJson
     if (res.success && res.data) {
       items.value = res.data.items || []
       total.value = res.data.total || 0
@@ -196,20 +183,6 @@ onMounted(() => {
 .repository-list-container {
   max-width: 1100px;
   margin: 0 auto;
-}
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.card-header h2 {
-  margin: 0;
-  font-size: 18px;
-  color: #303133;
-}
-.sub-text {
-  font-size: 12px;
-  color: #909399;
 }
 .filter-bar {
   margin-bottom: 16px;

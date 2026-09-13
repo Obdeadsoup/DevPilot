@@ -2,28 +2,23 @@
   <div class="workspace-list-container">
     <el-card>
       <template #header>
-        <div class="card-header">
-          <div>
-            <h2>Workspace 列表 (GET /api/v1/workspaces)</h2>
-            <span class="sub-text">仅展示当前用户拥有或为 ACTIVE 成员的 Workspace</span>
-          </div>
-          <div>
+        <PageHeader title="工作区" description="选择团队空间，继续进入项目与研发工作流。">
+          <template #actions>
             <el-button type="primary" @click="$router.push('/workspaces/new')">
-              创建 Workspace
+              创建工作区
             </el-button>
             <el-button @click="fetchData">刷新</el-button>
-          </div>
-        </div>
+          </template>
+        </PageHeader>
       </template>
 
       <PageState :loading="loading" :error="hasError" :error-msg="errorMsg" :empty="items.length === 0" @retry="fetchData">
         <template #empty-action>
-          <el-button type="primary" @click="$router.push('/workspaces/new')">创建首个 Workspace</el-button>
+          <el-button type="primary" @click="$router.push('/workspaces/new')">创建首个工作区</el-button>
         </template>
 
         <el-table :data="items" stripe style="width: 100%;">
-          <el-table-column prop="id" label="ID" width="80" />
-          <el-table-column prop="name" label="名称 (Name)" min-width="140" />
+          <el-table-column prop="name" label="名称" min-width="180" />
           <el-table-column prop="slug" label="Slug" min-width="120">
             <template #default="{ row }">
               <code>{{ row.slug }}</code>
@@ -32,11 +27,6 @@
           <el-table-column prop="status" label="状态" width="120">
             <template #default="{ row }">
               <StatusBadge :status="row.status" type="workspace" />
-            </template>
-          </el-table-column>
-          <el-table-column prop="version" label="Version (乐观锁)" width="130">
-            <template #default="{ row }">
-              <code>v{{ row.version }}</code>
             </template>
           </el-table-column>
           <el-table-column prop="updatedAt" label="更新时间" min-width="160" />
@@ -64,7 +54,6 @@
           />
         </div>
 
-        <RawJsonPanel :data="rawJson" title="GET /api/v1/workspaces 原始响应" />
       </PageState>
     </el-card>
   </div>
@@ -78,7 +67,7 @@ import { useScopeStore } from '@/stores/scope'
 import type { Workspace } from '@/types/api'
 import StatusBadge from '@/components/StatusBadge.vue'
 import PageState from '@/components/PageState.vue'
-import RawJsonPanel from '@/components/RawJsonPanel.vue'
+import PageHeader from '@/components/PageHeader.vue'
 
 const router = useRouter()
 const scopeStore = useScopeStore()
@@ -91,7 +80,6 @@ const page = ref(1)
 const size = ref(20)
 const total = ref(0)
 const items = ref<Workspace[]>([])
-const rawJson = ref<any>(null)
 
 async function fetchData() {
   loading.value = true
@@ -100,7 +88,6 @@ async function fetchData() {
 
   try {
     const res = await listWorkspacesApi(page.value, size.value)
-    rawJson.value = res.rawJson
     if (res.success && res.data) {
       items.value = res.data.items || []
       total.value = res.data.total || 0
@@ -131,20 +118,6 @@ onMounted(() => {
 .workspace-list-container {
   max-width: 1100px;
   margin: 0 auto;
-}
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.card-header h2 {
-  margin: 0;
-  font-size: 18px;
-  color: #303133;
-}
-.sub-text {
-  font-size: 12px;
-  color: #909399;
 }
 .pagination-bar {
   margin-top: 16px;
