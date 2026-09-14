@@ -34,6 +34,10 @@
             <groupId>com.obdeadsoup</groupId>
             <artifactId>devpilot-project</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.obdeadsoup</groupId>
+            <artifactId>devpilot-knowledge</artifactId>
+        </dependency>
         <!-- 只通过 Task Application Query 暴露 task.list_open；Agent 不接触 Task Mapper/Entity。 -->
         <dependency>
             <groupId>com.obdeadsoup</groupId>

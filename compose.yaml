@@ -101,6 +101,46 @@ services:
       retries: 10
       start_period: 5s
 
+  minio:
+    image: minio/minio:RELEASE.2025-07-23T15-54-02Z
+    profiles: ["full"]
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${DEVPILOT_MINIO_ACCESS_KEY:-devpilot}
+      MINIO_ROOT_PASSWORD: ${DEVPILOT_MINIO_SECRET_KEY:?Set DEVPILOT_MINIO_SECRET_KEY in .env}
+    ports:
+      - "${DEVPILOT_MINIO_PORT:-9000}:9000"
+      - "${DEVPILOT_MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - devpilot-minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  knowledge-embedding:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.9
+    profiles: ["full"]
+    restart: unless-stopped
+    command: --model-id ${DEVPILOT_KNOWLEDGE_EMBEDDING_MODEL:-intfloat/multilingual-e5-small} --port 80
+    volumes:
+      - devpilot-embedding-model-data:/data
+    expose:
+      - "80"
+
+  knowledge-reranker:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.9
+    profiles: ["full"]
+    restart: unless-stopped
+    command: --model-id ${DEVPILOT_KNOWLEDGE_RERANKER_MODEL:-BAAI/bge-reranker-base} --port 80
+    volumes:
+      - devpilot-reranker-model-data:/data
+    expose:
+      - "80"
+
   agent-service:
     profiles: ["full"]
     build:
@@ -182,6 +222,15 @@ services:
       MAIL_HEALTH_ENABLED: "true"
       DEVPILOT_GITHUB_API_TOKEN_LOCAL: ${DEVPILOT_GITHUB_API_TOKEN_LOCAL:-}
       DEVPILOT_GITHUB_WEBHOOK_SECRET_LOCAL: ${DEVPILOT_GITHUB_WEBHOOK_SECRET_LOCAL:-}
+      DEVPILOT_KNOWLEDGE_STORAGE_MODE: minio
+      DEVPILOT_MINIO_ENDPOINT: http://minio:9000
+      DEVPILOT_MINIO_ACCESS_KEY: ${DEVPILOT_MINIO_ACCESS_KEY:-devpilot}
+      DEVPILOT_MINIO_SECRET_KEY: ${DEVPILOT_MINIO_SECRET_KEY:?Set DEVPILOT_MINIO_SECRET_KEY in .env}
+      DEVPILOT_MINIO_BUCKET: ${DEVPILOT_MINIO_BUCKET:-devpilot-knowledge}
+      DEVPILOT_KNOWLEDGE_EMBEDDING_MODE: tei
+      DEVPILOT_KNOWLEDGE_EMBEDDING_ENDPOINT: http://knowledge-embedding
+      DEVPILOT_KNOWLEDGE_RERANKER_MODE: tei
+      DEVPILOT_KNOWLEDGE_RERANKER_ENDPOINT: http://knowledge-reranker
     ports:
       - "${DEVPILOT_CORE_PORT:-8080}:8080"
     expose:
@@ -195,6 +244,12 @@ services:
         condition: service_completed_successfully
       mailpit:
         condition: service_healthy
+      minio:
+        condition: service_healthy
+      knowledge-embedding:
+        condition: service_started
+      knowledge-reranker:
+        condition: service_started
       agent-service:
         condition: service_healthy
     healthcheck:
@@ -262,3 +317,9 @@ volumes:
     name: devpilot-redis-data
   devpilot-mailpit-data:
     name: devpilot-mailpit-data
+  devpilot-minio-data:
+    name: devpilot-minio-data
+  devpilot-embedding-model-data:
+    name: devpilot-embedding-model-data
+  devpilot-reranker-model-data:
+    name: devpilot-reranker-model-data

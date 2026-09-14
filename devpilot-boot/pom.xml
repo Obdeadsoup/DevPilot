@@ -48,6 +48,10 @@
         </dependency>
         <dependency>
             <groupId>com.obdeadsoup</groupId>
+            <artifactId>devpilot-knowledge</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.obdeadsoup</groupId>
             <artifactId>devpilot-github</artifactId>
         </dependency>
 

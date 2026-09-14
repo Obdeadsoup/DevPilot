@@ -181,6 +181,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/agent/AgentRunView.vue'),
       },
       {
+        path: 'workspaces/:workspaceId/projects/:projectId/knowledge',
+        name: 'ProjectKnowledge',
+        component: () => import('@/views/knowledge/ProjectKnowledgeView.vue'),
+      },
+      {
         path: 'developer-console',
         name: 'DeveloperConsole',
         component: DeveloperConsoleView,

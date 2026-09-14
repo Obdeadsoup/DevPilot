@@ -2,6 +2,9 @@ package com.obdeadsoup.devpilot.agent.application.tool;
 
 import com.obdeadsoup.devpilot.agent.application.AgentRunExecutionContext;
 import com.obdeadsoup.devpilot.agent.application.AgentRunStatus;
+import com.obdeadsoup.devpilot.knowledge.retrieval.KnowledgeRetrievalResult;
+import com.obdeadsoup.devpilot.knowledge.retrieval.KnowledgeRetrievalService;
+import com.obdeadsoup.devpilot.knowledge.retrieval.KnowledgeSearchHit;
 import com.obdeadsoup.devpilot.project.api.dto.ProjectActivityPageResponse;
 import com.obdeadsoup.devpilot.project.api.dto.ProjectActivityResponse;
 import com.obdeadsoup.devpilot.project.api.dto.ProjectResponse;
@@ -76,5 +79,22 @@ class AgentReadToolHandlersTest {
 
         assertThat(result.toString()).contains("externalUntrustedContent=true");
         verify(activityService).queryTimelineForActor(30, 10, 20, 1, 10);
+    }
+
+    @Test
+    void knowledgeSearchUsesRunBoundActorAndScopeAndReturnsTraceableSources() {
+        KnowledgeRetrievalService retrieval = mock(KnowledgeRetrievalService.class);
+        KnowledgeSearchHit hit = new KnowledgeSearchHit("doc:1:0", "doc", "architecture.md", "UPLOAD",
+                null, null, 0, "Outbox retries use exponential backoff.", 0.7, 0.8, 0.03, 0.95);
+        when(retrieval.searchForActor(30, 10, 20, "Outbox retry", List.of(), 5))
+                .thenReturn(new KnowledgeRetrievalResult("Outbox retry", "Outbox retry", 42, List.of(hit)));
+
+        Map<String, Object> result = new KnowledgeSearchToolHandler(retrieval)
+                .execute(CONTEXT, Map.of("query", "Outbox retry", "topK", 5));
+
+        assertThat(result).containsEntry("knowledgeVersion", 42L)
+                .containsEntry("external_untrusted_content", true);
+        assertThat(result.get("sources").toString()).contains("architecture.md", "exponential backoff");
+        verify(retrieval).searchForActor(30, 10, 20, "Outbox retry", List.of(), 5);
     }
 }

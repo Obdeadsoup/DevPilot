@@ -98,7 +98,12 @@ class DeterministicFakeModel:
         if self._tool_name and not any(
             message.role is MessageRole.TOOL for message in messages
         ):
-            arguments = {} if self._tool_name == "project.get_summary" else {"limit": 5}
+            if self._tool_name == "project.get_summary":
+                arguments = {}
+            elif self._tool_name == "knowledge.search":
+                arguments = {"query": user_messages[-1], "topK": 5}
+            else:
+                arguments = {"limit": 5}
             return ModelResponse.request_tools(
                 [ToolCall("fake-tool-call-1", self._tool_name, arguments)]
             )

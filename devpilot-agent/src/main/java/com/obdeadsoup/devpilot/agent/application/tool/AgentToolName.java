@@ -8,6 +8,7 @@ public enum AgentToolName {
     PROJECT_GET_SUMMARY("project.get_summary", AgentToolRisk.READ_ONLY),
     TASK_LIST_OPEN("task.list_open", AgentToolRisk.READ_ONLY),
     PROJECT_LIST_RECENT_ACTIVITY("project.list_recent_activity", AgentToolRisk.READ_ONLY),
+    KNOWLEDGE_SEARCH("knowledge.search", AgentToolRisk.READ_ONLY),
     TASK_CREATE("task.create", AgentToolRisk.WRITE_REQUIRES_APPROVAL);
 
     private final String wireName;

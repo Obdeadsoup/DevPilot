@@ -21,6 +21,8 @@ public enum ProjectPermission {
     AGENT_READ(true),
     AGENT_PROPOSE(false),
     AGENT_EXECUTE_CONFIRMED(false),
+    KNOWLEDGE_READ(true),
+    KNOWLEDGE_MANAGE(false),
     PROJECT_AUDIT_READ(true);
 
     private final boolean readOnly;

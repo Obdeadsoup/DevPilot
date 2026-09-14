@@ -1,0 +1,80 @@
+CREATE TABLE dp_knowledge_document (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    document_id VARCHAR(36) NOT NULL,
+    workspace_id BIGINT NOT NULL,
+    project_id BIGINT NOT NULL,
+    repository_binding_id BIGINT NULL,
+    filename VARCHAR(255) NOT NULL,
+    content_type VARCHAR(128) NOT NULL,
+    size_bytes BIGINT NOT NULL,
+    sha256 CHAR(64) NOT NULL,
+    object_key VARCHAR(512) NOT NULL,
+    source_type VARCHAR(24) NOT NULL DEFAULT 'UPLOAD',
+    access_scope VARCHAR(32) NOT NULL DEFAULT 'PROJECT_MEMBER',
+    status VARCHAR(24) NOT NULL,
+    failure_code VARCHAR(64) NULL,
+    chunk_count INT NOT NULL DEFAULT 0,
+    created_by BIGINT NOT NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    version BIGINT NOT NULL DEFAULT 0,
+    deleted TINYINT(1) NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_knowledge_document_id (document_id),
+    KEY idx_knowledge_document_project (workspace_id, project_id, status, deleted),
+    KEY idx_knowledge_document_hash (project_id, sha256, deleted),
+    CONSTRAINT fk_knowledge_document_project FOREIGN KEY (project_id, workspace_id)
+        REFERENCES dp_project (id, workspace_id),
+    CONSTRAINT fk_knowledge_document_creator FOREIGN KEY (created_by) REFERENCES dp_user (id),
+    CONSTRAINT chk_knowledge_document_status CHECK (status IN
+        ('UPLOADED','INGESTING','READY','FAILED','DELETED')),
+    CONSTRAINT chk_knowledge_document_scope CHECK (access_scope IN ('PROJECT_MEMBER')),
+    CONSTRAINT chk_knowledge_document_size CHECK (size_bytes > 0),
+    CONSTRAINT chk_knowledge_document_version CHECK (version >= 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE dp_knowledge_chunk (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    chunk_id VARCHAR(64) NOT NULL,
+    document_id BIGINT NOT NULL,
+    workspace_id BIGINT NOT NULL,
+    project_id BIGINT NOT NULL,
+    repository_binding_id BIGINT NULL,
+    source_file VARCHAR(255) NOT NULL,
+    source_type VARCHAR(24) NOT NULL,
+    commit_sha CHAR(40) NULL,
+    document_version BIGINT NOT NULL,
+    chunk_index INT NOT NULL,
+    chunk_text MEDIUMTEXT NOT NULL,
+    token_count INT NOT NULL,
+    embedding_json MEDIUMTEXT NOT NULL,
+    access_scope VARCHAR(32) NOT NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_knowledge_chunk_id (chunk_id),
+    UNIQUE KEY uk_knowledge_chunk_order (document_id, document_version, chunk_index),
+    KEY idx_knowledge_chunk_project (workspace_id, project_id, access_scope),
+    FULLTEXT KEY ft_knowledge_chunk_text (chunk_text),
+    CONSTRAINT fk_knowledge_chunk_document FOREIGN KEY (document_id)
+        REFERENCES dp_knowledge_document (id) ON DELETE CASCADE,
+    CONSTRAINT chk_knowledge_chunk_index CHECK (chunk_index >= 0),
+    CONSTRAINT chk_knowledge_chunk_token_count CHECK (token_count > 0),
+    CONSTRAINT chk_knowledge_chunk_scope CHECK (access_scope IN ('PROJECT_MEMBER'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE dp_knowledge_query_trace (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    workspace_id BIGINT NOT NULL,
+    project_id BIGINT NOT NULL,
+    actor_user_id BIGINT NOT NULL,
+    original_query VARCHAR(2000) NOT NULL,
+    rewritten_query VARCHAR(3000) NOT NULL,
+    result_chunk_ids JSON NOT NULL,
+    knowledge_version BIGINT NOT NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id),
+    KEY idx_knowledge_query_project (workspace_id, project_id, actor_user_id, created_at),
+    CONSTRAINT fk_knowledge_query_project FOREIGN KEY (project_id, workspace_id)
+        REFERENCES dp_project (id, workspace_id),
+    CONSTRAINT fk_knowledge_query_actor FOREIGN KEY (actor_user_id) REFERENCES dp_user (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

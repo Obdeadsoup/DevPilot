@@ -187,6 +187,48 @@ export interface UpdateProjectRequest {
   expectedVersion: number
 }
 
+export type KnowledgeDocumentStatus = 'UPLOADED' | 'INGESTING' | 'READY' | 'FAILED' | 'DELETED'
+
+export interface KnowledgeDocument {
+  documentId: string
+  repositoryBindingId: number | null
+  filename: string
+  contentType: string
+  sizeBytes: number
+  sha256: string
+  sourceType: 'UPLOAD' | 'GIT_SYNC'
+  accessScope: 'PROJECT_MEMBER'
+  status: KnowledgeDocumentStatus
+  failureCode: string | null
+  chunkCount: number
+  createdBy: number
+  createdAt: string
+  updatedAt: string
+  version: number
+}
+
+export interface KnowledgeSearchHit {
+  chunkId: string
+  documentId: string
+  sourceFile: string
+  sourceType: string
+  repositoryBindingId: number | null
+  commitSha: string | null
+  chunkIndex: number
+  content: string
+  denseScore: number
+  sparseScore: number
+  fusionScore: number
+  rerankScore: number
+}
+
+export interface KnowledgeSearchResult {
+  originalQuery: string
+  rewrittenQuery: string
+  knowledgeVersion: number
+  hits: KnowledgeSearchHit[]
+}
+
 // Repository Binding
 export interface GitHubRepositoryBinding {
   id: number

@@ -160,6 +160,34 @@ async function mockApi(page: Page, options: { workspaceStatus?: number; projectS
     if (path === '/api/v1/workspaces/1/projects/10/agent-runs' && request.method() === 'GET') {
       return fulfillJson(route, envelope({ page: 0, size: 20, total: 0, items: [] }))
     }
+    if (path === '/api/v1/workspaces/1/projects/10/knowledge/documents') {
+      return fulfillJson(route, envelope([{
+        documentId: 'doc-architecture',
+        filename: 'architecture.md',
+        contentType: 'text/markdown',
+        sizeBytes: 2048,
+        status: 'READY',
+        failureCode: null,
+        chunkCount: 3,
+        repositoryBindingId: null,
+        version: 2,
+        createdAt: '2026-09-12T08:00:00Z',
+        updatedAt: '2026-09-12T09:00:00Z',
+      }]))
+    }
+    if (path === '/api/v1/workspaces/1/projects/10/knowledge/search') {
+      return fulfillJson(route, envelope({
+        originalQuery: '为什么使用 Outbox？',
+        rewrittenQuery: '为什么使用 Outbox？',
+        knowledgeVersion: 3000002,
+        hits: [{
+          chunkId: 'doc-architecture:2:0', documentId: 'doc-architecture', sourceFile: 'architecture.md',
+          sourceType: 'UPLOAD', repositoryBindingId: null, commitSha: null, chunkIndex: 0,
+          content: 'DevPilot 使用 Transactional Outbox 保证业务数据与领域事件原子提交。',
+          denseScore: 0.81, sparseScore: 2.31, fusionScore: 0.032, rerankScore: 0.94,
+        }],
+      }))
+    }
     if (path === '/api/v1/workspaces') {
       return fulfillJson(route, envelope({ page: 1, size: 20, total: 1, items: [workspace] }))
     }
@@ -406,6 +434,24 @@ test('logout clears the session and returns to login', async ({ page }) => {
   await expect(page.evaluate(() => sessionStorage.getItem('devpilot_access_token'))).resolves.toBeNull()
 })
 
+test('project knowledge page exposes ingestion status and traceable hybrid retrieval', async ({ page }) => {
+  await seedSession(page)
+  await mockApi(page)
+
+  await page.goto('/workspaces/1/projects/10/knowledge')
+  await expect(page.getByRole('heading', { name: '项目知识库' })).toBeVisible()
+  await expect(page.getByRole('row').filter({ hasText: 'architecture.md' })).toContainText('READY')
+
+  await page.getByLabel('问题').fill('为什么使用 Outbox？')
+  await page.getByRole('button', { name: '检索项目知识' }).click()
+  await expect(page.getByText('DevPilot 使用 Transactional Outbox')).toBeVisible()
+  await expect(page.getByText('Rerank 0.940')).toBeVisible()
+  await expect(page.getByText('BM25 2.310')).toBeVisible()
+  if (process.env.CAPTURE_DEMO_ARTIFACTS) {
+    await page.screenshot({ path: '../docs/interview-demo-artifacts/project-knowledge.png', fullPage: true })
+  }
+})
+
 test('business pages do not render transport or endpoint copy', async ({ page }) => {
   await seedSession(page)
   await mockApi(page)
@@ -418,6 +464,7 @@ test('business pages do not render transport or endpoint copy', async ({ page })
     '/workspaces/1/projects/10/github/issues',
     '/workspaces/1/projects/10/github/pull-requests',
     '/workspaces/1/projects/10/agent',
+    '/workspaces/1/projects/10/knowledge',
     '/notifications',
   ]
 
@@ -470,5 +517,18 @@ test.describe('mobile shell', () => {
       await page.waitForTimeout(400)
       await page.screenshot({ path: '../docs/interview-demo-artifacts/authenticated-mobile.png', fullPage: true })
     }
+  })
+
+  test('keeps knowledge upload and retrieval usable without page overflow', async ({ page }) => {
+    await seedSession(page)
+    await mockApi(page)
+    await page.goto('/workspaces/1/projects/10/knowledge')
+    await expect(page.getByRole('heading', { name: '项目知识库' })).toBeVisible()
+    await expect(page.getByText('拖放文件到这里')).toBeVisible()
+    const metrics = await page.evaluate(() => ({
+      width: document.documentElement.clientWidth,
+      scroll: document.documentElement.scrollWidth,
+    }))
+    expect(metrics.scroll).toBeLessThanOrEqual(metrics.width)
   })
 })

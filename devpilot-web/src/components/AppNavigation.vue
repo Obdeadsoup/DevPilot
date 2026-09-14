@@ -44,6 +44,10 @@
           <el-icon><MagicStick /></el-icon>
           <span>Agent</span>
         </el-menu-item>
+        <el-menu-item :index="projectPath('/knowledge')">
+          <el-icon><Collection /></el-icon>
+          <span>项目知识库</span>
+        </el-menu-item>
       </el-menu-item-group>
     </template>
 
@@ -72,7 +76,7 @@
 <script setup lang="ts">
 import { useRoute } from 'vue-router'
 import { useScopeStore } from '@/stores/scope'
-import { Bell, Checked, Connection, DataLine, Document, Folder, Grid, List, MagicStick, Postcard, Setting, Tools } from '@element-plus/icons-vue'
+import { Bell, Checked, Collection, Connection, DataLine, Document, Folder, Grid, List, MagicStick, Postcard, Setting, Tools } from '@element-plus/icons-vue'
 
 defineEmits<{ navigate: [] }>()
 

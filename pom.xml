@@ -25,6 +25,7 @@
         <module>devpilot-framework</module>
         <module>devpilot-identity</module>
         <module>devpilot-project</module>
+        <module>devpilot-knowledge</module>
         <module>devpilot-outbox</module>
         <module>devpilot-task</module>
         <module>devpilot-github</module>
@@ -97,6 +98,12 @@
             <dependency>
                 <groupId>com.obdeadsoup</groupId>
                 <artifactId>devpilot-project</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.obdeadsoup</groupId>
+                <artifactId>devpilot-knowledge</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
