@@ -7,6 +7,19 @@ EchoTool，以及带 `max_steps`、`max_tool_calls` 和重复 `tool_call_id` 防
 Adapter 使用 OpenAI-compatible Chat Completions 协议，默认连接 DeepSeek；自动化测试使用 FakeModel/Fake Client，
 不访问网络、不需要 API Key，也不消耗 Token。
 
+## LangGraph migration status
+
+Legacy `AgentLoop` remains the production/default runtime. LangGraph is currently introduced as an
+isolated parity skeleton for direct final responses and read-only tool calls. The graph reuses the
+existing `Model` abstraction and `ToolRegistry`; no gRPC entry point selects it yet.
+
+Persistence/resume, cancel, Proposal/HITL, and RPC streaming still run only through `AgentLoop` and
+the Runtime Repository. The skeleton does not use a LangGraph checkpointer and does not replace the
+existing SQLite runtime store.
+
+Implementation map, graph call chain, reducer notes and migration interview guide:
+[P2-00 / P2-01 learning material](docs/langgraph-migration-prep.md).
+
 P0-06 在保留 Unary `StartRun` 的同时实现 `StreamRun` Server Streaming。同步 AgentLoop 通过可选
 Provider-neutral `RuntimeEvent` hook 产生 model/tool 生命周期，Servicer 用容量 64 的 Queue 和独立
 worker thread 桥接为严格递增的 protobuf `AgentEvent`。当前已有协作式 `CancelRun`；

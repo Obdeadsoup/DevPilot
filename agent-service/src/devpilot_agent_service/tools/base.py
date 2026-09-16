@@ -1,4 +1,4 @@
-"""本地演示 Tool 的最小协议与模型可见定义。"""
+"""本地演示Tool的最小协议与模型可见定义。"""
 
 from collections.abc import Mapping
 from dataclasses import dataclass
