@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <div>
-            <span>Workspace 详情 (ID: {{ workspaceId }})</span>
+            <span>{{ workspace?.name || '工作区设置' }}</span>
             <StatusBadge v-if="workspace" :status="workspace.status" type="workspace" style="margin-left: 12px;" />
           </div>
           <div>
@@ -17,17 +17,11 @@
       <PageState :loading="loading" :error="hasError" :error-msg="errorMsg" @retry="fetchDetail">
         <template v-if="workspace">
           <el-descriptions :column="2" border class="mb-4">
-            <el-descriptions-item label="ID">
-              <code>{{ workspace.id }}</code>
-            </el-descriptions-item>
-            <el-descriptions-item label="Slug (不可修改)">
+            <el-descriptions-item label="访问标识">
               <code>{{ workspace.slug }}</code>
             </el-descriptions-item>
-            <el-descriptions-item label="Owner User ID">
+            <el-descriptions-item label="所有者">
               <code>{{ workspace.ownerUserId }}</code>
-            </el-descriptions-item>
-            <el-descriptions-item label="当前 Version (版本号)">
-              <el-tag type="info" size="small">v{{ workspace.version }}</el-tag>
             </el-descriptions-item>
             <el-descriptions-item label="创建时间">
               {{ workspace.createdAt }}
@@ -37,20 +31,15 @@
             </el-descriptions-item>
           </el-descriptions>
 
-          <el-divider content-position="left">编辑 Workspace 资料 (PUT /api/v1/workspaces/{id})</el-divider>
+          <el-divider content-position="left">工作区资料</el-divider>
 
           <el-form :model="editForm" label-position="top" style="max-width: 600px;">
-            <el-form-item label="名称 (name)" required>
+            <el-form-item label="名称" required>
               <el-input v-model="editForm.name" maxlength="100" show-word-limit />
             </el-form-item>
 
-            <el-form-item label="描述 (description)">
+            <el-form-item label="描述">
               <el-input v-model="editForm.description" type="textarea" :rows="3" maxlength="500" show-word-limit />
-            </el-form-item>
-
-            <el-form-item label="提交版本号 (expectedVersion)">
-              <el-input-number v-model="editForm.expectedVersion" :min="0" disabled />
-              <span class="field-hint" style="margin-left: 12px;">自动使用当前最新 version = {{ workspace.version }}</span>
             </el-form-item>
 
             <el-form-item>
@@ -60,17 +49,17 @@
             </el-form-item>
           </el-form>
 
-          <el-divider content-position="left">状态转换与生命周期管理</el-divider>
+          <el-divider content-position="left">工作区状态</el-divider>
 
           <div class="action-bar">
             <template v-if="workspace.status === 'ACTIVE'">
               <el-button type="danger" :loading="actionLoading" @click="confirmStateChange('disable')">
-                禁用 Workspace (POST .../disable)
+                禁用工作区
               </el-button>
             </template>
             <template v-else-if="workspace.status === 'DISABLED'">
               <el-button type="success" :loading="actionLoading" @click="confirmStateChange('reactivate')">
-                重新启用 Workspace (POST .../reactivate)
+                重新启用工作区
               </el-button>
             </template>
           </div>
@@ -88,7 +77,7 @@
             <el-table-column prop="joinedAt" label="加入时间" min-width="180"><template #default="scope">{{ scope.row.joinedAt || '等待接受' }}</template></el-table-column>
           </el-table>
 
-          <RawJsonPanel :data="rawJson" title="GET /api/v1/workspaces/{id} 原始响应" />
+          <RawJsonPanel :data="{ workspaceId: workspace.id, ownerUserId: workspace.ownerUserId, version: workspace.version, response: rawJson }" title="技术详情" />
         </template>
       </PageState>
 
@@ -115,6 +104,7 @@ import StatusBadge from '@/components/StatusBadge.vue'
 import PageState from '@/components/PageState.vue'
 import RawJsonPanel from '@/components/RawJsonPanel.vue'
 import ConflictDialog from '@/components/ConflictDialog.vue'
+import { productErrorMessage, unexpectedErrorMessage } from '@/utils/productError'
 
 const route = useRoute()
 const router = useRouter()
@@ -159,11 +149,11 @@ async function fetchDetail() {
       void loadMembers()
     } else {
       hasError.value = true
-      errorMsg.value = res.message || 'Workspace 不存在或无权限访问'
+      errorMsg.value = productErrorMessage(res, '无法加载工作区，请稍后重试。')
     }
   } catch (err: any) {
     hasError.value = true
-    errorMsg.value = err.message || '网络连接失败'
+    errorMsg.value = unexpectedErrorMessage(err, '暂时无法加载工作区，请稍后重试。')
   } finally {
     loading.value = false
   }
@@ -187,7 +177,7 @@ async function inviteMember() {
       ElMessage.success('邀请已创建，等待对方接受')
       inviteForm.email = ''
       await loadMembers()
-    } else ElMessage.error(res.message || '邀请失败')
+    } else ElMessage.error(productErrorMessage(res, '邀请发送失败，请检查成员邮箱后重试。'))
   } finally {
     inviting.value = false
   }
@@ -205,17 +195,17 @@ async function handleUpdate() {
     })
 
     if (res.success && res.data) {
-      ElMessage.success('Workspace 资料更新成功')
+      ElMessage.success('工作区资料已更新')
       workspace.value = res.data
       editForm.expectedVersion = res.data.version
       scopeStore.setWorkspace(res.data.id, res.data.name)
     } else if (res.httpStatus === 409) {
       conflictDialogRef.value?.show(res.code, res.message)
     } else {
-      ElMessage.error(`更新失败 [${res.code}]: ${res.message}`)
+      ElMessage.error(productErrorMessage(res, '工作区更新失败，请稍后重试。'))
     }
   } catch (err: any) {
-    ElMessage.error(err.message || '请求错误')
+    ElMessage.error(unexpectedErrorMessage(err, '工作区更新失败，请稍后重试。'))
   } finally {
     updating.value = false
   }
@@ -224,10 +214,10 @@ async function handleUpdate() {
 async function confirmStateChange(action: 'disable' | 'reactivate') {
   if (!workspace.value) return
   const isDisable = action === 'disable'
-  const title = isDisable ? '禁用 Workspace 确认' : '重新启用 Workspace 确认'
+  const title = isDisable ? '禁用工作区' : '重新启用工作区'
   const content = isDisable
-    ? `禁用后该 Workspace 下的项目将暂停访问。确定要禁用吗？(expectedVersion = ${workspace.value.version})`
-    : `确定要重新启用该 Workspace 吗？(expectedVersion = ${workspace.value.version})`
+    ? '禁用后，该工作区下的项目将暂停访问。确定继续吗？'
+    : '重新启用后，成员可以继续访问工作区。确定继续吗？'
 
   try {
     await ElMessageBox.confirm(content, title, {
@@ -242,17 +232,17 @@ async function confirmStateChange(action: 'disable' | 'reactivate') {
       : await reactivateWorkspaceApi(workspaceId, workspace.value.version)
 
     if (res.success && res.data) {
-      ElMessage.success(isDisable ? 'Workspace 已禁用' : 'Workspace 已重新启用')
+      ElMessage.success(isDisable ? '工作区已禁用' : '工作区已重新启用')
       workspace.value = res.data
       editForm.expectedVersion = res.data.version
     } else if (res.httpStatus === 409) {
       conflictDialogRef.value?.show(res.code, res.message)
     } else {
-      ElMessage.error(`操作失败 [${res.code}]: ${res.message}`)
+      ElMessage.error(productErrorMessage(res, '工作区状态更新失败，请稍后重试。'))
     }
   } catch (err: any) {
     if (err !== 'cancel') {
-      ElMessage.error(err.message || '操作取消或异常')
+      ElMessage.error(unexpectedErrorMessage(err, '工作区状态更新失败，请稍后重试。'))
     }
   } finally {
     actionLoading.value = false

@@ -1,7 +1,7 @@
 <template>
   <div class="task-github-links-container">
     <div class="links-header mb-3">
-      <span class="title">关联 GitHub 快照 (GitHub Snapshot Links)</span>
+      <span class="title">关联的 GitHub 工作项</span>
       <el-button type="primary" size="small" @click="dialogVisible = true">
         添加关联快照
       </el-button>
@@ -79,34 +79,31 @@
     <!-- Create Link Dialog -->
     <el-dialog
       v-model="dialogVisible"
-      title="关联现有 GitHub Issue / PR 快照"
+      title="关联 GitHub 工作项"
       width="520px"
       :close-on-click-modal="false"
     >
       <el-form label-position="top">
-        <el-form-item label="快照资源类型 (resourceType)" required>
+        <el-form-item label="工作项类型" required>
           <el-radio-group v-model="form.resourceType" @change="handleTypeChange">
             <el-radio value="ISSUE">GitHub Issue 快照</el-radio>
             <el-radio value="PULL_REQUEST">GitHub Pull Request 快照</el-radio>
           </el-radio-group>
         </el-form-item>
 
-        <el-form-item label="快照主键 ID (snapshotId)" required>
-          <el-input-number v-model="form.snapshotId" :min="1" style="width: 100%;" placeholder="例如 Issue/PR 在系统中的快照 ID" />
-          <div class="field-hint">注意：填入的是本地 Snapshot ID，不是 GitHub Number。可以前往 GitHub 快照列表查看。</div>
+        <el-form-item label="工作项编号" required>
+          <el-input-number v-model="form.snapshotId" :min="1" style="width: 100%;" placeholder="在 GitHub 快照列表中查看编号" />
+          <div class="field-hint">请输入 DevPilot 中已同步工作项的编号。</div>
         </el-form-item>
 
-        <el-form-item label="关联类型 (relationType)" required>
+        <el-form-item label="关联关系" required>
           <el-select v-model="form.relationType" style="width: 100%;">
-            <el-option label="TRACKS (追踪 Issue)" value="TRACKS" />
-            <el-option label="IMPLEMENTED_BY (由 PR 实现)" value="IMPLEMENTED_BY" />
-            <el-option label="RELATED_TO (相关)" value="RELATED_TO" />
+            <el-option label="追踪此问题" value="TRACKS" />
+            <el-option label="由此变更实现" value="IMPLEMENTED_BY" />
+            <el-option label="相关工作项" value="RELATED_TO" />
           </el-select>
         </el-form-item>
 
-        <el-form-item label="提交 Task 版本号 (expectedTaskVersion)">
-          <el-input-number :model-value="taskVersion" disabled style="width: 100%;" />
-        </el-form-item>
       </el-form>
 
       <template #footer>
@@ -128,6 +125,7 @@ import {
 } from '@/api/modules/task'
 import type { TaskGitHubLinkResponse, TaskGitHubResourceType, TaskGitHubRelationType } from '@/types/task'
 import PageState from '@/components/PageState.vue'
+import { productErrorMessage, unexpectedErrorMessage } from '@/utils/productError'
 
 const props = defineProps<{
   workspaceId: number
@@ -179,10 +177,10 @@ async function handleCreateLink() {
       dialogVisible.value = false
       emit('refresh')
     } else {
-      ElMessage.error(`关联失败 [${res.code}]: ${res.message}`)
+      ElMessage.error(productErrorMessage(res, '关联失败，请确认工作项后重试。'))
     }
   } catch (err: any) {
-    ElMessage.error(err.message || '网络请求失败')
+    ElMessage.error(unexpectedErrorMessage(err, '关联失败，请稍后重试。'))
   } finally {
     submitting.value = false
   }
@@ -191,7 +189,7 @@ async function handleCreateLink() {
 async function handleRemoveLink(link: TaskGitHubLinkResponse) {
   try {
     await ElMessageBox.confirm(
-      `确定要移除该 GitHub 关联吗？(Task version = ${props.taskVersion}, Link version = ${link.version})`,
+      '确定要移除该 GitHub 工作项关联吗？',
       '移除关联确认',
       { confirmButtonText: '确定移除', cancelButtonText: '取消', type: 'warning' }
     )
@@ -211,11 +209,11 @@ async function handleRemoveLink(link: TaskGitHubLinkResponse) {
       ElMessage.success('关联已移除')
       emit('refresh')
     } else {
-      ElMessage.error(`移除失败 [${res.code}]: ${res.message}`)
+      ElMessage.error(productErrorMessage(res, '移除关联失败，请稍后重试。'))
     }
   } catch (err: any) {
     if (err !== 'cancel') {
-      ElMessage.error(err.message || '操作取消或异常')
+      ElMessage.error(unexpectedErrorMessage(err, '移除关联失败，请稍后重试。'))
     }
   }
 }

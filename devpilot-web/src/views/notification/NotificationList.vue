@@ -4,8 +4,8 @@
       <template #header>
         <div class="card-header">
           <div>
-            <h2>消息通知列表 (GET /api/v1/notifications)</h2>
-            <span class="sub-text">实时 SSE 状态: {{ notificationStore.streamState }}</span>
+            <h2>通知中心</h2>
+            <span class="sub-text">实时更新：{{ streamStateLabel }}</span>
           </div>
           <div>
             <el-button
@@ -13,7 +13,7 @@
               :disabled="notificationStore.unreadCount === 0"
               @click="handleMarkAllRead"
             >
-              一键全部标为已读 (POST .../read-all)
+              全部标为已读
             </el-button>
             <el-button @click="fetchData">刷新</el-button>
           </div>
@@ -23,10 +23,10 @@
       <!-- Filter Controls -->
       <div class="filter-bar">
         <el-form :inline="true">
-          <el-form-item label="状态 (status)">
+          <el-form-item label="状态">
             <el-select v-model="statusFilter" placeholder="全部" clearable style="width: 140px;" @change="handleFilterChange">
-              <el-option label="UNREAD (未读)" value="UNREAD" />
-              <el-option label="READ (已读)" value="READ" />
+              <el-option label="未读" value="UNREAD" />
+              <el-option label="已读" value="READ" />
             </el-select>
           </el-form-item>
         </el-form>
@@ -34,11 +34,10 @@
 
       <PageState :loading="loading" :error="hasError" :error-msg="errorMsg" :empty="items.length === 0" @retry="fetchData">
         <el-table :data="items" stripe style="width: 100%;">
-          <el-table-column prop="id" label="ID" width="70" />
           <el-table-column prop="status" label="状态" width="100">
             <template #default="{ row }">
               <el-tag :type="row.status === 'UNREAD' ? 'danger' : 'info'" size="small">
-                {{ row.status }}
+                {{ row.status === 'UNREAD' ? '未读' : '已读' }}
               </el-tag>
             </template>
           </el-table-column>
@@ -62,7 +61,7 @@
           <el-table-column label="操作" width="180" fixed="right">
             <template #default="{ row }">
               <el-button type="primary" link size="small" @click="navigateToTarget(row)">
-                查看 {{ row.targetType }}
+                查看相关内容
               </el-button>
               <el-button
                 v-if="row.status === 'UNREAD'"
@@ -89,14 +88,14 @@
           />
         </div>
 
-        <RawJsonPanel :data="rawJson" title="GET /api/v1/notifications 原始响应" />
+        <RawJsonPanel :data="rawJson" title="技术详情" />
       </PageState>
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { listNotificationsApi } from '@/api/modules/notification'
@@ -104,6 +103,7 @@ import { useNotificationStore } from '@/stores/notification'
 import type { NotificationResponse, NotificationStatus } from '@/types/notification'
 import PageState from '@/components/PageState.vue'
 import RawJsonPanel from '@/components/RawJsonPanel.vue'
+import { productErrorMessage, unexpectedErrorMessage } from '@/utils/productError'
 
 const router = useRouter()
 const notificationStore = useNotificationStore()
@@ -118,6 +118,13 @@ const size = ref(20)
 const total = ref(0)
 const items = ref<NotificationResponse[]>([])
 const rawJson = ref<any>(null)
+const streamStateLabel = computed(() => ({
+  open: '已连接',
+  connecting: '连接中',
+  retrying: '重新连接中',
+  closed: '未连接',
+  idle: '未连接',
+}[notificationStore.streamState] || '未连接'))
 
 async function fetchData() {
   loading.value = true
@@ -136,11 +143,11 @@ async function fetchData() {
       total.value = res.data.total || 0
     } else {
       hasError.value = true
-      errorMsg.value = res.message || '获取通知列表失败'
+      errorMsg.value = productErrorMessage(res, '暂时无法加载通知，请稍后重试。')
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     hasError.value = true
-    errorMsg.value = err.message || '网络连接失败'
+    errorMsg.value = unexpectedErrorMessage(err, '暂时无法加载通知，请稍后重试。')
   } finally {
     loading.value = false
   }
@@ -157,7 +164,7 @@ async function handleMarkRead(item: NotificationResponse) {
     ElMessage.success('已标记为已读')
     item.status = 'READ'
   } else {
-    ElMessage.error(res.message || '标记失败')
+    ElMessage.error(productErrorMessage(res, '暂时无法更新通知，请重试。'))
   }
 }
 
@@ -167,7 +174,7 @@ async function handleMarkAllRead() {
     ElMessage.success('所有未读通知已标为已读')
     fetchData()
   } else {
-    ElMessage.error(res.message || '操作失败')
+    ElMessage.error(productErrorMessage(res, '暂时无法更新通知，请重试。'))
   }
 }
 

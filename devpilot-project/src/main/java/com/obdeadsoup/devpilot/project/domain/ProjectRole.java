@@ -19,7 +19,9 @@ public enum ProjectRole {
             ProjectPermission.TASK_ASSIGN,
             ProjectPermission.TASK_STATUS_CHANGE,
             ProjectPermission.AGENT_READ,
-            ProjectPermission.AGENT_PROPOSE
+            ProjectPermission.AGENT_PROPOSE,
+            ProjectPermission.KNOWLEDGE_READ,
+            ProjectPermission.KNOWLEDGE_MANAGE
     )),
     VIEWER(Set.of(
             ProjectPermission.PROJECT_READ,
@@ -27,7 +29,8 @@ public enum ProjectRole {
             ProjectPermission.PROJECT_ACTIVITY_READ,
             ProjectPermission.REPOSITORY_READ,
             ProjectPermission.TASK_READ,
-            ProjectPermission.AGENT_READ
+            ProjectPermission.AGENT_READ,
+            ProjectPermission.KNOWLEDGE_READ
     ));
 
     private final Set<ProjectPermission> permissions;

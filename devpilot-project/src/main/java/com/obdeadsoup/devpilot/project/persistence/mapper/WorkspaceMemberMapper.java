@@ -1,6 +1,7 @@
 package com.obdeadsoup.devpilot.project.persistence.mapper;
 
 import com.obdeadsoup.devpilot.project.persistence.entity.WorkspaceMemberEntity;
+import com.obdeadsoup.devpilot.project.persistence.entity.WorkspaceInvitationEntity;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -39,6 +40,24 @@ public interface WorkspaceMemberMapper {
             ORDER BY id
             """)
     List<WorkspaceMemberEntity> findByWorkspace(@Param("workspaceId") long workspaceId);
+
+    @Select("""
+            SELECT member.workspace_id AS workspaceId,
+                   workspace.name AS workspaceName,
+                   workspace.slug AS workspaceSlug,
+                   member.role,
+                   member.status,
+                   member.invited_by AS invitedBy,
+                   member.version
+            FROM dp_workspace_member member
+            JOIN dp_workspace workspace
+              ON workspace.id = member.workspace_id
+             AND workspace.deleted = 0
+            WHERE member.user_id = #{userId}
+              AND member.status = 'INVITED'
+            ORDER BY member.id DESC
+            """)
+    List<WorkspaceInvitationEntity> findPendingInvitationsByUser(@Param("userId") long userId);
 
     @Insert("""
             INSERT INTO dp_workspace_member (

@@ -1,66 +1,56 @@
 <template>
-  <div class="register-container">
-    <el-card class="register-card">
-      <template #header>
-        <div class="card-header">
-          <h2>注册 DevPilot 本地账号</h2>
-          <span class="sub-title">POST /api/v1/auth/register</span>
-        </div>
-      </template>
+  <AuthShell>
+    <template #eyebrow>CREATE ACCOUNT</template>
+    <template #title>创建 DevPilot 账号</template>
+    <template #description>通过邮箱验证创建账号，开始团队协作。</template>
 
-      <el-alert
-        v-if="errorMessage"
-        type="error"
-        show-icon
-        :title="errorTitle"
-        :description="errorMessage"
-        style="margin-bottom: 20px;"
-      />
-
-      <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @keyup.enter="handleRegister">
+    <el-alert v-if="errorMessage" type="error" show-icon :title="errorTitle" :description="errorMessage" class="form-alert" />
+    <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @keyup.enter="handleRegister">
+      <div class="form-grid">
         <el-form-item label="用户名" prop="username">
-          <el-input v-model="form.username" maxlength="64" show-word-limit autocomplete="username" />
+          <el-input v-model="form.username" maxlength="64" autocomplete="username" />
         </el-form-item>
         <el-form-item label="邮箱" prop="email">
           <el-input v-model="form.email" maxlength="254" autocomplete="email" />
         </el-form-item>
-        <el-form-item label="邮箱验证码" prop="verificationCode">
-          <el-input v-model="form.verificationCode" maxlength="6" inputmode="numeric" autocomplete="one-time-code">
-            <template #append>
-              <el-button :loading="sendingCode" :disabled="cooldownSeconds > 0" @click="sendCode">
-                {{ cooldownSeconds > 0 ? `${cooldownSeconds} 秒后重发` : '发送验证码' }}
-              </el-button>
-            </template>
-          </el-input>
-        </el-form-item>
+      </div>
+      <el-form-item label="邮箱验证码" prop="verificationCode">
+        <el-input v-model="form.verificationCode" maxlength="6" inputmode="numeric" autocomplete="one-time-code">
+          <template #append>
+            <el-button :loading="sendingCode" :disabled="cooldownSeconds > 0" @click="sendCode">
+              {{ cooldownSeconds > 0 ? `${cooldownSeconds}s` : '发送验证码' }}
+            </el-button>
+          </template>
+        </el-input>
+      </el-form-item>
+      <div class="form-grid">
         <el-form-item label="密码" prop="password">
           <el-input v-model="form.password" type="password" maxlength="72" show-password autocomplete="new-password" />
         </el-form-item>
         <el-form-item label="确认密码" prop="confirmPassword">
           <el-input v-model="form.confirmPassword" type="password" maxlength="72" show-password autocomplete="new-password" />
         </el-form-item>
-        <el-alert
-          type="info"
-          :closable="false"
-          title="密码至少 12 位，且必须包含字母和数字。用户名、邮箱将规范化为小写。"
-          style="margin-bottom: 20px;"
-        />
-        <el-button type="primary" :loading="loading" style="width: 100%;" size="large" @click="handleRegister">
-          注册账号
-        </el-button>
-      </el-form>
-      <div class="footer-note">已有账号？<router-link to="/login">返回登录</router-link></div>
-    </el-card>
-  </div>
+      </div>
+      <p class="password-hint">至少 12 位，并同时包含字母与数字。</p>
+      <el-button type="primary" :loading="loading" class="primary-action" size="large" @click="handleRegister">创建账号</el-button>
+    </el-form>
+
+    <template #footer>已有账号？ <router-link :to="loginLocation">返回登录</router-link></template>
+  </AuthShell>
 </template>
 
 <script setup lang="ts">
-import { onUnmounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onUnmounted, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+
 import { registerApi, sendEmailVerificationCodeApi } from '@/api/modules/auth'
+import AuthShell from '@/components/AuthShell.vue'
+import { normalizeReturnUrl } from '@/router/returnUrl'
+import { productErrorMessage } from '@/utils/productError'
 
 const router = useRouter()
+const route = useRoute()
 const formRef = ref<FormInstance>()
 const loading = ref(false)
 const errorTitle = ref('')
@@ -70,11 +60,16 @@ const sendingCode = ref(false)
 const cooldownSeconds = ref(0)
 let cooldownTimer: number | undefined
 
+const returnUrl = computed(() => normalizeReturnUrl(route.query.returnUrl))
+const loginLocation = computed(() => ({
+  path: '/login',
+  query: returnUrl.value === '/workspaces' ? {} : { returnUrl: returnUrl.value },
+}))
 const rules: FormRules = {
   username: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
     { min: 3, max: 64, message: '用户名长度为 3 到 64 位', trigger: 'blur' },
-    { pattern: /^[A-Za-z0-9][A-Za-z0-9._-]*$/, message: '用户名只能使用字母、数字、点、下划线或连字符', trigger: 'blur' },
+    { pattern: /^[A-Za-z0-9][A-Za-z0-9._-]*$/, message: '仅支持字母、数字、点、下划线或连字符', trigger: 'blur' },
   ],
   email: [
     { required: true, message: '请输入邮箱', trigger: 'blur' },
@@ -97,19 +92,19 @@ const rules: FormRules = {
 }
 
 async function sendCode() {
-  const emailValid = await formRef.value?.validateField('email').then(() => true).catch(() => false)
-  if (!emailValid || sendingCode.value || cooldownSeconds.value > 0) return
+  const valid = await formRef.value?.validateField('email').then(() => true).catch(() => false)
+  if (!valid || sendingCode.value || cooldownSeconds.value > 0) return
   sendingCode.value = true
   errorTitle.value = ''
   errorMessage.value = ''
   try {
     const result = await sendEmailVerificationCodeApi(form.email.trim())
     if (!result.success) {
-      errorTitle.value = `验证码发送失败 [${result.code}]`
-      errorMessage.value = result.message || '请稍后重试。'
+      errorTitle.value = '验证码发送失败'
+      errorMessage.value = productErrorMessage(result, '验证码发送失败，请稍后重试。')
       return
     }
-    ElMessage.success('验证码已发送，请查收邮箱。')
+    ElMessage.success('验证码已发送，请检查邮箱。')
     cooldownSeconds.value = 60
     cooldownTimer = window.setInterval(() => {
       cooldownSeconds.value -= 1
@@ -136,12 +131,12 @@ async function handleRegister() {
       verificationCode: form.verificationCode,
     })
     if (!result.success) {
-      errorTitle.value = `注册失败 [${result.code}]`
-      errorMessage.value = result.message || '请检查输入后重试。'
+      errorTitle.value = '注册失败'
+      errorMessage.value = productErrorMessage(result, '请检查输入后重试。')
       return
     }
     ElMessage.success('注册成功，请登录。')
-    await router.push('/login')
+    await router.push(loginLocation.value)
   } finally {
     loading.value = false
   }
@@ -151,9 +146,9 @@ onUnmounted(() => { if (cooldownTimer) window.clearInterval(cooldownTimer) })
 </script>
 
 <style scoped>
-.register-container { display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #f0f2f5; padding: 20px; }
-.register-card { width: 440px; }
-.card-header h2 { margin: 0 0 6px; font-size: 20px; color: #303133; }
-.sub-title, .footer-note { font-size: 13px; color: #909399; }
-.footer-note { margin-top: 20px; text-align: center; }
+.form-alert { margin-bottom: var(--space-5); }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.password-hint { margin: calc(var(--space-2) * -1) 0 var(--space-5); color: var(--color-text-muted); font-size: var(--font-size-xs); }
+.primary-action { width: 100%; }
+@media (max-width: 540px) { .form-grid { grid-template-columns: 1fr; gap: 0; } }
 </style>

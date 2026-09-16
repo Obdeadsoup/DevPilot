@@ -4,8 +4,8 @@
       <template #header>
         <div class="card-header">
           <div>
-            <h2>GitHub Pull Request 快照 (GET .../github/pull-requests)</h2>
-            <span class="sub-text">Project ID: {{ projectId }}</span>
+            <h2>GitHub Pull Requests</h2>
+            <span class="sub-text">同步到当前项目的代码变更快照</span>
           </div>
           <el-button @click="fetchData">刷新列表</el-button>
         </div>
@@ -19,10 +19,10 @@
             </template>
           </el-table-column>
 
-          <el-table-column prop="title" label="标题 (Title)" min-width="200">
+          <el-table-column prop="title" label="标题" min-width="200">
             <template #default="{ row }">
               <div style="display: flex; align-items: center; gap: 8px;">
-                <el-tag v-if="row.draft" size="small" type="info" effect="plain">Draft</el-tag>
+                <el-tag v-if="row.draft" size="small" type="info" effect="plain">草稿</el-tag>
                 <router-link
                   :to="`/workspaces/${workspaceId}/projects/${projectId}/github/pull-requests/${row.id}`"
                   style="color: #409eff; font-weight: 500; text-decoration: none;"
@@ -39,13 +39,13 @@
             </template>
           </el-table-column>
 
-          <el-table-column prop="authorLogin" label="作者 (Author)" width="130">
+          <el-table-column prop="authorLogin" label="作者" width="130">
             <template #default="{ row }">
               <code>@{{ row.authorLogin }}</code>
             </template>
           </el-table-column>
 
-          <el-table-column label="分支 (Head → Base)" min-width="160">
+          <el-table-column label="分支（来源 → 目标）" min-width="160">
             <template #default="{ row }">
               <code>{{ row.headRef }}</code> → <code>{{ row.baseRef }}</code>
             </template>
@@ -61,7 +61,7 @@
                 size="small"
                 @click="$router.push(`/workspaces/${workspaceId}/projects/${projectId}/github/pull-requests/${row.id}`)"
               >
-                查看 PR 与 Review
+                查看变更与评审
               </el-button>
             </template>
           </el-table-column>
@@ -79,7 +79,7 @@
           />
         </div>
 
-        <RawJsonPanel :data="rawJson" title="GET .../github/pull-requests 原始响应" />
+        <RawJsonPanel :data="rawJson" title="技术详情" />
       </PageState>
     </el-card>
   </div>
@@ -93,6 +93,7 @@ import type { GitHubPullRequest } from '@/types/api'
 import StatusBadge from '@/components/StatusBadge.vue'
 import PageState from '@/components/PageState.vue'
 import RawJsonPanel from '@/components/RawJsonPanel.vue'
+import { productErrorMessage, unexpectedErrorMessage } from '@/utils/productError'
 
 const route = useRoute()
 const workspaceId = Number(route.params.workspaceId)
@@ -121,11 +122,11 @@ async function fetchData() {
       total.value = res.data.total || 0
     } else {
       hasError.value = true
-      errorMsg.value = res.message || '获取 Pull Request 列表失败'
+      errorMsg.value = productErrorMessage(res, '暂时无法加载 Pull Requests，请稍后重试。')
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     hasError.value = true
-    errorMsg.value = err.message || '网络连接失败'
+    errorMsg.value = unexpectedErrorMessage(err, '暂时无法加载 Pull Requests，请稍后重试。')
   } finally {
     loading.value = false
   }

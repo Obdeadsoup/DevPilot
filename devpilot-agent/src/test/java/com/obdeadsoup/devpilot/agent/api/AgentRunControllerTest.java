@@ -31,6 +31,7 @@ class AgentRunControllerTest {
         assertThat(validator.validate(new StartAgentRunRequest("   "))).isNotEmpty();
         assertThat(validator.validate(new StartAgentRunRequest("a".repeat(10_001)))).isNotEmpty();
         assertThat(validator.validate(new StartAgentRunRequest("explain this change"))).isEmpty();
+        assertThat(validator.validate(new StartAgentRunRequest("explain", 0L, "main"))).isNotEmpty();
     }
 
     @Test
@@ -39,21 +40,21 @@ class AgentRunControllerTest {
         AgentRunView view = new AgentRunView("run-1", "request-1", 1, 2, 7,
                 AgentRunStatus.RUNNING, "hello", "octo/demo", "agent", "a".repeat(40), null, null,
                 now, null, now, now, 0);
-        when(service.start(1, 2, "hello", null)).thenReturn(view);
+        when(service.start(1, 2, "hello", 31L, "agent")).thenReturn(view);
 
-        var response = controller.start(1, 2, new StartAgentRunRequest("hello"));
+        var response = controller.start(1, 2, new StartAgentRunRequest("hello", 31L, "agent"));
 
         assertThat(response.getStatusCode().value()).isEqualTo(202);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().code()).isEqualTo("COMMON_0000");
         assertThat(response.getBody().data().status()).isEqualTo(AgentRunStatus.RUNNING);
-        verify(service).start(1, 2, "hello", null);
+        verify(service).start(1, 2, "hello", 31L, "agent");
     }
 
     @Test
     void permissionErrorFromApplicationBoundaryIsNotSwallowed() {
         BusinessException denied = new BusinessException(IdentityErrorCode.ACCESS_DENIED);
-        when(service.start(1, 2, "hello", null)).thenThrow(denied);
+        when(service.start(1, 2, "hello", null, null)).thenThrow(denied);
 
         assertThatThrownBy(() -> controller.start(1, 2, new StartAgentRunRequest("hello")))
                 .isSameAs(denied);

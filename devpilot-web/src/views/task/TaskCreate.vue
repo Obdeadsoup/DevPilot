@@ -3,7 +3,7 @@
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>创建 Task (POST .../projects/{projectId}/tasks)</span>
+          <span>创建任务</span>
           <el-button link @click="$router.push(`/workspaces/${workspaceId}/projects/${projectId}/tasks`)">
             返回列表
           </el-button>
@@ -13,7 +13,7 @@
       <el-alert
         title="初始状态与负责人说明"
         type="info"
-        description="新创建的 Task 默认处于 BACKLOG 状态。后端当前未提供成员查询 API，负责人请输入该项目内有效 ACTIVE 用户的数字 ID。"
+        description="新任务将进入“待规划”状态。负责人为可选项，可填写当前项目成员的用户编号。"
         show-icon
         :closable="false"
         style="margin-bottom: 20px;"
@@ -26,35 +26,35 @@
         label-position="top"
         style="max-width: 650px;"
       >
-        <el-form-item label="任务标题 (title)" prop="title">
+        <el-form-item label="任务标题" prop="title">
           <el-input
             v-model="form.title"
-            placeholder="例如: 实现接口参数自动校验与错误处理"
+            placeholder="例如：完善参数校验与错误提示"
             maxlength="255"
             show-word-limit
           />
         </el-form-item>
 
-        <el-form-item label="优先级 (priority)" prop="priority">
+        <el-form-item label="优先级" prop="priority">
           <el-radio-group v-model="form.priority">
-            <el-radio value="LOW">LOW</el-radio>
-            <el-radio value="MEDIUM">MEDIUM (默认)</el-radio>
-            <el-radio value="HIGH">HIGH</el-radio>
-            <el-radio value="URGENT">URGENT</el-radio>
+            <el-radio value="LOW">低</el-radio>
+            <el-radio value="MEDIUM">中（默认）</el-radio>
+            <el-radio value="HIGH">高</el-radio>
+            <el-radio value="URGENT">紧急</el-radio>
           </el-radio-group>
         </el-form-item>
 
-        <el-form-item label="分配负责人 User ID (assigneeUserId, 可选)" prop="assigneeUserId">
+        <el-form-item label="负责人编号（可选）" prop="assigneeUserId">
           <el-input-number
             v-model="form.assigneeUserId"
             :min="1"
-            placeholder="数字 User ID"
+            placeholder="用户编号"
             style="width: 200px;"
             controls-position="right"
           />
         </el-form-item>
 
-        <el-form-item label="截止时间 (dueAt, 可选)" prop="dueAt">
+        <el-form-item label="截止时间（可选）" prop="dueAt">
           <el-date-picker
             v-model="form.dueAt"
             type="datetime"
@@ -64,7 +64,7 @@
           />
         </el-form-item>
 
-        <el-form-item label="详细描述 (description, 可选)" prop="description">
+        <el-form-item label="详细描述（可选）" prop="description">
           <el-input
             v-model="form.description"
             type="textarea"
@@ -77,7 +77,7 @@
 
         <el-form-item style="margin-top: 24px;">
           <el-button type="primary" :loading="loading" @click="handleSubmit">
-            提交创建 (进入 BACKLOG)
+            创建任务
           </el-button>
           <el-button @click="$router.push(`/workspaces/${workspaceId}/projects/${projectId}/tasks`)">
             取消
@@ -85,7 +85,7 @@
         </el-form-item>
       </el-form>
 
-      <RawJsonPanel v-if="rawJson" :data="rawJson" title="创建 Task 响应 JSON" />
+      <RawJsonPanel v-if="rawJson" :data="rawJson" title="技术详情" />
     </el-card>
   </div>
 </template>
@@ -97,6 +97,7 @@ import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { createTaskApi } from '@/api/modules/task'
 import type { TaskPriority } from '@/types/task'
 import RawJsonPanel from '@/components/RawJsonPanel.vue'
+import { productErrorMessage, unexpectedErrorMessage } from '@/utils/productError'
 
 const route = useRoute()
 const router = useRouter()
@@ -141,13 +142,13 @@ async function handleSubmit() {
       rawJson.value = res.rawJson
 
       if (res.success && res.data) {
-        ElMessage.success('Task 创建成功')
+        ElMessage.success('任务创建成功')
         router.push(`/workspaces/${workspaceId}/projects/${projectId}/tasks/${res.data.id}`)
       } else {
-        ElMessage.error(`创建失败 [${res.code}]: ${res.message}`)
+        ElMessage.error(productErrorMessage(res, '任务创建失败，请检查填写内容后重试。'))
       }
     } catch (err: any) {
-      ElMessage.error(err.message || '网络无法连接')
+      ElMessage.error(unexpectedErrorMessage(err, '暂时无法创建任务，请稍后重试。'))
     } finally {
       loading.value = false
     }

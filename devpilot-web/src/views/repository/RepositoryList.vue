@@ -2,18 +2,14 @@
   <div class="repository-list-container">
     <el-card>
       <template #header>
-        <div class="card-header">
-          <div>
-            <h2>GitHub 仓库绑定 (GET .../github-repositories)</h2>
-            <span class="sub-text">Project ID: {{ projectId }}</span>
-          </div>
-          <div>
+        <PageHeader title="GitHub 仓库" description="管理项目关联的仓库、凭据与同步状态。">
+          <template #actions>
             <el-button type="primary" @click="$router.push(`/workspaces/${workspaceId}/projects/${projectId}/repositories/new`)">
-              绑定新 GitHub 仓库
+              绑定仓库
             </el-button>
             <el-button @click="fetchData">刷新</el-button>
-          </div>
-        </div>
+          </template>
+        </PageHeader>
       </template>
 
       <!-- Filter Controls -->
@@ -21,8 +17,8 @@
         <el-form :inline="true">
           <el-form-item label="绑定状态">
             <el-select v-model="statusFilter" placeholder="全部状态" clearable style="width: 140px;" @change="handleFilterChange">
-              <el-option label="ACTIVE" value="ACTIVE" />
-              <el-option label="DISABLED" value="DISABLED" />
+              <el-option label="启用" value="ACTIVE" />
+              <el-option label="已禁用" value="DISABLED" />
             </el-select>
           </el-form-item>
         </el-form>
@@ -36,7 +32,6 @@
         </template>
 
         <el-table :data="items" stripe style="width: 100%;">
-          <el-table-column prop="id" label="ID" width="70" />
           <el-table-column prop="fullName" label="仓库全名" min-width="160">
             <template #default="{ row }">
               <a :href="row.htmlUrl" target="_blank" rel="noopener noreferrer" style="color: #409eff; text-decoration: none;">
@@ -54,23 +49,18 @@
               <StatusBadge :status="row.bindingStatus" type="binding" />
             </template>
           </el-table-column>
-          <el-table-column prop="hasApiCredential" label="API凭据" width="90">
+          <el-table-column prop="hasApiCredential" label="访问凭据" width="110">
             <template #default="{ row }">
               <el-tag :type="row.hasApiCredential ? 'success' : 'danger'" size="small">
                 {{ row.hasApiCredential ? '已配置' : '缺失' }}
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="hasWebhookSecret" label="Webhook Secret" width="120">
+          <el-table-column prop="hasWebhookSecret" label="Webhook 密钥" width="120">
             <template #default="{ row }">
               <el-tag :type="row.hasWebhookSecret ? 'success' : 'info'" size="small">
                 {{ row.hasWebhookSecret ? '已配置' : '未配置' }}
               </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="version" label="Version" width="90">
-            <template #default="{ row }">
-              <code>v{{ row.version }}</code>
             </template>
           </el-table-column>
           <el-table-column label="操作" width="220" fixed="right">
@@ -85,7 +75,7 @@
                 size="small"
                 @click="triggerSync(row)"
               >
-                触发 Commit 同步
+                同步提交
               </el-button>
             </template>
           </el-table-column>
@@ -103,7 +93,6 @@
           />
         </div>
 
-        <RawJsonPanel :data="rawJson" title="GET .../github-repositories 原始响应" />
       </PageState>
     </el-card>
   </div>
@@ -118,7 +107,8 @@ import { triggerCommitSyncApi } from '@/api/modules/sync'
 import type { GitHubRepositoryBinding } from '@/types/api'
 import StatusBadge from '@/components/StatusBadge.vue'
 import PageState from '@/components/PageState.vue'
-import RawJsonPanel from '@/components/RawJsonPanel.vue'
+import PageHeader from '@/components/PageHeader.vue'
+import { productErrorMessage, unexpectedErrorMessage } from '@/utils/productError'
 
 const route = useRoute()
 const router = useRouter()
@@ -135,7 +125,6 @@ const page = ref(1)
 const size = ref(20)
 const total = ref(0)
 const items = ref<GitHubRepositoryBinding[]>([])
-const rawJson = ref<any>(null)
 
 async function fetchData() {
   loading.value = true
@@ -148,17 +137,16 @@ async function fetchData() {
       size: size.value,
       status: statusFilter.value || undefined,
     })
-    rawJson.value = res.rawJson
     if (res.success && res.data) {
       items.value = res.data.items || []
       total.value = res.data.total || 0
     } else {
       hasError.value = true
-      errorMsg.value = res.message || '获取仓库绑定列表失败'
+      errorMsg.value = productErrorMessage(res, '无法加载 GitHub 仓库，请稍后重试。')
     }
   } catch (err: any) {
     hasError.value = true
-    errorMsg.value = err.message || '网络连接失败'
+    errorMsg.value = unexpectedErrorMessage(err, '暂时无法加载 GitHub 仓库，请稍后重试。')
   } finally {
     loading.value = false
   }
@@ -177,13 +165,13 @@ async function triggerSync(binding: GitHubRepositoryBinding) {
   try {
     const res = await triggerCommitSyncApi(workspaceId, projectId, binding.id)
     if (res.success && res.data) {
-      ElMessage.success(`Commit 同步已触发 (Run ID: ${res.data.runId})`)
+      ElMessage.success('提交同步已开始')
       router.push(`/workspaces/${workspaceId}/projects/${projectId}/sync-runs/${binding.id}/${res.data.runId}`)
     } else {
-      ElMessage.error(`触发失败 [${res.code}]: ${res.message}`)
+      ElMessage.error(productErrorMessage(res, '无法开始提交同步，请稍后重试。'))
     }
   } catch (err: any) {
-    ElMessage.error(err.message || '网络请求错误')
+    ElMessage.error(unexpectedErrorMessage(err, '无法开始提交同步，请稍后重试。'))
   }
 }
 
@@ -196,20 +184,6 @@ onMounted(() => {
 .repository-list-container {
   max-width: 1100px;
   margin: 0 auto;
-}
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.card-header h2 {
-  margin: 0;
-  font-size: 18px;
-  color: #303133;
-}
-.sub-text {
-  font-size: 12px;
-  color: #909399;
 }
 .filter-bar {
   margin-bottom: 16px;

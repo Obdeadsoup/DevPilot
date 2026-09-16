@@ -1,31 +1,26 @@
 <template>
   <div class="raw-json-panel">
-    <el-collapse v-model="activeNames">
-      <el-collapse-item name="json">
-        <template #title>
-          <div class="panel-header">
-            <span>{{ title || '原始 JSON / 响应 Payload' }}</span>
-            <el-button type="primary" link size="small" @click.stop="copyJson">
-              复制 JSON
-            </el-button>
-          </div>
-        </template>
-        <pre class="json-code"><code>{{ formattedJson }}</code></pre>
-      </el-collapse-item>
-    </el-collapse>
+    <TechnicalDetails :title="title || '技术详情'" summary="原始数据与诊断信息">
+      <div class="panel-header">
+        <span>原始数据</span>
+        <el-button type="primary" link size="small" @click="copyJson">
+          复制 JSON
+        </el-button>
+      </div>
+      <pre class="json-code"><code>{{ formattedJson }}</code></pre>
+    </TechnicalDetails>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { ElMessage } from 'element-plus'
+import TechnicalDetails from '@/components/TechnicalDetails.vue'
 
 const props = defineProps<{
   data: any
   title?: string
 }>()
-
-const activeNames = ref<string[]>([])
 
 const formattedJson = computed(() => {
   if (props.data === undefined || props.data === null) {
@@ -53,21 +48,22 @@ function copyJson() {
 
 <style scoped>
 .raw-json-panel {
-  margin-top: 16px;
+  margin-top: var(--space-5);
 }
 .panel-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   width: 100%;
-  padding-right: 12px;
+  margin-bottom: var(--space-2);
   font-weight: 500;
 }
 .json-code {
-  background-color: #1e1e1e;
+  margin: 0;
+  padding: var(--space-3);
   color: #d4d4d4;
-  padding: 12px;
-  border-radius: 6px;
+  background-color: #1e1e1e;
+  border-radius: var(--radius-sm);
   overflow-x: auto;
   font-family: 'Fira Code', Consolas, Monaco, monospace;
   font-size: 13px;

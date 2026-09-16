@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     v-model="visible"
-    title="并发更新冲突 (409 Conflict)"
+    title="内容已更新"
     width="520px"
     :close-on-click-modal="false"
   >
@@ -9,27 +9,31 @@
       type="warning"
       :closable="false"
       show-icon
-      title="资源版本号 (version) 已失效"
+      title="其他协作者已更新这项内容"
     >
       <template #default>
-        <div>后端业务错误码: <code>{{ code }}</code></div>
-        <div style="margin-top: 4px;">{{ message || '资源已被其他请求并发修改，无法直接写入。' }}</div>
+        <div>为避免覆盖他人的修改，请先获取最新内容，再重新提交你的更改。</div>
       </template>
     </el-alert>
 
     <div style="margin-top: 16px;">
-      <p>按照 DevPilot 接口规范：</p>
       <ul>
-        <li>禁止自动静默重试更新请求。</li>
-        <li>请先点击“重新获取最新数据”拉取最新版本 (expectedVersion)。</li>
-        <li>确认无误后再提交修改。</li>
+        <li>点击“获取最新内容”刷新当前页面。</li>
+        <li>确认最新内容后，再次完成本次操作。</li>
       </ul>
     </div>
+
+    <TechnicalDetails summary="错误标识与原始信息">
+      <el-descriptions :column="1" border>
+        <el-descriptions-item label="错误标识"><code>{{ code || '—' }}</code></el-descriptions-item>
+        <el-descriptions-item label="原始信息">{{ message || '无' }}</el-descriptions-item>
+      </el-descriptions>
+    </TechnicalDetails>
 
     <template #footer>
       <el-button @click="visible = false">取消</el-button>
       <el-button type="primary" @click="handleRefresh">
-        重新获取最新数据
+        获取最新内容
       </el-button>
     </template>
   </el-dialog>
@@ -37,6 +41,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import TechnicalDetails from '@/components/TechnicalDetails.vue'
 
 const emit = defineEmits(['refresh'])
 

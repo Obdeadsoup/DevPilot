@@ -3,7 +3,7 @@
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>创建 Workspace (POST /api/v1/workspaces)</span>
+          <span>创建工作区</span>
           <el-button link @click="$router.push('/workspaces')">返回列表</el-button>
         </div>
       </template>
@@ -15,32 +15,32 @@
         label-position="top"
         style="max-width: 600px;"
       >
-        <el-form-item label="名称 (name)" prop="name">
+        <el-form-item label="工作区名称" prop="name">
           <el-input
             v-model="form.name"
-            placeholder="例如: Student Team Workspace"
+            placeholder="例如：平台研发团队"
             maxlength="100"
             show-word-limit
           />
         </el-form-item>
 
-        <el-form-item label="Slug (全局唯一标识)" prop="slug">
+        <el-form-item label="访问标识" prop="slug">
           <el-input
             v-model="form.slug"
-            placeholder="例如: student-team (长度 1 或 3-64 字符)"
+            placeholder="例如：platform-team"
             maxlength="64"
           />
           <div class="field-hint">
-            正则: <code>^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$</code>。后端当前规则不接受长度为 2 的 slug (如 "ab")。
+            使用小写字母、数字和连字符，首尾须为字母或数字；支持 1 个字符或 3–64 个字符。
           </div>
         </el-form-item>
 
-        <el-form-item label="描述 (description)" prop="description">
+        <el-form-item label="工作区描述" prop="description">
           <el-input
             v-model="form.description"
             type="textarea"
             :rows="3"
-            placeholder="可选 Workspace 描述"
+            placeholder="说明团队职责与协作范围（可选）"
             maxlength="500"
             show-word-limit
           />
@@ -48,13 +48,13 @@
 
         <el-form-item style="margin-top: 24px;">
           <el-button type="primary" :loading="loading" @click="handleSubmit">
-            提交创建
+            创建工作区
           </el-button>
           <el-button @click="$router.push('/workspaces')">取消</el-button>
         </el-form-item>
       </el-form>
 
-      <RawJsonPanel v-if="rawJson" :data="rawJson" title="创建响应 JSON" />
+      <RawJsonPanel v-if="rawJson" :data="rawJson" title="技术详情" />
     </el-card>
   </div>
 </template>
@@ -65,6 +65,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { createWorkspaceApi } from '@/api/modules/workspace'
 import RawJsonPanel from '@/components/RawJsonPanel.vue'
+import { productErrorMessage, unexpectedErrorMessage } from '@/utils/productError'
 
 const router = useRouter()
 
@@ -84,7 +85,7 @@ const validateSlug = (_rule: any, value: string, callback: any) => {
   }
   const trimmed = value.trim().toLowerCase()
   if (trimmed.length === 2) {
-    return callback(new Error('后端规则提示：当前暂不接受长度为 2 的 slug (如 "ab")'))
+    return callback(new Error('访问标识暂不支持两个字符，请使用至少三个字符'))
   }
   const regex = /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/
   if (!regex.test(trimmed)) {
@@ -117,13 +118,13 @@ async function handleSubmit() {
       rawJson.value = res.rawJson
 
       if (res.success && res.data) {
-        ElMessage.success('Workspace 创建成功')
+        ElMessage.success('工作区创建成功')
         router.push(`/workspaces/${res.data.id}`)
       } else {
-        ElMessage.error(`创建失败 [${res.code}]: ${res.message}`)
+        ElMessage.error(productErrorMessage(res, '工作区创建失败，请检查填写内容后重试。', '该访问标识已被使用，请更换后重试。'))
       }
     } catch (err: any) {
-      ElMessage.error(err.message || '网络无法连接')
+      ElMessage.error(unexpectedErrorMessage(err, '暂时无法创建工作区，请稍后重试。'))
     } finally {
       loading.value = false
     }

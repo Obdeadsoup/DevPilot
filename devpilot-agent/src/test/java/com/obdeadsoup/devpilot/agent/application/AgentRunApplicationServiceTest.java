@@ -125,18 +125,53 @@ class AgentRunApplicationServiceTest {
     void resolvesExplicitBranchAndPersistsTheAuthorityProvidedSnapshotBeforeStartingStream() {
         AgentRunView running = view();
         AgentRunCodeSnapshot snapshot = new AgentRunCodeSnapshot("octo/demo", "agent", "a".repeat(40));
-        when(repositoryBindingService.resolveActiveBranchSnapshotForAgentRun(1, 2, "agent"))
+        when(repositoryBindingService.resolveBranchSnapshotForAgentRun(1, 2, 31L, "agent"))
                 .thenReturn(java.util.Optional.of(new GitHubRepositoryBranchSnapshot(
                         snapshot.repositoryFullName(), snapshot.branchName(), snapshot.commitSha())));
         when(persistenceService.createRunning("request-1", "run-1", 1, 2, 7, "hello", snapshot, STARTED_AT))
                 .thenReturn(running);
 
-        service.start(1, 2, "hello", "agent");
+        service.start(1, 2, "hello", 31L, "agent");
 
         InOrder order = inOrder(repositoryBindingService, persistenceService, streamCoordinator);
-        order.verify(repositoryBindingService).resolveActiveBranchSnapshotForAgentRun(1, 2, "agent");
+        order.verify(repositoryBindingService).resolveBranchSnapshotForAgentRun(1, 2, 31L, "agent");
         order.verify(persistenceService).createRunning("request-1", "run-1", 1, 2, 7, "hello", snapshot, STARTED_AT);
         order.verify(streamCoordinator).start(1, 2, new AgentRunCommand("request-1", "run-1", "hello"));
+    }
+
+    @Test
+    void repositoryContextIsOptInAndNeverGuessedFromProjectBindings() {
+        AgentRunView running = view();
+        when(persistenceService.createRunning(
+                "request-1", "run-1", 1, 2, 7, "hello", AgentRunCodeSnapshot.none(), STARTED_AT)).thenReturn(running);
+
+        service.start(1, 2, "hello", null, null);
+
+        verify(repositoryBindingService).resolveBranchSnapshotForAgentRun(1, 2, null, null);
+        verify(persistenceService).createRunning(
+                "request-1", "run-1", 1, 2, 7, "hello", AgentRunCodeSnapshot.none(), STARTED_AT);
+    }
+
+    @Test
+    void branchWithoutBindingIsRejectedBeforeRepositoryLookup() {
+        assertThatThrownBy(() -> service.start(1, 2, "hello", null, "main"))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.errorCode())
+                                .isEqualTo(AgentRunErrorCode.INVALID_AGENT_INPUT));
+        verify(repositoryBindingService, never())
+                .resolveBranchSnapshotForAgentRun(anyLong(), anyLong(), any(), any());
+        verify(persistenceService, never())
+                .createRunning(any(), any(), anyLong(), anyLong(), anyLong(), any(), any(), any());
+    }
+
+    @Test
+    void blankBranchIsRejectedInsteadOfFallingBackToDefault() {
+        assertThatThrownBy(() -> service.start(1, 2, "hello", 31L, "   "))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.errorCode())
+                                .isEqualTo(AgentRunErrorCode.INVALID_AGENT_INPUT));
+        verify(repositoryBindingService, never())
+                .resolveBranchSnapshotForAgentRun(anyLong(), anyLong(), any(), any());
     }
 
     private AgentRunView view() {

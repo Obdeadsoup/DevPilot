@@ -13,15 +13,14 @@
         <div class="history-card">
           <div class="history-header">
             <span class="action-tag">
-              <el-tag size="small" type="success">{{ item.action }}</el-tag>
+              <el-tag size="small" type="success">{{ actionLabel(item.action) }}</el-tag>
             </span>
-            <span class="actor">操作人: <code>User #{{ item.actorUserId }}</code></span>
-            <span class="version">Target Version: <code>v{{ item.taskVersion }}</code></span>
+            <span class="actor">操作人：<code>成员 #{{ item.actorUserId }}</code></span>
           </div>
 
           <div class="status-change">
             <StatusBadge v-if="item.fromStatus" :status="item.fromStatus" type="task" />
-            <span v-else class="text-muted">CREATED</span>
+            <span v-else class="text-muted">已创建</span>
             <span class="arrow">→</span>
             <StatusBadge :status="item.toStatus" type="task" />
           </div>
@@ -42,6 +41,15 @@ import StatusBadge from '@/components/StatusBadge.vue'
 defineProps<{
   history: TaskStatusHistoryResponse[]
 }>()
+
+function actionLabel(value: string) {
+  return ({
+    CREATED: '创建任务', UPDATED: '更新任务', ASSIGNED: '分配负责人', UNASSIGNED: '移除负责人',
+    PLANNED: '加入待办', RETURNED_TO_BACKLOG: '返回待规划', STARTED: '开始处理',
+    SUBMITTED_FOR_REVIEW: '提交审核', CHANGES_REQUESTED: '要求修改', COMPLETED: '确认完成',
+    CANCELED: '取消任务', REOPENED: '重新打开',
+  } as Record<string, string>)[value] || value
+}
 </script>
 
 <style scoped>

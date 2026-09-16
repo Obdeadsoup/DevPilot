@@ -9,7 +9,7 @@ function runBase(workspaceId: number, projectId: number) {
 export function startAgentRunApi(
   workspaceId: number,
   projectId: number,
-  data: { input: string; branchName?: string },
+  data: { input: string; repositoryBindingId?: number; branchName?: string },
 ): Promise<ApiResult<AgentRun>> {
   return request<AgentRun>({
     url: runBase(workspaceId, projectId),

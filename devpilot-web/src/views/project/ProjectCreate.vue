@@ -3,7 +3,7 @@
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>创建 Project (POST /api/v1/workspaces/{workspaceId}/projects)</span>
+          <span>创建项目</span>
           <el-button link @click="$router.push(`/workspaces/${workspaceId}/projects`)">返回列表</el-button>
         </div>
       </template>
@@ -15,35 +15,35 @@
         label-position="top"
         style="max-width: 600px;"
       >
-        <el-form-item label="Project Key (创建后不可更改)" prop="projectKey">
+        <el-form-item label="项目标识（创建后不可更改）" prop="projectKey">
           <el-input
             v-model="form.projectKey"
-            placeholder="例如: WEB (大写字母开头，大写字母或数字 2-12 字符)"
+            placeholder="例如：WEB"
             maxlength="12"
             @input="form.projectKey = form.projectKey.toUpperCase()"
           />
           <div class="field-hint">
-            正则: <code>^[A-Z][A-Z0-9]{1,11}$</code>。同一 Workspace 内活跃 Key 必须唯一。
+            使用 2–12 位大写字母或数字，并以字母开头；同一工作区内不可重复。
           </div>
         </el-form-item>
 
-        <el-form-item label="项目名称 (name)" prop="name">
+        <el-form-item label="项目名称" prop="name">
           <el-input
             v-model="form.name"
-            placeholder="例如: DevPilot Web Client"
+            placeholder="例如：DevPilot Web Client"
             maxlength="100"
             show-word-limit
           />
         </el-form-item>
 
-        <el-form-item label="可见性 (visibility)" prop="visibility">
+        <el-form-item label="可见范围" prop="visibility">
           <el-radio-group v-model="form.visibility">
-            <el-radio value="PRIVATE">PRIVATE (私有，仅归属成员访问)</el-radio>
-            <el-radio value="INTERNAL">INTERNAL (内部，全 Workspace Member 只读)</el-radio>
+            <el-radio value="PRIVATE">私有（仅项目成员访问）</el-radio>
+            <el-radio value="INTERNAL">工作区内可见</el-radio>
           </el-radio-group>
         </el-form-item>
 
-        <el-form-item label="描述 (description)" prop="description">
+        <el-form-item label="项目描述" prop="description">
           <el-input
             v-model="form.description"
             type="textarea"
@@ -52,20 +52,18 @@
             maxlength="500"
             show-word-limit
           />
-          <div class="field-hint">
-            安全提示：前端暂时限制 <= 500 字符（避开 MySQL 数据库 VARCHAR(500) 缺口）。
-          </div>
+          <div class="field-hint">最多 500 个字符。</div>
         </el-form-item>
 
         <el-form-item style="margin-top: 24px;">
           <el-button type="primary" :loading="loading" @click="handleSubmit">
-            提交创建 (初始状态为 PLANNING)
+            创建项目
           </el-button>
           <el-button @click="$router.push(`/workspaces/${workspaceId}/projects`)">取消</el-button>
         </el-form-item>
       </el-form>
 
-      <RawJsonPanel v-if="rawJson" :data="rawJson" title="创建项目响应 JSON" />
+      <RawJsonPanel v-if="rawJson" :data="rawJson" title="技术详情" />
     </el-card>
   </div>
 </template>
@@ -76,6 +74,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { createProjectApi } from '@/api/modules/project'
 import RawJsonPanel from '@/components/RawJsonPanel.vue'
+import { productErrorMessage, unexpectedErrorMessage } from '@/utils/productError'
 
 const route = useRoute()
 const router = useRouter()
@@ -133,10 +132,10 @@ async function handleSubmit() {
         ElMessage.success('项目创建成功')
         router.push(`/workspaces/${workspaceId}/projects/${res.data.id}/overview`)
       } else {
-        ElMessage.error(`创建失败 [${res.code}]: ${res.message}`)
+        ElMessage.error(productErrorMessage(res, '项目创建失败，请检查填写内容后重试。', '项目标识已被使用，请更换后重试。'))
       }
     } catch (err: any) {
-      ElMessage.error(err.message || '网络无法连接')
+      ElMessage.error(unexpectedErrorMessage(err, '暂时无法创建项目，请稍后重试。'))
     } finally {
       loading.value = false
     }

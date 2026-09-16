@@ -9,6 +9,7 @@ import com.obdeadsoup.devpilot.project.domain.WorkspaceRole;
 import com.obdeadsoup.devpilot.project.error.WorkspaceErrorCode;
 import com.obdeadsoup.devpilot.project.persistence.entity.WorkspaceEntity;
 import com.obdeadsoup.devpilot.project.persistence.entity.WorkspaceMemberEntity;
+import com.obdeadsoup.devpilot.project.persistence.entity.WorkspaceInvitationEntity;
 import com.obdeadsoup.devpilot.project.persistence.mapper.ProjectMemberMapper;
 import com.obdeadsoup.devpilot.project.persistence.mapper.WorkspaceMapper;
 import com.obdeadsoup.devpilot.project.persistence.mapper.WorkspaceMemberMapper;
@@ -93,6 +94,12 @@ public class WorkspaceMemberService {
         if (memberMapper.reject(workspaceId, userId, expectedVersion) != 1) {
             throw new BusinessException(WorkspaceErrorCode.MEMBERSHIP_VERSION_CONFLICT);
         }
+    }
+
+    /** 邀请以 membership=INVITED 为唯一事实来源；查询不授予 workspace 权限。 */
+    @Transactional(readOnly = true)
+    public List<WorkspaceInvitationEntity> listOwnInvitations() {
+        return memberMapper.findPendingInvitationsByUser(currentUserProvider.requireUserId());
     }
 
     @Transactional(readOnly = true)

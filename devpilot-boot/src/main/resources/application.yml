@@ -36,6 +36,28 @@ spring:
     validate-migration-naming: true
 
 devpilot:
+  knowledge:
+    max-upload-bytes: ${DEVPILOT_KNOWLEDGE_MAX_UPLOAD_BYTES:20971520}
+    chunk-size: ${DEVPILOT_KNOWLEDGE_CHUNK_SIZE:1000}
+    chunk-overlap: ${DEVPILOT_KNOWLEDGE_CHUNK_OVERLAP:150}
+    max-chunks-per-document: ${DEVPILOT_KNOWLEDGE_MAX_CHUNKS:2000}
+    embedding-dimensions: ${DEVPILOT_KNOWLEDGE_EMBEDDING_DIMENSIONS:256}
+    max-searchable-chunks: ${DEVPILOT_KNOWLEDGE_MAX_SEARCHABLE_CHUNKS:2000}
+    dense-candidate-limit: ${DEVPILOT_KNOWLEDGE_DENSE_CANDIDATES:50}
+    sparse-candidate-limit: ${DEVPILOT_KNOWLEDGE_SPARSE_CANDIDATES:50}
+    default-top-k: ${DEVPILOT_KNOWLEDGE_TOP_K:8}
+    worker-threads: ${DEVPILOT_KNOWLEDGE_WORKER_THREADS:2}
+    worker-queue-capacity: ${DEVPILOT_KNOWLEDGE_WORKER_QUEUE_CAPACITY:100}
+    embedding-mode: ${DEVPILOT_KNOWLEDGE_EMBEDDING_MODE:local}
+    embedding-endpoint: ${DEVPILOT_KNOWLEDGE_EMBEDDING_ENDPOINT:http://127.0.0.1:8083}
+    reranker-mode: ${DEVPILOT_KNOWLEDGE_RERANKER_MODE:local}
+    reranker-endpoint: ${DEVPILOT_KNOWLEDGE_RERANKER_ENDPOINT:http://127.0.0.1:8084}
+    storage-mode: ${DEVPILOT_KNOWLEDGE_STORAGE_MODE:local}
+    local-directory: ${DEVPILOT_KNOWLEDGE_LOCAL_DIRECTORY:.runtime/knowledge-objects}
+    minio-endpoint: ${DEVPILOT_MINIO_ENDPOINT:http://localhost:9000}
+    minio-access-key: ${DEVPILOT_MINIO_ACCESS_KEY:devpilot}
+    minio-secret-key: ${DEVPILOT_MINIO_SECRET_KEY:devpilot-local-secret}
+    minio-bucket: ${DEVPILOT_MINIO_BUCKET:devpilot-knowledge}
   agent:
     grpc:
       host: ${DEVPILOT_AGENT_GRPC_HOST:localhost}

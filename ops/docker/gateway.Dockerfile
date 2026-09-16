@@ -1,5 +1,8 @@
 FROM maven:3.9.11-eclipse-temurin-21 AS build
 WORKDIR /workspace
+ARG DEVPILOT_MAVEN_PROXY_HOST
+ARG DEVPILOT_MAVEN_PROXY_PORT
+COPY ops/docker/mvn-with-proxy.sh /usr/local/bin/devpilot-mvn
 
 COPY pom.xml ./
 COPY devpilot-framework/pom.xml devpilot-framework/pom.xml
@@ -13,11 +16,13 @@ COPY devpilot-audit/pom.xml devpilot-audit/pom.xml
 COPY devpilot-agent/pom.xml devpilot-agent/pom.xml
 COPY devpilot-gateway/pom.xml devpilot-gateway/pom.xml
 COPY devpilot-boot/pom.xml devpilot-boot/pom.xml
-RUN mvn -B -ntp -pl devpilot-gateway -am dependency:go-offline
+RUN --mount=type=cache,id=devpilot-maven-repository,target=/root/.m2,sharing=locked \
+    DEVPILOT_MAVEN_RETRY_COUNT=4 sh /usr/local/bin/devpilot-mvn -B -ntp -pl devpilot-gateway -am dependency:go-offline
 
 COPY devpilot-framework/src devpilot-framework/src
 COPY devpilot-gateway/src devpilot-gateway/src
-RUN mvn -B -ntp -pl devpilot-gateway -am package -DskipTests
+RUN --mount=type=cache,id=devpilot-maven-repository,target=/root/.m2,sharing=locked \
+    sh /usr/local/bin/devpilot-mvn -B -ntp -pl devpilot-gateway -am package -DskipTests
 
 FROM eclipse-temurin:21-jre-noble AS runtime
 RUN apt-get update \

@@ -10,6 +10,7 @@ from devpilot_agent_service.runtime.errors import InvalidToolArguments
 from devpilot_agent_service.runtime.message import MessageRole
 from devpilot_agent_service.tools.devpilot import (
     ListOpenTasksTool,
+    KnowledgeSearchTool,
     ProjectSummaryTool,
     RecentProjectActivityTool,
 )
@@ -31,18 +32,23 @@ def test_remote_tool_definitions_and_argument_boundaries(repository) -> None:
         ProjectSummaryTool(client),
         ListOpenTasksTool(client),
         RecentProjectActivityTool(client),
+        KnowledgeSearchTool(client),
     ]
 
     assert [tool.name for tool in tools] == [
         "project.get_summary",
         "task.list_open",
         "project.list_recent_activity",
+        "knowledge.search",
     ]
     assert tools[1].parameter_schema["properties"]["limit"]["maximum"] == 20
+    assert tools[3].parameter_schema["properties"]["topK"]["maximum"] == 10
     with pytest.raises(InvalidToolArguments):
         tools[0].execute({"scope": 1}, run_context=RunContext("run", "request"), tool_call_id="c")
     with pytest.raises(InvalidToolArguments):
         tools[1].execute({"limit": 21}, run_context=RunContext("run", "request"), tool_call_id="c")
+    with pytest.raises(InvalidToolArguments):
+        tools[3].execute({"query": ""}, run_context=RunContext("run", "request"), tool_call_id="c")
 
 
 def test_agent_loop_propagates_run_context_call_id_and_returns_tool_message(repository) -> None:

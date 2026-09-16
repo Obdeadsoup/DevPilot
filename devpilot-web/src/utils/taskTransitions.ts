@@ -2,28 +2,28 @@ import type { TaskStatus, TaskAction, TaskPriority } from '@/types/task'
 
 export const TASK_STATUS_TRANSITIONS: Record<TaskStatus, { action: TaskAction; endpoint: string; label: string; type: string }[]> = {
   BACKLOG: [
-    { action: 'PLANNED', endpoint: 'plan', label: '规划到 TODO', type: 'primary' },
-    { action: 'CANCELED', endpoint: 'cancel', label: '取消 Task', type: 'danger' },
+    { action: 'PLANNED', endpoint: 'plan', label: '加入待办', type: 'primary' },
+    { action: 'CANCELED', endpoint: 'cancel', label: '取消任务', type: 'danger' },
   ],
   TODO: [
-    { action: 'STARTED', endpoint: 'start', label: '开始执行 (IN_PROGRESS)', type: 'primary' },
-    { action: 'RETURNED_TO_BACKLOG', endpoint: 'return-to-backlog', label: '退回 BACKLOG', type: 'info' },
-    { action: 'CANCELED', endpoint: 'cancel', label: '取消 Task', type: 'danger' },
+    { action: 'STARTED', endpoint: 'start', label: '开始处理', type: 'primary' },
+    { action: 'RETURNED_TO_BACKLOG', endpoint: 'return-to-backlog', label: '返回待规划', type: 'info' },
+    { action: 'CANCELED', endpoint: 'cancel', label: '取消任务', type: 'danger' },
   ],
   IN_PROGRESS: [
-    { action: 'SUBMITTED_FOR_REVIEW', endpoint: 'submit-for-review', label: '提交 Review (IN_REVIEW)', type: 'warning' },
-    { action: 'CANCELED', endpoint: 'cancel', label: '取消 Task', type: 'danger' },
+    { action: 'SUBMITTED_FOR_REVIEW', endpoint: 'submit-for-review', label: '提交审核', type: 'warning' },
+    { action: 'CANCELED', endpoint: 'cancel', label: '取消任务', type: 'danger' },
   ],
   IN_REVIEW: [
-    { action: 'COMPLETED', endpoint: 'complete', label: '审核通过 (DONE)', type: 'success' },
-    { action: 'CHANGES_REQUESTED', endpoint: 'request-changes', label: '打回修改 (IN_PROGRESS)', type: 'warning' },
-    { action: 'CANCELED', endpoint: 'cancel', label: '取消 Task', type: 'danger' },
+    { action: 'COMPLETED', endpoint: 'complete', label: '确认完成', type: 'success' },
+    { action: 'CHANGES_REQUESTED', endpoint: 'request-changes', label: '要求修改', type: 'warning' },
+    { action: 'CANCELED', endpoint: 'cancel', label: '取消任务', type: 'danger' },
   ],
   DONE: [
-    { action: 'REOPENED', endpoint: 'reopen', label: '重新打开 (TODO)', type: 'info' },
+    { action: 'REOPENED', endpoint: 'reopen', label: '重新打开', type: 'info' },
   ],
   CANCELED: [
-    { action: 'REOPENED', endpoint: 'reopen', label: '重新打开 (TODO)', type: 'info' },
+    { action: 'REOPENED', endpoint: 'reopen', label: '重新打开', type: 'info' },
   ],
 }
 

@@ -4,8 +4,8 @@
       <template #header>
         <div class="card-header">
           <div>
-            <h2>审计日志查询 (GET .../audit-logs)</h2>
-            <span class="sub-text">Workspace ID: {{ workspaceId }}</span>
+            <h2>审计记录</h2>
+            <span class="sub-text">查看工作区内的重要管理操作</span>
           </div>
           <el-button @click="fetchData">刷新</el-button>
         </div>
@@ -14,32 +14,32 @@
       <!-- Filter Controls -->
       <div class="filter-bar">
         <el-form :inline="true">
-          <el-form-item label="项目 (projectId)">
-            <el-input-number v-model="filter.projectId" :min="1" placeholder="Project ID" style="width: 130px;" controls-position="right" @change="handleFilterChange" />
+          <el-form-item label="项目编号">
+            <el-input-number v-model="filter.projectId" :min="1" placeholder="项目编号" style="width: 130px;" controls-position="right" @change="handleFilterChange" />
           </el-form-item>
 
-          <el-form-item label="操作人 User ID">
-            <el-input-number v-model="filter.actorUserId" :min="1" placeholder="User ID" style="width: 120px;" controls-position="right" @change="handleFilterChange" />
+          <el-form-item label="操作人编号">
+            <el-input-number v-model="filter.actorUserId" :min="1" placeholder="成员编号" style="width: 120px;" controls-position="right" @change="handleFilterChange" />
           </el-form-item>
 
-          <el-form-item label="操作类型 (actionType)">
+          <el-form-item label="操作类型">
             <el-select v-model="filter.actionType" placeholder="全部类型" clearable style="width: 180px;" @change="handleFilterChange">
-              <el-option label="OUTBOX_REPLAY_REQUESTED" value="OUTBOX_REPLAY_REQUESTED" />
-              <el-option label="OUTBOX_REPLAY_CREATED" value="OUTBOX_REPLAY_CREATED" />
-              <el-option label="OUTBOX_REPLAY_REJECTED" value="OUTBOX_REPLAY_REJECTED" />
-              <el-option label="GITHUB_SYNC_REPLAY_REQUESTED" value="GITHUB_SYNC_REPLAY_REQUESTED" />
-              <el-option label="GITHUB_SYNC_REPLAY_CREATED" value="GITHUB_SYNC_REPLAY_CREATED" />
-              <el-option label="GITHUB_SYNC_REPLAY_REJECTED" value="GITHUB_SYNC_REPLAY_REJECTED" />
-              <el-option label="OUTBOX_DEAD_VIEWED" value="OUTBOX_DEAD_VIEWED" />
-              <el-option label="GITHUB_SYNC_DEAD_VIEWED" value="GITHUB_SYNC_DEAD_VIEWED" />
+              <el-option label="事件恢复已请求" value="OUTBOX_REPLAY_REQUESTED" />
+              <el-option label="事件恢复已创建" value="OUTBOX_REPLAY_CREATED" />
+              <el-option label="事件恢复被拒绝" value="OUTBOX_REPLAY_REJECTED" />
+              <el-option label="仓库同步恢复已请求" value="GITHUB_SYNC_REPLAY_REQUESTED" />
+              <el-option label="仓库同步恢复已创建" value="GITHUB_SYNC_REPLAY_CREATED" />
+              <el-option label="仓库同步恢复被拒绝" value="GITHUB_SYNC_REPLAY_REJECTED" />
+              <el-option label="失败事件已查看" value="OUTBOX_DEAD_VIEWED" />
+              <el-option label="同步失败已查看" value="GITHUB_SYNC_DEAD_VIEWED" />
             </el-select>
           </el-form-item>
 
-          <el-form-item label="结果 (result)">
+          <el-form-item label="结果">
             <el-select v-model="filter.result" placeholder="全部结果" clearable style="width: 130px;" @change="handleFilterChange">
-              <el-option label="SUCCESS" value="SUCCESS" />
-              <el-option label="FAILURE" value="FAILURE" />
-              <el-option label="DENIED" value="DENIED" />
+              <el-option label="成功" value="SUCCESS" />
+              <el-option label="失败" value="FAILURE" />
+              <el-option label="已拒绝" value="DENIED" />
             </el-select>
           </el-form-item>
 
@@ -69,10 +69,10 @@
 
       <PageState :loading="loading" :error="hasError" :error-msg="errorMsg" :empty="items.length === 0" @retry="fetchData">
         <el-table :data="items" stripe style="width: 100%;">
-          <el-table-column prop="id" label="ID" width="70" />
-          <el-table-column prop="actionType" label="动作类型 (Action)" min-width="210">
+          <el-table-column prop="id" label="记录编号" width="100" />
+          <el-table-column prop="actionType" label="操作类型" min-width="210">
             <template #default="{ row }">
-              <code>{{ row.actionType }}</code>
+              {{ auditActionLabel(row.actionType) }}
             </template>
           </el-table-column>
 
@@ -82,21 +82,21 @@
             </template>
           </el-table-column>
 
-          <el-table-column prop="actorType" label="主体 (Actor)" width="120">
+          <el-table-column prop="actorType" label="操作人" width="120">
             <template #default="{ row }">
-              <span>{{ row.actorType }}</span>
+              <span>{{ row.actorType === 'USER' ? '成员' : '系统' }}</span>
               <span v-if="row.actorUserId"> (#{{ row.actorUserId }})</span>
             </template>
           </el-table-column>
 
           <el-table-column prop="resourceType" label="资源类型" width="160">
             <template #default="{ row }">
-              <code>{{ row.resourceType }}</code>
+              {{ resourceTypeLabel(row.resourceType) }}
               <span v-if="row.resourceId"> (#{{ row.resourceId }})</span>
             </template>
           </el-table-column>
 
-          <el-table-column prop="reason" label="重放/操作原因" min-width="180">
+          <el-table-column prop="reason" label="操作原因" min-width="180">
             <template #default="{ row }">
               <span>{{ row.reason || '-' }}</span>
             </template>
@@ -125,11 +125,11 @@
           />
         </div>
 
-        <RawJsonPanel :data="rawJson" title="GET .../audit-logs 原始响应" />
+        <RawJsonPanel :data="rawJson" title="技术详情" />
       </PageState>
 
       <!-- Audit Detail Drawer -->
-      <el-drawer v-model="drawerVisible" title="审计日志元数据详情" size="550px">
+      <el-drawer v-model="drawerVisible" title="审计技术详情" size="550px">
         <template v-if="selectedRecord">
           <el-descriptions :column="1" border class="mb-3">
             <el-descriptions-item label="Audit Record ID">
@@ -146,7 +146,7 @@
             </el-descriptions-item>
           </el-descriptions>
 
-          <RawJsonPanel :data="selectedRecord.metadataJson" title="Audit Metadata JSON" />
+          <RawJsonPanel :data="selectedRecord.metadataJson" title="诊断信息" />
         </template>
       </el-drawer>
     </el-card>
@@ -162,11 +162,12 @@ import type { AuditRecordResponse, AuditActionType, AuditResourceType, AuditResu
 import StatusBadge from '@/components/StatusBadge.vue'
 import PageState from '@/components/PageState.vue'
 import RawJsonPanel from '@/components/RawJsonPanel.vue'
+import { productErrorMessage, unexpectedErrorMessage } from '@/utils/productError'
 
 const route = useRoute()
 const scopeStore = useScopeStore()
 
-const workspaceId = Number(route.params.workspaceId || scopeStore.currentWorkspaceId || 1)
+const workspaceId = Number(route.params.workspaceId)
 
 const loading = ref(false)
 const hasError = ref(false)
@@ -214,14 +215,27 @@ async function fetchData() {
       total.value = res.data.total || 0
     } else {
       hasError.value = true
-      errorMsg.value = res.message || '获取审计日志失败'
+      errorMsg.value = productErrorMessage(res, '暂时无法加载审计记录，请稍后重试。')
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     hasError.value = true
-    errorMsg.value = err.message || '网络连接失败'
+    errorMsg.value = unexpectedErrorMessage(err, '暂时无法加载审计记录，请稍后重试。')
   } finally {
     loading.value = false
   }
+}
+
+function auditActionLabel(value: string) {
+  return ({
+    OUTBOX_REPLAY_REQUESTED: '事件恢复已请求', OUTBOX_REPLAY_CREATED: '事件恢复已创建',
+    OUTBOX_REPLAY_REJECTED: '事件恢复被拒绝', GITHUB_SYNC_REPLAY_REQUESTED: '仓库同步恢复已请求',
+    GITHUB_SYNC_REPLAY_CREATED: '仓库同步恢复已创建', GITHUB_SYNC_REPLAY_REJECTED: '仓库同步恢复被拒绝',
+    OUTBOX_DEAD_VIEWED: '失败事件已查看', GITHUB_SYNC_DEAD_VIEWED: '同步失败已查看',
+  } as Record<string, string>)[value] || value
+}
+
+function resourceTypeLabel(value: string) {
+  return ({ OUTBOX_EVENT: '项目事件', GITHUB_SYNC_RUN: '仓库同步' } as Record<string, string>)[value] || value
 }
 
 function handleFilterChange() {

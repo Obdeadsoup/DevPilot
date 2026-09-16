@@ -108,8 +108,14 @@ class ProjectPermissionMatrixTest {
                 ProjectPermission.PROJECT_ACTIVITY_READ,
                 ProjectPermission.REPOSITORY_READ,
                 ProjectPermission.TASK_READ,
-                ProjectPermission.AGENT_READ
+                ProjectPermission.AGENT_READ,
+                ProjectPermission.KNOWLEDGE_READ
         );
+        assertThat(ProjectRole.DEVELOPER.permissions())
+                .contains(ProjectPermission.KNOWLEDGE_READ, ProjectPermission.KNOWLEDGE_MANAGE);
+        assertThat(ProjectRole.VIEWER.permissions())
+                .contains(ProjectPermission.KNOWLEDGE_READ)
+                .doesNotContain(ProjectPermission.KNOWLEDGE_MANAGE);
     }
 
     @Test

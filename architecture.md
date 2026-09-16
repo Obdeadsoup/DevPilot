@@ -24,16 +24,15 @@ devpilot-task            任务、迭代、状态机、截止规则
 devpilot-notification    通知和未读计数
 devpilot-outbox          Task 事务事件、有限重试与恢复
 devpilot-audit           DEAD 查询、人工 Replay 与 append-only 运维审计
-devpilot-knowledge       文档、会议纪要、检索
 devpilot-agent           Agent 集成边界：Browser API、RBAC、Run 投影、RPC、Tool Gateway、人工确认
 ```
 
 当前依赖：identity→framework，project→framework+identity，task→framework+identity+project+outbox，
 github→framework+project+task，notification→framework+identity+project+task+github+outbox，
 audit→framework+identity+project+github+outbox，boot→全部模块。audit 是末端运维模块，上游不反向依赖。
-Agent 第 1 章新增 agent→framework+identity+project，boot→agent；当前 agent 没有 Java 业务类，也不依赖
-task/github/outbox/audit。Python `agent-service` 是独立进程和独立 Python 工程，不是 Maven dependency；第 2 章只在
-该 Python 工程内增加同步最小 Agent Loop，未改变 Java 模块图。
+Agent 模块依赖 framework、identity、project、task 与 github 的公开 Application Port，boot 负责装配；它拥有
+AgentRun 权威投影、HTTP/SSE、Java→Python gRPC Client 与 Python→Java Tool Gateway。Python `agent-service` 是独立
+进程和独立 Python 工程，不是 Maven dependency，也不访问 Java 业务数据库。
 Workspace、两级成员关系、角色、Permission
 和授权服务全部属于 project；identity 只向 project 提供当前用户和用户有效性能力，绝不反向
 依赖 project。移除 Workspace Member 与撤销其 Project Membership 在 project 模块同一事务
@@ -288,7 +287,7 @@ Browser → Java devpilot-agent（HTTP / RBAC / Scope / Run 业务投影）
         → AgentRuntime gRPC → Python agent-service（LLM / Agent Loop / runtime state）
 
 Python agent-service → DevPilotToolGateway gRPC → Java devpilot-agent
-        → 权限与风险策略 → 只读工具 / Proposal → 人工确认
+        → run-bound delegation + RBAC → 三个只读工具 + task.create Proposal
         → 正式业务 Application Service → 审计
 ```
 
@@ -298,9 +297,11 @@ Conversation runtime context 归 Python。两个进程不共享业务表，Pytho
 Runtime 内部表。
 
 跨语言唯一契约源位于 `contracts/agent/v1`：`AgentRuntime` 是 Java→Python，`DevPilotToolGateway` 是
-Python→Java。当前已有 Python 单进程内的 Message → Model → ToolCall → Tool Result → Model → Final 控制循环；
-仍没有 Stub、网络调用、HTTP API、AgentRun 表、真实 LLM 或 DevPilot 业务 Tool。
-未来执行工具只接受已保存并已确认的 Proposal ID，不直接接受自由文本改数据。
+Python→Java。Browser 通过 Java HTTP 创建/查询/取消 Run，通过 Java SSE 观察类型化事件；Java 以 gRPC Server
+Streaming 调用 Python，Python 可调用 `project.get_summary`、`task.list_open`、
+`project.list_recent_activity`。创建 Run 时 Repository Binding 必须显式传入；未选择时不猜测，选择后由 Java
+校验作用域和 ACTIVE 状态并冻结 Branch/Commit SHA。当前工具不会读取仓库源码，也没有写 Tool、Proposal/HITL、
+RAG 或 Memory；未来写操作只能基于已保存并确认的 Proposal，而不能直接接受自由文本改数据。
 
 ## 测试
 

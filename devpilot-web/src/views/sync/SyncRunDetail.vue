@@ -4,12 +4,12 @@
       <template #header>
         <div class="card-header">
           <div>
-            <span>Commit Sync Run 运行状态 (ID: {{ runId }})</span>
+            <span>仓库同步</span>
             <StatusBadge v-if="syncRun" :status="syncRun.status" type="syncRun" style="margin-left: 12px;" />
           </div>
           <div>
             <el-tag v-if="polling" type="warning" size="small" effect="dark">
-              短轮询进行中 (3s)...
+              正在自动刷新
             </el-tag>
             <el-button size="small" style="margin-left: 8px;" @click="fetchDetail">手动刷新</el-button>
           </div>
@@ -21,7 +21,7 @@
           <el-alert
             v-if="syncRun.status === 'RUNNING' || syncRun.status === 'PENDING'"
             type="info"
-            title="后台同步任务处理中..."
+            title="正在同步 GitHub 提交…"
             show-icon
             :closable="false"
             style="margin-bottom: 16px;"
@@ -29,7 +29,7 @@
           <el-alert
             v-else-if="syncRun.status === 'RETRY_WAIT'"
             type="warning"
-            :title="`触发 GitHub 限流或临时网络失败，等待重试 (下次重试: ${syncRun.nextRetryAt || '等待中'})`"
+            :title="`同步暂时受阻，将自动重试${syncRun.nextRetryAt ? `（${syncRun.nextRetryAt}）` : ''}`"
             show-icon
             :closable="false"
             style="margin-bottom: 16px;"
@@ -37,7 +37,7 @@
           <el-alert
             v-else-if="syncRun.status === 'SUCCEEDED'"
             type="success"
-            title="同步任务已成功完成！"
+            title="仓库提交已同步"
             show-icon
             :closable="false"
             style="margin-bottom: 16px;"
@@ -45,30 +45,21 @@
           <el-alert
             v-else-if="syncRun.status === 'DEAD'"
             type="error"
-            :title="`同步任务已终态失败 [错误码: ${syncRun.lastErrorCode || 'DEAD'}]`"
+            title="同步未完成，请在运行恢复中重试或联系管理员"
             show-icon
             :closable="false"
             style="margin-bottom: 16px;"
           />
 
           <el-descriptions :column="2" border class="mb-4">
-            <el-descriptions-item label="Run ID">
-              <code>{{ syncRun.id }}</code>
+            <el-descriptions-item label="同步内容">
+              <el-tag size="small">{{ resourceTypeLabel(syncRun.resourceType) }}</el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="Repository Binding ID">
-              <code>{{ syncRun.repositoryBindingId }}</code>
+            <el-descriptions-item label="触发方式">
+              <el-tag size="small" type="info">{{ triggerTypeLabel(syncRun.triggerType) }}</el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="资源类型 (ResourceType)">
-              <el-tag size="small">{{ syncRun.resourceType }}</el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="触发方式 (TriggerType)">
-              <el-tag size="small" type="info">{{ syncRun.triggerType }}</el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="尝试次数 (AttemptCount)">
+            <el-descriptions-item label="尝试次数">
               {{ syncRun.attemptCount }}
-            </el-descriptions-item>
-            <el-descriptions-item label="最后错误稳定码">
-              <code>{{ syncRun.lastErrorCode || '无' }}</code>
             </el-descriptions-item>
             <el-descriptions-item label="开始时间">
               {{ syncRun.startedAt || '未开始' }}
@@ -84,7 +75,10 @@
             </el-descriptions-item>
           </el-descriptions>
 
-          <RawJsonPanel :data="rawJson" title="GET .../sync-runs/{runId} 原始响应" />
+          <RawJsonPanel
+            :data="{ runId: syncRun.id, repositoryBindingId: syncRun.repositoryBindingId, lastErrorCode: syncRun.lastErrorCode, response: rawJson }"
+            title="技术详情"
+          />
         </template>
       </PageState>
     </el-card>
@@ -99,6 +93,7 @@ import type { GitHubSyncRun } from '@/types/api'
 import StatusBadge from '@/components/StatusBadge.vue'
 import PageState from '@/components/PageState.vue'
 import RawJsonPanel from '@/components/RawJsonPanel.vue'
+import { productErrorMessage, unexpectedErrorMessage } from '@/utils/productError'
 
 const route = useRoute()
 const workspaceId = Number(route.params.workspaceId)
@@ -133,16 +128,24 @@ async function fetchDetail() {
       }
     } else {
       hasError.value = true
-      errorMsg.value = res.message || 'Sync Run 不存在'
+      errorMsg.value = productErrorMessage(res, '没有找到这次同步记录，请返回仓库页面重试。')
       stopPolling()
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     hasError.value = true
-    errorMsg.value = err.message || '网络连接失败'
+    errorMsg.value = unexpectedErrorMessage(err, '暂时无法加载同步进度，请稍后重试。')
     stopPolling()
   } finally {
     loading.value = false
   }
+}
+
+function resourceTypeLabel(value: string) {
+  return value === 'COMMITS' ? '提交记录' : value
+}
+
+function triggerTypeLabel(value: string) {
+  return ({ MANUAL: '手动同步', SCHEDULED: '定时同步', RETRY: '自动重试' } as Record<string, string>)[value] || value
 }
 
 function startPolling() {

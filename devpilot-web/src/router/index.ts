@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import type { RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { resolveRouteScope } from '@/router/scopeResolver'
 
 import MainLayout from '@/layouts/MainLayout.vue'
 import LoginView from '@/views/LoginView.vue'
@@ -29,7 +31,7 @@ import SyncRunDetail from '@/views/sync/SyncRunDetail.vue'
 import DeveloperConsoleView from '@/views/DeveloperConsoleView.vue'
 import UserProfileView from '@/views/UserProfileView.vue'
 
-const routes = [
+const routes: RouteRecordRaw[] = [
   {
     path: '/login',
     name: 'Login',
@@ -95,6 +97,13 @@ const routes = [
         path: 'workspaces/:workspaceId/projects/:projectId/overview',
         name: 'ProjectDetail',
         component: ProjectDetail,
+      },
+      {
+        path: 'workspaces/:workspaceId/projects/:projectId',
+        redirect: to => ({
+          name: 'ProjectDetail',
+          params: { workspaceId: to.params.workspaceId, projectId: to.params.projectId },
+        }),
       },
       {
         path: 'workspaces/:workspaceId/projects/:projectId/tasks',
@@ -172,9 +181,55 @@ const routes = [
         component: () => import('@/views/agent/AgentRunView.vue'),
       },
       {
+        path: 'workspaces/:workspaceId/projects/:projectId/knowledge',
+        name: 'ProjectKnowledge',
+        component: () => import('@/views/knowledge/ProjectKnowledgeView.vue'),
+      },
+      {
         path: 'developer-console',
         name: 'DeveloperConsole',
         component: DeveloperConsoleView,
+      },
+      {
+        path: 'forbidden',
+        name: 'Forbidden',
+        component: () => import('@/views/RouteProblemView.vue'),
+        props: {
+          statusCode: '403',
+          title: '没有访问权限',
+          description: '当前账号无权访问这个工作区或项目。请返回可用的工作区继续。',
+        },
+      },
+      {
+        path: 'resource-not-found',
+        name: 'ResourceNotFound',
+        component: () => import('@/views/RouteProblemView.vue'),
+        props: {
+          statusCode: '404',
+          title: '资源不存在',
+          description: '目标资源可能已被移除，或链接中的工作区、项目标识不正确。',
+        },
+      },
+      {
+        path: 'scope-unavailable',
+        name: 'ScopeUnavailable',
+        component: () => import('@/views/RouteProblemView.vue'),
+        props: {
+          statusCode: '暂时不可用',
+          title: '无法加载项目上下文',
+          description: '服务暂时没有返回工作区或项目信息。请稍后重试。',
+        },
+      },
+      {
+        path: ':pathMatch(.*)*',
+        name: 'NotFound',
+        component: () => import('@/views/RouteProblemView.vue'),
+        props: {
+          statusCode: '404',
+          title: '页面不存在',
+          description: '这个地址没有对应的 DevPilot 页面。',
+        },
+        meta: { public: true },
       },
     ],
   },
@@ -200,7 +255,7 @@ router.beforeEach(async (to) => {
   if (isPublic && authStore.isAuthenticated && (to.path === '/login' || to.path === '/register')) {
     return { path: '/workspaces' }
   }
-  return true
+  return resolveRouteScope(to)
 })
 
 export default router

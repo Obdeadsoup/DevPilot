@@ -4,8 +4,9 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 COPY pyproject.toml README.md ./
 COPY src src
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir .
+RUN --mount=type=cache,id=devpilot-pip-cache,target=/root/.cache/pip \
+    pip install --upgrade pip \
+    && pip install .
 
 FROM python:3.12-slim AS runtime
 RUN groupadd --system devpilot \

@@ -3,7 +3,7 @@
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>绑定 GitHub 仓库 (POST .../github-repositories)</span>
+          <span>绑定 GitHub 仓库</span>
           <el-button link @click="$router.push(`/workspaces/${workspaceId}/projects/${projectId}/repositories`)">
             返回列表
           </el-button>
@@ -11,7 +11,7 @@
       </template>
 
       <el-alert
-        title="凭据引用名称说明 (Security Warning)"
+        title="凭据安全"
         type="warning"
         show-icon
         :closable="false"
@@ -19,7 +19,7 @@
       >
         <template #default>
           <div>
-            <code>apiCredentialRef</code> 与 <code>webhookSecretRef</code> 填写的是服务器宿主<b>环境变量名</b>（例如 <code>DEVPILOT_GITHUB_API_TOKEN_LOCAL</code>），<b>绝不能输入真实的 GitHub PAT 或 Webhook 密钥明文！</b>
+            此处只填写服务端已经配置的凭据引用名称，<b>不要输入真实的访问令牌或 Webhook 密钥。</b>
           </div>
         </template>
       </el-alert>
@@ -31,43 +31,43 @@
         label-position="top"
         style="max-width: 600px;"
       >
-        <el-form-item label="GitHub Owner / Organization (owner)" prop="owner">
+        <el-form-item label="GitHub 所有者或组织" prop="owner">
           <el-input
             v-model="form.owner"
-            placeholder="例如: example-org"
+            placeholder="例如：example-org"
             maxlength="39"
           />
         </el-form-item>
 
-        <el-form-item label="GitHub 仓库名 (repositoryName)" prop="repositoryName">
+        <el-form-item label="GitHub 仓库名" prop="repositoryName">
           <el-input
             v-model="form.repositoryName"
-            placeholder="例如: example-repo"
+            placeholder="例如：example-repo"
             maxlength="100"
           />
         </el-form-item>
 
-        <el-form-item label="API Token 环境变量引用名 (apiCredentialRef)" prop="apiCredentialRef">
+        <el-form-item label="访问凭据引用名称" prop="apiCredentialRef">
           <el-input
             v-model="form.apiCredentialRef"
-            placeholder="例如: DEVPILOT_GITHUB_API_TOKEN_LOCAL"
+            placeholder="输入服务端已配置的引用名称"
             maxlength="200"
           />
-          <div class="field-hint">建议格式: <code>^DEVPILOT_GITHUB_API_TOKEN_[A-Z0-9_]+$</code></div>
+          <div class="field-hint">该名称用于定位服务端凭据，不会保存令牌明文。</div>
         </el-form-item>
 
-        <el-form-item label="Webhook Secret 环境变量引用名 (webhookSecretRef)" prop="webhookSecretRef">
+        <el-form-item label="Webhook 密钥引用名称" prop="webhookSecretRef">
           <el-input
             v-model="form.webhookSecretRef"
-            placeholder="例如: DEVPILOT_GITHUB_WEBHOOK_SECRET_LOCAL"
+            placeholder="输入服务端已配置的引用名称"
             maxlength="200"
           />
-          <div class="field-hint">建议格式: <code>^DEVPILOT_GITHUB_WEBHOOK_SECRET_[A-Z0-9_]+$</code></div>
+          <div class="field-hint">用于验证 GitHub 事件来源，不会保存密钥明文。</div>
         </el-form-item>
 
         <el-form-item style="margin-top: 24px;">
           <el-button type="primary" :loading="loading" @click="handleSubmit">
-            提交绑定 (将验证 GitHub REST API)
+            验证并绑定
           </el-button>
           <el-button @click="$router.push(`/workspaces/${workspaceId}/projects/${projectId}/repositories`)">
             取消
@@ -75,7 +75,7 @@
         </el-form-item>
       </el-form>
 
-      <RawJsonPanel v-if="rawJson" :data="rawJson" title="绑定仓库响应 JSON" />
+      <RawJsonPanel v-if="rawJson" :data="rawJson" title="技术详情" />
     </el-card>
   </div>
 </template>
@@ -86,6 +86,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { createRepositoryApi } from '@/api/modules/repository'
 import RawJsonPanel from '@/components/RawJsonPanel.vue'
+import { productErrorMessage, unexpectedErrorMessage } from '@/utils/productError'
 
 const route = useRoute()
 const router = useRouter()
@@ -100,8 +101,8 @@ const rawJson = ref<any>(null)
 const form = reactive({
   owner: '',
   repositoryName: '',
-  apiCredentialRef: 'DEVPILOT_GITHUB_API_TOKEN_LOCAL',
-  webhookSecretRef: 'DEVPILOT_GITHUB_WEBHOOK_SECRET_LOCAL',
+  apiCredentialRef: '',
+  webhookSecretRef: '',
 })
 
 const validateOwner = (_rule: any, value: string, callback: any) => {
@@ -123,7 +124,7 @@ const validateRepo = (_rule: any, value: string, callback: any) => {
 const rules: FormRules = {
   owner: [{ validator: validateOwner, trigger: 'blur' }],
   repositoryName: [{ validator: validateRepo, trigger: 'blur' }],
-  apiCredentialRef: [{ required: true, message: '请输入 API 凭据引用名称', trigger: 'blur' }],
+  apiCredentialRef: [{ required: true, message: '请输入访问凭据引用名称', trigger: 'blur' }],
   webhookSecretRef: [{ required: true, message: '请输入 Webhook 密钥引用名称', trigger: 'blur' }],
 }
 
@@ -146,10 +147,10 @@ async function handleSubmit() {
         ElMessage.success('GitHub 仓库绑定成功')
         router.push(`/workspaces/${workspaceId}/projects/${projectId}/repositories/${res.data.id}`)
       } else {
-        ElMessage.error(`绑定失败 [${res.code}]: ${res.message}`)
+        ElMessage.error(productErrorMessage(res, '仓库绑定失败，请检查仓库与凭据设置后重试。', '该 GitHub 仓库已被绑定，请刷新后重试。'))
       }
     } catch (err: any) {
-      ElMessage.error(err.message || '网络无法连接')
+      ElMessage.error(unexpectedErrorMessage(err, '暂时无法绑定仓库，请稍后重试。'))
     } finally {
       loading.value = false
     }

@@ -2,52 +2,48 @@
   <div class="task-list-container">
     <el-card>
       <template #header>
-        <div class="card-header">
-          <div>
-            <h2>Task 任务列表 (GET .../tasks)</h2>
-            <span class="sub-text">Project ID: {{ projectId }}</span>
-          </div>
-          <div>
+        <PageHeader title="任务" description="聚焦当前项目的优先级、负责人和交付状态。">
+          <template #actions>
             <el-button type="primary" @click="$router.push(`/workspaces/${workspaceId}/projects/${projectId}/tasks/new`)">
-              创建新 Task
+              创建任务
             </el-button>
             <el-button @click="fetchData">刷新</el-button>
-          </div>
-        </div>
+          </template>
+        </PageHeader>
       </template>
 
       <!-- Filter Bar -->
       <div class="filter-bar">
-        <el-form :inline="true">
-          <el-form-item label="状态 (status)">
+        <el-form class="filter-form" label-position="top">
+          <el-form-item label="状态">
             <el-select v-model="filter.status" placeholder="全部状态" clearable style="width: 140px;" @change="handleFilterChange">
-              <el-option label="BACKLOG" value="BACKLOG" />
-              <el-option label="TODO" value="TODO" />
-              <el-option label="IN_PROGRESS" value="IN_PROGRESS" />
-              <el-option label="IN_REVIEW" value="IN_REVIEW" />
-              <el-option label="DONE" value="DONE" />
-              <el-option label="CANCELED" value="CANCELED" />
+              <el-option label="待规划" value="BACKLOG" />
+              <el-option label="待处理" value="TODO" />
+              <el-option label="进行中" value="IN_PROGRESS" />
+              <el-option label="审核中" value="IN_REVIEW" />
+              <el-option label="已完成" value="DONE" />
+              <el-option label="已取消" value="CANCELED" />
             </el-select>
           </el-form-item>
 
-          <el-form-item label="优先级 (priority)">
+          <el-form-item label="优先级">
             <el-select v-model="filter.priority" placeholder="全部优先级" clearable style="width: 130px;" @change="handleFilterChange">
-              <el-option label="LOW" value="LOW" />
-              <el-option label="MEDIUM" value="MEDIUM" />
-              <el-option label="HIGH" value="HIGH" />
-              <el-option label="URGENT" value="URGENT" />
+              <el-option label="低" value="LOW" />
+              <el-option label="中" value="MEDIUM" />
+              <el-option label="高" value="HIGH" />
+              <el-option label="紧急" value="URGENT" />
             </el-select>
           </el-form-item>
 
-          <el-form-item label="负责人 User ID">
-            <el-input-number v-model="filter.assigneeUserId" :min="1" placeholder="ID" style="width: 120px;" controls-position="right" @change="handleFilterChange" />
+          <el-form-item label="负责人编号">
+            <el-input-number v-model="filter.assigneeUserId" :min="1" placeholder="成员编号" style="width: 120px;" controls-position="right" @change="handleFilterChange" />
           </el-form-item>
 
-          <el-form-item label="创建者 User ID">
-            <el-input-number v-model="filter.reporterUserId" :min="1" placeholder="ID" style="width: 120px;" controls-position="right" @change="handleFilterChange" />
+          <el-form-item label="创建者编号">
+            <el-input-number v-model="filter.reporterUserId" :min="1" placeholder="成员编号" style="width: 120px;" controls-position="right" @change="handleFilterChange" />
           </el-form-item>
 
-          <el-form-item label="截止之前 (dueBefore)">
+          <el-form-item label="截止时间">
             <el-date-picker
               v-model="filter.dueBefore"
               type="datetime"
@@ -63,12 +59,12 @@
       <PageState :loading="loading" :error="hasError" :error-msg="errorMsg" :empty="items.length === 0" @retry="fetchData">
         <template #empty-action>
           <el-button type="primary" @click="$router.push(`/workspaces/${workspaceId}/projects/${projectId}/tasks/new`)">
-            创建首个 Task
+            创建首个任务
           </el-button>
         </template>
 
         <el-table :data="items" stripe style="width: 100%;">
-          <el-table-column prop="displayKey" label="Key #" width="110">
+          <el-table-column prop="displayKey" label="任务编号" width="120">
             <template #default="{ row }">
               <el-tag type="info" effect="plain">
                 <code>{{ row.displayKey }}</code>
@@ -76,7 +72,7 @@
             </template>
           </el-table-column>
 
-          <el-table-column prop="title" label="任务标题 (Title)" min-width="200">
+          <el-table-column prop="title" label="任务标题" min-width="200">
             <template #default="{ row }">
               <router-link
                 :to="`/workspaces/${workspaceId}/projects/${projectId}/tasks/${row.id}`"
@@ -101,7 +97,7 @@
 
           <el-table-column prop="assigneeUserId" label="负责人" width="120">
             <template #default="{ row }">
-              <span v-if="row.assigneeUserId">User #{{ row.assigneeUserId }}</span>
+              <span v-if="row.assigneeUserId">成员 #{{ row.assigneeUserId }}</span>
               <span v-else class="text-muted">未分配</span>
             </template>
           </el-table-column>
@@ -112,11 +108,6 @@
             </template>
           </el-table-column>
 
-          <el-table-column prop="version" label="Version" width="90">
-            <template #default="{ row }">
-              <code>v{{ row.version }}</code>
-            </template>
-          </el-table-column>
 
           <el-table-column label="操作" width="120" fixed="right">
             <template #default="{ row }">
@@ -144,7 +135,6 @@
           />
         </div>
 
-        <RawJsonPanel :data="rawJson" title="GET .../tasks 原始响应" />
       </PageState>
     </el-card>
   </div>
@@ -157,7 +147,8 @@ import { listTasksApi } from '@/api/modules/task'
 import type { TaskResponse, TaskStatus, TaskPriority } from '@/types/task'
 import StatusBadge from '@/components/StatusBadge.vue'
 import PageState from '@/components/PageState.vue'
-import RawJsonPanel from '@/components/RawJsonPanel.vue'
+import PageHeader from '@/components/PageHeader.vue'
+import { productErrorMessage, unexpectedErrorMessage } from '@/utils/productError'
 
 const route = useRoute()
 const workspaceId = Number(route.params.workspaceId)
@@ -179,7 +170,6 @@ const page = ref(1)
 const size = ref(20)
 const total = ref(0)
 const items = ref<TaskResponse[]>([])
-const rawJson = ref<any>(null)
 
 async function fetchData() {
   loading.value = true
@@ -196,17 +186,16 @@ async function fetchData() {
       reporterUserId: filter.reporterUserId || undefined,
       dueBefore: filter.dueBefore || undefined,
     })
-    rawJson.value = res.rawJson
     if (res.success && res.data) {
       items.value = res.data.items || []
       total.value = res.data.total || 0
     } else {
       hasError.value = true
-      errorMsg.value = res.message || '获取 Task 列表失败'
+      errorMsg.value = productErrorMessage(res, '暂时无法加载任务，请稍后重试。')
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     hasError.value = true
-    errorMsg.value = err.message || '网络连接失败'
+    errorMsg.value = unexpectedErrorMessage(err, '暂时无法加载任务，请稍后重试。')
   } finally {
     loading.value = false
   }
@@ -227,26 +216,15 @@ onMounted(() => {
   max-width: 1100px;
   margin: 0 auto;
 }
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.card-header h2 {
-  margin: 0;
-  font-size: 18px;
-  color: #303133;
-}
-.sub-text {
-  font-size: 12px;
-  color: #909399;
-}
 .filter-bar {
   margin-bottom: 16px;
   padding: 12px;
   background-color: #fafafa;
   border-radius: 6px;
 }
+.filter-form { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 0 var(--space-4); }
+.filter-form :deep(.el-form-item) { margin-bottom: 0; }
+.filter-form :deep(.el-select), .filter-form :deep(.el-input-number), .filter-form :deep(.el-date-editor) { width: 100% !important; }
 .text-muted {
   color: #909399;
 }
@@ -255,4 +233,6 @@ onMounted(() => {
   display: flex;
   justify-content: flex-end;
 }
+@media (max-width: 1000px) { .filter-form { grid-template-columns: repeat(2, minmax(140px, 1fr)); row-gap: var(--space-3); } }
+@media (max-width: 560px) { .filter-form { grid-template-columns: 1fr; } }
 </style>
