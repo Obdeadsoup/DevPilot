@@ -9,6 +9,7 @@ from langchain_core.messages import AIMessage, ToolMessage
 from devpilot_agent_service.graph.state import DevPilotAgentState
 from devpilot_agent_service.runtime.context import RunContext
 from devpilot_agent_service.runtime.errors import MaxToolCallsExceeded
+from devpilot_agent_service.runtime.events import RuntimeEvent, RuntimeEventType
 from devpilot_agent_service.tools.base import ToolRisk
 from devpilot_agent_service.tools.registry import ToolRegistry
 from devpilot_agent_service.tools.workflow import WorkflowTool
@@ -19,6 +20,7 @@ def create_tool_node(
     *,
     max_tool_calls: int = 16,
     tool_call_namespace: str | None = None,
+    on_event: Callable[[RuntimeEvent], None] | None = None,
 ) -> Callable[[DevPilotAgentState], dict[str, object]]:
     """Execute the latest model batch through ToolRegistry and preserve every call ID."""
 
@@ -50,6 +52,9 @@ def create_tool_node(
             if not isinstance(call_id, str) or not call_id:
                 raise ValueError("graph tool call must have a non-empty id")
             tool = registry.get(name)
+            step = max(1, state.get("model_call_count", 0))
+            if on_event:
+                on_event(RuntimeEvent(RuntimeEventType.TOOL_STARTED, step, name))
             if isinstance(tool, WorkflowTool):
                 workflow = tool.execute_in_graph(
                     call["args"],
@@ -88,6 +93,8 @@ def create_tool_node(
                     name=name,
                 )
             )
+            if on_event:
+                on_event(RuntimeEvent(RuntimeEventType.TOOL_COMPLETED, step, name))
         return {
             **updates,
             "messages": results,

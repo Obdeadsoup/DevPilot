@@ -4,12 +4,14 @@ import logging
 import os
 from collections.abc import Callable, Mapping
 from concurrent import futures
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Self
 
 import grpc
 
 from devpilot_agent_service.config import DEFAULT_RUNTIME_DB_PATH, create_runtime_repository
+from devpilot_agent_service.harness.workflow import WorkflowRuntime
+from devpilot_agent_service.harness.workflow_fake import DeterministicWorkflowModel
 from devpilot_agent_service.model.providers.config import OpenAICompatibleConfig
 from devpilot_agent_service.model.providers.openai_compatible import OpenAICompatibleModel
 from devpilot_agent_service.rpc.application import (
@@ -17,6 +19,7 @@ from devpilot_agent_service.rpc.application import (
     DeterministicFakeModel,
 )
 from devpilot_agent_service.rpc.generated import agent_runtime_pb2_grpc
+from devpilot_agent_service.rpc.langgraph_application import LangGraphRuntimeApplication
 from devpilot_agent_service.rpc.servicer import AgentRuntimeServicer
 from devpilot_agent_service.rpc.tool_gateway_client import (
     JavaToolGatewayClient,
@@ -24,6 +27,7 @@ from devpilot_agent_service.rpc.tool_gateway_client import (
 )
 from devpilot_agent_service.runtime.agent_loop import AgentLoop
 from devpilot_agent_service.runtime.cancellation import ActiveRunRegistry
+from devpilot_agent_service.runtime.redaction import RuntimeRedactor
 from devpilot_agent_service.tools.devpilot import (
     CreateTaskTool,
     KnowledgeSearchTool,
@@ -61,8 +65,11 @@ class RpcServerConfig:
     fake_delay_seconds: float = 0.0
     runtime_db_path: str = DEFAULT_RUNTIME_DB_PATH
     fake_tool_name: str | None = None
+    runtime_mode: str = "legacy"
 
     def __post_init__(self) -> None:
+        if self.runtime_mode not in {"legacy", "langgraph"}:
+            raise ValueError("AGENT_RUNTIME_MODE must be 'legacy' or 'langgraph'")
         if not isinstance(self.host, str) or not self.host.strip():
             raise ValueError("AGENT_GRPC_HOST must not be blank")
         if (
@@ -102,6 +109,7 @@ class RpcServerConfig:
             fake_delay_seconds=fake_delay,
             runtime_db_path=source.get("AGENT_RUNTIME_DB_PATH", DEFAULT_RUNTIME_DB_PATH),
             fake_tool_name=fake_tool_name,
+            runtime_mode=source.get("AGENT_RUNTIME_MODE", "legacy").strip().lower(),
         )
 
     @property
@@ -115,9 +123,42 @@ def create_application(
     tool_client_factory: Callable[[JavaToolGatewayConfig], JavaToolGatewayClient] = (
         JavaToolGatewayClient
     ),
-) -> AgentRuntimeApplication:
-    """按显式模式组装 Model；fake 永不访问网络，deepseek 继续只读既有环境变量。"""
+) -> AgentRuntimeApplication | LangGraphRuntimeApplication:
+    """显式选择 runtime/model；fake 无模型网络请求，Remote Tools 仍走既有 gRPC。"""
 
+    # Java -> Python Runtime ingress selection; Python -> Java tools keep the same client.
+    # LangGraph must not open/reconcile Legacy sqlite until lifecycle parity is implemented.
+    if config.runtime_mode == "langgraph":
+        gateway_config = JavaToolGatewayConfig.from_env()
+        client = tool_client_factory(gateway_config)
+        try:
+            if config.model_mode == "fake":
+                model = DeterministicWorkflowModel(config.fake_delay_seconds, config.fake_tool_name)
+                planner_model = model
+                redactor = RuntimeRedactor((gateway_config.service_key,))
+            else:
+                provider_config = OpenAICompatibleConfig.from_deepseek_env()
+                model = OpenAICompatibleModel(provider_config)
+                planner_model = OpenAICompatibleModel(
+                    replace(
+                        provider_config,
+                        connect_timeout_seconds=min(provider_config.connect_timeout_seconds, 5.0),
+                        read_timeout_seconds=min(provider_config.read_timeout_seconds, 5.0),
+                        overall_timeout_seconds=min(provider_config.overall_timeout_seconds, 5.0),
+                    )
+                )
+                redactor = RuntimeRedactor((gateway_config.service_key, provider_config.api_key))
+            workflow = WorkflowRuntime(
+                model,
+                _remote_tool_registry(client),
+                lambda: model,
+                planner_model=planner_model,
+                redactor=redactor,
+            )
+            return LangGraphRuntimeApplication(workflow, close_callback=client.close)
+        except Exception:
+            client.close()
+            raise
     repository = create_runtime_repository(config.runtime_db_path)
     if config.model_mode == "fake":
         if config.fake_tool_name is not None:
@@ -164,7 +205,7 @@ def _remote_tool_registry(client: JavaToolGatewayClient) -> ToolRegistry:
 
 def create_server(
     config: RpcServerConfig,
-    application: AgentRuntimeApplication | None = None,
+    application: AgentRuntimeApplication | LangGraphRuntimeApplication | None = None,
 ) -> grpc.Server:
     """创建但不启动 Server；线程池只承载同步 Unary 调用，生命周期由进程入口管理。"""
 
@@ -195,10 +236,11 @@ def serve() -> None:
     server = create_server(config, application)
     server.start()
     LOGGER.info(
-        "Agent Runtime gRPC server started address=%s modelMode=%s fakeTool=%s",
+        "Agent Runtime gRPC server started address=%s modelMode=%s fakeTool=%s runtimeMode=%s",
         config.bind_address,
         config.model_mode,
         config.fake_tool_name or "disabled",
+        config.runtime_mode,
     )
     try:
         server.wait_for_termination()

@@ -16,6 +16,7 @@ from devpilot_agent_service.runtime.errors import (
     MaxToolCallsExceeded,
     ModelInvocationError,
 )
+from devpilot_agent_service.runtime.events import RuntimeEvent, RuntimeEventType
 from devpilot_agent_service.runtime.message import Message
 from devpilot_agent_service.tools.registry import ToolRegistry
 
@@ -27,6 +28,7 @@ def create_agent_node(
     context_manager: ContextManager,
     max_steps: int,
     max_tool_calls: int,
+    on_event: Callable[[RuntimeEvent], None] | None = None,
 ) -> Callable[[DevPilotAgentState], dict[str, object]]:
     """Adapt graph messages to the existing provider-neutral Model abstraction."""
 
@@ -35,6 +37,8 @@ def create_agent_node(
         if rounds >= max_steps:
             raise MaxStepsExceeded(max_steps)
         bounded = context_manager.select(state["messages"])
+        if on_event:
+            on_event(RuntimeEvent(RuntimeEventType.MODEL_STEP_STARTED, rounds + 1))
         try:
             response = model.generate(
                 _to_runtime_messages(bounded.messages), registry.definitions()

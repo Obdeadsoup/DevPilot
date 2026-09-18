@@ -10,6 +10,7 @@ import grpc
 
 from devpilot_agent_service.rpc.application import AgentRuntimeApplication
 from devpilot_agent_service.rpc.generated import agent_runtime_pb2, agent_runtime_pb2_grpc
+from devpilot_agent_service.rpc.langgraph_application import LangGraphRuntimeApplication
 from devpilot_agent_service.runtime.cancellation import (
     ActiveRunRegistry,
     CancelStatus,
@@ -43,7 +44,7 @@ class AgentRuntimeServicer(agent_runtime_pb2_grpc.AgentRuntimeServicer):
 
     def __init__(
         self,
-        application: AgentRuntimeApplication,
+        application: AgentRuntimeApplication | LangGraphRuntimeApplication,
         active_runs: ActiveRunRegistry | None = None,
     ) -> None:
         self._application = application
@@ -257,6 +258,8 @@ class AgentRuntimeServicer(agent_runtime_pb2_grpc.AgentRuntimeServicer):
         _require_non_blank(request.request_id, "request_id", context)
         try:
             decision = self._application.request_cancel(request.run_id, request.request_id)
+        except ResumeRejected as error:
+            context.abort(grpc.StatusCode.FAILED_PRECONDITION, error.code)
         except Exception:
             context.abort(grpc.StatusCode.INTERNAL, "runtime cancellation could not be persisted")
         if decision is None:

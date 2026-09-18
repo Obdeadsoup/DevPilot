@@ -27,6 +27,12 @@ class DevPilotAgentState(TypedDict):
     model_call_count: NotRequired[int]
     plan: NotRequired[list[PlanItem]]
     context_summary: NotRequired[str | None]
+    planner_decision: NotRequired[dict]
+    planner_route: NotRequired[str]
+    rewritten_query: NotRequired[str]
+    planner_elapsed_ms: NotRequired[int]
+    planner_call_count: NotRequired[int]
+    write_path_required: NotRequired[bool]
     delegation_count: NotRequired[int]
     delegation_trace: NotRequired[list[DelegationRecord]]
     final_answer: str | None
