@@ -1,7 +1,7 @@
 """Tool 的注册、模型定义导出与统一执行边界。"""
 
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 from devpilot_agent_service.runtime.context import RunContext
 from devpilot_agent_service.runtime.errors import (
@@ -44,6 +44,16 @@ class ToolRegistry:
 
     def risk(self, name: str) -> ToolRisk:
         return definition_of(self.get(name)).risk
+
+    def subset(self, names: Sequence[str], *, read_only: bool = True) -> "ToolRegistry":
+        """Snapshot an explicit capability allowlist; fail closed on unknown/write tools."""
+        registry = ToolRegistry()
+        for name in names:
+            tool = self.get(name)
+            if read_only and definition_of(tool).risk is not ToolRisk.READ_ONLY:
+                raise ValueError("subset only supports read-only tools")
+            registry.register(tool)
+        return registry
 
     def create_proposal(
         self,

@@ -4,23 +4,63 @@ from collections.abc import Callable, Sequence
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 
+from devpilot_agent_service.context import ContextManager
 from devpilot_agent_service.graph.state import DevPilotAgentState
 from devpilot_agent_service.model.base import Model
+from devpilot_agent_service.model.errors import ProviderError, ProviderErrorKind
 from devpilot_agent_service.model.types import ModelResponse, ModelResponseKind, ToolCall
+from devpilot_agent_service.runtime.errors import (
+    DuplicateToolCallIdError,
+    InvalidModelResponseError,
+    MaxStepsExceeded,
+    MaxToolCallsExceeded,
+    ModelInvocationError,
+)
 from devpilot_agent_service.runtime.message import Message
 from devpilot_agent_service.tools.registry import ToolRegistry
 
 
 def create_agent_node(
-    model: Model, registry: ToolRegistry
-) -> Callable[[DevPilotAgentState], dict[str, list[AIMessage]]]:
+    model: Model,
+    registry: ToolRegistry,
+    *,
+    context_manager: ContextManager,
+    max_steps: int,
+    max_tool_calls: int,
+) -> Callable[[DevPilotAgentState], dict[str, object]]:
     """Adapt graph messages to the existing provider-neutral Model abstraction."""
 
-    def agent_node(state: DevPilotAgentState) -> dict[str, list[AIMessage]]:
-        response = model.generate(_to_runtime_messages(state["messages"]), registry.definitions())
+    def agent_node(state: DevPilotAgentState) -> dict[str, object]:
+        rounds = state.get("model_call_count", 0)
+        if rounds >= max_steps:
+            raise MaxStepsExceeded(max_steps)
+        bounded = context_manager.select(state["messages"])
+        try:
+            response = model.generate(
+                _to_runtime_messages(bounded.messages), registry.definitions()
+            )
+        except ProviderError as error:
+            raise ModelInvocationError(rounds + 1, error.kind) from error
+        except Exception as error:
+            raise ModelInvocationError(rounds + 1, ProviderErrorKind.UNKNOWN) from error
         if not isinstance(response, ModelResponse):
-            raise TypeError("model must return ModelResponse")
-        return {"messages": [_to_ai_message(response)]}
+            raise InvalidModelResponseError(rounds + 1)
+        known_ids = {
+            call["id"]
+            for message in state["messages"]
+            if isinstance(message, AIMessage)
+            for call in message.tool_calls
+        }
+        ids = [call.call_id for call in response.tool_calls]
+        if len(ids) != len(set(ids)) or known_ids.intersection(ids):
+            raise DuplicateToolCallIdError()
+        if state.get("tool_call_count", 0) + len(ids) > max_tool_calls:
+            raise MaxToolCallsExceeded(max_tool_calls)
+        return {
+            "messages": [_to_ai_message(response)],
+            "model_call_count": rounds + 1,
+            "context_summary": bounded.summary,
+        }
 
     return agent_node
 
