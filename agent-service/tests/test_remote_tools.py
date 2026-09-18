@@ -9,8 +9,8 @@ from devpilot_agent_service.runtime.context import RunContext
 from devpilot_agent_service.runtime.errors import InvalidToolArguments
 from devpilot_agent_service.runtime.message import MessageRole
 from devpilot_agent_service.tools.devpilot import (
-    ListOpenTasksTool,
     KnowledgeSearchTool,
+    ListOpenTasksTool,
     ProjectSummaryTool,
     RecentProjectActivityTool,
 )
