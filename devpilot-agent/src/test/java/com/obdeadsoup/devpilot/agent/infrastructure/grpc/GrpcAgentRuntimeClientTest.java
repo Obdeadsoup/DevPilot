@@ -1,6 +1,7 @@
 package com.obdeadsoup.devpilot.agent.infrastructure.grpc;
 
 import com.obdeadsoup.devpilot.agent.application.AgentRunCommand;
+import com.obdeadsoup.devpilot.agent.application.AgentExecutionScope;
 import com.obdeadsoup.devpilot.agent.application.AgentRunStatus;
 import com.obdeadsoup.devpilot.agent.contract.v1.AgentRuntimeGrpc;
 import com.obdeadsoup.devpilot.agent.contract.v1.RunStatus;
@@ -47,13 +48,17 @@ class GrpcAgentRuntimeClientTest {
                 .setStatus(RunStatus.RUN_STATUS_SUCCEEDED)
                 .build());
 
-        var result = client.run(new AgentRunCommand("request-1", "run-1", "hello"));
+        var result = client.run(new AgentRunCommand("request-1", "run-1", "hello",
+                new AgentExecutionScope(11, 22, 33)));
 
         ArgumentCaptor<StartRunRequest> request = ArgumentCaptor.forClass(StartRunRequest.class);
         verify(deadlineStub).startRun(request.capture());
         assertThat(request.getValue().getRequestId()).isEqualTo("request-1");
         assertThat(request.getValue().getRunId()).isEqualTo("run-1");
         assertThat(request.getValue().getUserInput()).isEqualTo("hello");
+        assertThat(request.getValue().getExecutionScope().getWorkspaceId()).isEqualTo(11);
+        assertThat(request.getValue().getExecutionScope().getProjectId()).isEqualTo(22);
+        assertThat(request.getValue().getExecutionScope().getActorUserId()).isEqualTo(33);
         assertThat(result.runId()).isEqualTo("run-1");
         assertThat(result.finalOutput()).isEqualTo("finished");
         assertThat(result.status()).isEqualTo(AgentRunStatus.SUCCEEDED);

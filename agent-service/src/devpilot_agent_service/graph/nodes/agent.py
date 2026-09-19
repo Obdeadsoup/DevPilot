@@ -29,10 +29,13 @@ def create_agent_node(
     max_steps: int,
     max_tool_calls: int,
     on_event: Callable[[RuntimeEvent], None] | None = None,
+    safe_point: Callable[[], None] | None = None,
 ) -> Callable[[DevPilotAgentState], dict[str, object]]:
     """Adapt graph messages to the existing provider-neutral Model abstraction."""
 
     def agent_node(state: DevPilotAgentState) -> dict[str, object]:
+        if safe_point:
+            safe_point()
         rounds = state.get("model_call_count", 0)
         if rounds >= max_steps:
             raise MaxStepsExceeded(max_steps)
@@ -47,6 +50,8 @@ def create_agent_node(
             raise ModelInvocationError(rounds + 1, error.kind) from error
         except Exception as error:
             raise ModelInvocationError(rounds + 1, ProviderErrorKind.UNKNOWN) from error
+        if safe_point:
+            safe_point()
         if not isinstance(response, ModelResponse):
             raise InvalidModelResponseError(rounds + 1)
         known_ids = {

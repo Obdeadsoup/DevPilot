@@ -62,7 +62,8 @@ class AgentRunApplicationServiceTest {
         order.verify(persistenceService).createRunning(
                 "request-1", "run-1", 1, 2, 7, "hello", AgentRunCodeSnapshot.none(), STARTED_AT);
         order.verify(streamCoordinator).start(
-                1, 2, new AgentRunCommand("request-1", "run-1", "hello"));
+                1, 2, new AgentRunCommand("request-1", "run-1", "hello",
+                        new AgentExecutionScope(1, 2, 7)));
         verify(persistenceService, never()).markSucceeded(anyLong(), anyLong(), any(), any(), any());
         verify(persistenceService, never()).markFailed(anyLong(), anyLong(), any(), any(), any());
     }
@@ -136,7 +137,8 @@ class AgentRunApplicationServiceTest {
         InOrder order = inOrder(repositoryBindingService, persistenceService, streamCoordinator);
         order.verify(repositoryBindingService).resolveBranchSnapshotForAgentRun(1, 2, 31L, "agent");
         order.verify(persistenceService).createRunning("request-1", "run-1", 1, 2, 7, "hello", snapshot, STARTED_AT);
-        order.verify(streamCoordinator).start(1, 2, new AgentRunCommand("request-1", "run-1", "hello"));
+        order.verify(streamCoordinator).start(1, 2, new AgentRunCommand("request-1", "run-1", "hello",
+                new AgentExecutionScope(1, 2, 7)));
     }
 
     @Test

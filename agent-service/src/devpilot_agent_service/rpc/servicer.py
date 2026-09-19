@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 import grpc
 
-from devpilot_agent_service.rpc.application import AgentRuntimeApplication
+from devpilot_agent_service.memory.store import MemoryScope
 from devpilot_agent_service.rpc.generated import agent_runtime_pb2, agent_runtime_pb2_grpc
 from devpilot_agent_service.rpc.langgraph_application import LangGraphRuntimeApplication
 from devpilot_agent_service.runtime.cancellation import (
@@ -44,7 +44,7 @@ class AgentRuntimeServicer(agent_runtime_pb2_grpc.AgentRuntimeServicer):
 
     def __init__(
         self,
-        application: AgentRuntimeApplication | LangGraphRuntimeApplication,
+        application: LangGraphRuntimeApplication,
         active_runs: ActiveRunRegistry | None = None,
     ) -> None:
         self._application = application
@@ -69,6 +69,10 @@ class AgentRuntimeServicer(agent_runtime_pb2_grpc.AgentRuntimeServicer):
             )
         except RunAlreadyExists:
             context.abort(grpc.StatusCode.ALREADY_EXISTS, "runtime run already exists")
+        except ApprovalRequired:
+            context.abort(grpc.StatusCode.FAILED_PRECONDITION, "RUN_WAITING_APPROVAL")
+        except RunCancelled:
+            context.abort(grpc.StatusCode.CANCELLED, "agent run cancelled")
         except AgentRuntimeError as error:
             LOGGER.warning(
                 "Agent runtime failed failureType=%s stopReason=%s",
@@ -115,7 +119,12 @@ class AgentRuntimeServicer(agent_runtime_pb2_grpc.AgentRuntimeServicer):
         except DuplicateActiveRunError:
             context.abort(grpc.StatusCode.ALREADY_EXISTS, "agent run is already active")
         try:
-            run_context = RunContext(request.run_id, request.request_id)
+            scope = (
+                MemoryScope.from_proto(request.execution_scope)
+                if not resume and request.HasField("execution_scope")
+                else None
+            )
+            run_context = RunContext(request.run_id, request.request_id, scope)
             if proposal_id is not None:
                 prepared = self._application.prepare_approval_resume(run_context, proposal_id)
             elif resume:
@@ -134,6 +143,9 @@ class AgentRuntimeServicer(agent_runtime_pb2_grpc.AgentRuntimeServicer):
                 else grpc.StatusCode.FAILED_PRECONDITION
             )
             context.abort(status, error.code)
+        except ValueError:
+            self._active_runs.complete(request.run_id)
+            context.abort(grpc.StatusCode.INVALID_ARGUMENT, "invalid execution scope")
         except Exception:
             self._active_runs.complete(request.run_id)
             context.abort(grpc.StatusCode.INTERNAL, "runtime preparation failed")
@@ -204,7 +216,7 @@ class AgentRuntimeServicer(agent_runtime_pb2_grpc.AgentRuntimeServicer):
             sequence,
             (
                 agent_runtime_pb2.AGENT_EVENT_TYPE_RUN_RESUMED
-                if proposal_id is not None
+                if resume
                 else agent_runtime_pb2.AGENT_EVENT_TYPE_RUN_STARTED
             ),
         )

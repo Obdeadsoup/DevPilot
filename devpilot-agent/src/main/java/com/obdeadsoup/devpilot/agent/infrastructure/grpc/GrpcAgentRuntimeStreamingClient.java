@@ -23,10 +23,21 @@ public final class GrpcAgentRuntimeStreamingClient implements AgentRuntimeStream
 
     @Override
     public AgentRuntimeStreamHandle stream(AgentRunCommand command, AgentRuntimeEventListener listener) {
-        StreamRunRequest request = StreamRunRequest.newBuilder().setRunId(command.runId())
-                .setRequestId(command.requestId()).setUserInput(command.userInput()).build();
+        StreamRunRequest.Builder builder = StreamRunRequest.newBuilder().setRunId(command.runId())
+                .setRequestId(command.requestId()).setUserInput(command.userInput());
+        if (command.executionScope() != null) {
+            builder.setExecutionScope(toProtoScope(command.executionScope()));
+        }
+        StreamRunRequest request = builder.build();
         return start(request, (value, observer) -> stub.withDeadlineAfter(deadline.toMillis(), TimeUnit.MILLISECONDS)
                 .streamRun(value, observer), listener);
+    }
+
+    private static com.obdeadsoup.devpilot.agent.contract.v1.AgentExecutionScope toProtoScope(
+            com.obdeadsoup.devpilot.agent.application.AgentExecutionScope scope) {
+        return com.obdeadsoup.devpilot.agent.contract.v1.AgentExecutionScope.newBuilder()
+                .setWorkspaceId(scope.workspaceId()).setProjectId(scope.projectId())
+                .setActorUserId(scope.actorUserId()).build();
     }
 
     @Override

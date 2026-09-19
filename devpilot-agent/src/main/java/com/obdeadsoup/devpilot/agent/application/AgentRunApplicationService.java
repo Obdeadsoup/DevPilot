@@ -66,7 +66,8 @@ public class AgentRunApplicationService {
                 identity.requestId(), identity.runId(), workspaceId, projectId,
                 userId, normalizedInput, codeSnapshot, timeProvider.now());
         streamCoordinator.start(workspaceId, projectId,
-                new AgentRunCommand(identity.requestId(), identity.runId(), normalizedInput));
+                new AgentRunCommand(identity.requestId(), identity.runId(), normalizedInput,
+                        new AgentExecutionScope(workspaceId, projectId, userId)));
         return running;
     }
 

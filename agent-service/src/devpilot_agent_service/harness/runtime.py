@@ -71,6 +71,7 @@ class HarnessRuntime:
         *,
         config: HarnessConfig | None = None,
         redactor: RuntimeRedactor | None = None,
+        build_main_graph: bool = True,
     ) -> None:
         self.config = config or HarnessConfig()
         self._redactor = redactor or RuntimeRedactor()
@@ -93,12 +94,16 @@ class HarnessRuntime:
                 redactor=self._redactor,
             )
         )
-        self._graph = build_agent_graph(
-            model,
-            self.registry,
-            context_manager=context,
-            max_steps=self.config.max_steps,
-            max_tool_calls=self.config.max_tool_calls,
+        self._graph = (
+            build_agent_graph(
+                model,
+                self.registry,
+                context_manager=context,
+                max_steps=self.config.max_steps,
+                max_tool_calls=self.config.max_tool_calls,
+            )
+            if build_main_graph
+            else None
         )
 
     def invoke(
@@ -108,6 +113,8 @@ class HarnessRuntime:
         run_context: RunContext | None = None,
         history: Sequence[BaseMessage] = (),
     ) -> HarnessResult:
+        if self._graph is None:
+            raise RuntimeError("this harness is configured for the WorkflowRuntime graph")
         if not isinstance(user_input, str) or not user_input.strip():
             raise ValueError("harness query must not be blank")
         if run_context is not None and not isinstance(run_context, RunContext):

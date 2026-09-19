@@ -42,7 +42,7 @@ def test_resume_rpc_returns_existing_run_and_explicit_rejection_errors(repositor
             stub.ResumeRun(pb.ResumeRunRequest(run_id="run", request_id="request"), timeout=3)
         )
         assert [e.type for e in resumed] == [
-            pb.AGENT_EVENT_TYPE_RUN_STARTED,
+            pb.AGENT_EVENT_TYPE_RUN_RESUMED,
             pb.AGENT_EVENT_TYPE_MODEL_STEP_STARTED,
             pb.AGENT_EVENT_TYPE_RUN_SUCCEEDED,
         ]

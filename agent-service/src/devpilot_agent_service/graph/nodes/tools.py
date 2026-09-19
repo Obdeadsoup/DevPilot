@@ -21,10 +21,13 @@ def create_tool_node(
     max_tool_calls: int = 16,
     tool_call_namespace: str | None = None,
     on_event: Callable[[RuntimeEvent], None] | None = None,
+    safe_point: Callable[[], None] | None = None,
 ) -> Callable[[DevPilotAgentState], dict[str, object]]:
     """Execute the latest model batch through ToolRegistry and preserve every call ID."""
 
     def tool_node(state: DevPilotAgentState) -> dict[str, object]:
+        if safe_point:
+            safe_point()
         messages = state["messages"]
         if not messages or not isinstance(messages[-1], AIMessage):
             raise ValueError("tools node requires a preceding AIMessage")
@@ -45,6 +48,8 @@ def create_tool_node(
         working = dict(state)
         updates: dict[str, object] = {}
         for call in calls:
+            if safe_point:
+                safe_point()
             name = call["name"]
             if registry.risk(name) is not ToolRisk.READ_ONLY:
                 raise ValueError(f"experimental graph only supports read-only tools: {name}")
@@ -81,6 +86,8 @@ def create_tool_node(
                     run_context=run_context,
                     tool_call_id=gateway_call_id,
                 )
+            if safe_point:
+                safe_point()
             results.append(
                 ToolMessage(
                     content=json.dumps(

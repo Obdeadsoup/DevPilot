@@ -208,7 +208,7 @@ key、key version 与 rotation metadata；业务表仍只保存 credential ID/re
 ### Requirements
 
 - Docker Desktop / Docker Engine 与 Docker Compose
-- 真实演示路径需要一个 DeepSeek API Key；确定性离线验收可显式使用 `AGENT_MODEL_MODE=fake`
+- 真实演示路径需要一个 DeepSeek API Key
 - GitHub Repository 集成时需要测试仓库的 fine-grained PAT 与独立 Webhook secret
 
 仅开发 Java Core 时仍可只启动基础设施：
@@ -236,26 +236,13 @@ DEEPSEEK_API_KEY=<real-key>
 绑定 GitHub Repository 前再填写 `DEVPILOT_GITHUB_API_TOKEN_LOCAL` 与
 `DEVPILOT_GITHUB_WEBHOOK_SECRET_LOCAL`。Binding 请求传环境变量名作为 reference，不传 Secret 值。
 
-`.env` 已排除版本控制，Dockerfile 也不会复制它；但 `docker compose config` 会展开环境变量，分享其输出前必须脱敏。
-
 ### 2. 运行启动前检查
 
-预检只报告变量是否配置，不打印 Secret 值；同时检查 Docker Engine、端口占用和完整 Compose 配置。
+预检只报告变量是否配置；同时检查 Docker Engine、端口占用和完整 Compose 配置。
 
 ```powershell
 .\ops\fullstack\Test-DevPilotDemoPreflight.ps1
 ```
-
-真实面试演示保持默认 `AGENT_MODEL_MODE=deepseek`。只有在明确说明“确定性测试/离线兜底”时，才使用：
-
-```powershell
-$env:AGENT_MODEL_MODE = "fake"
-$env:AGENT_FAKE_TOOL_NAME = "project.get_summary"
-.\ops\fullstack\Test-DevPilotDemoPreflight.ps1 -Mode fake
-```
-
-fake 模式会真实经过 Python AgentLoop、Java Tool Gateway、RBAC 与只读 Application Service，但不访问 LLM，
-不能作为 DeepSeek 已连通的证据。
 
 ### 3. 启动完整本地全栈
 

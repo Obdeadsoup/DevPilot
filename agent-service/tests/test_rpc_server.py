@@ -56,13 +56,15 @@ def test_server_config_rejects_invalid_values(environment: dict[str, str]) -> No
         RpcServerConfig.from_env(environment)
 
 
-def test_fake_mode_is_deterministic_and_still_uses_agent_loop(tmp_path) -> None:
-    result = create_application(
+def test_fake_mode_is_deterministic_and_uses_unified_graph(tmp_path) -> None:
+    application = create_application(
         RpcServerConfig(model_mode="fake", runtime_db_path=str(tmp_path / "runtime.sqlite3"))
-    ).start_run("hello")
+    )
+    result = application.start_run("hello", run_context=RunContext("fake-run", "request"))
+    application.close()
 
-    assert result.final_answer == "fake:hello"
-    assert len(result.trace) == 1
+    assert result.final_answer == "fake-workflow:hello:"
+    assert result.safe_trace()["planner_route"] == "DIRECT"
 
 
 def test_fake_tool_mode_exercises_remote_gateway_before_final_output(
@@ -96,8 +98,8 @@ def test_fake_tool_mode_exercises_remote_gateway_before_final_output(
     )
     application.close()
 
-    assert result.final_answer == "fake-tool:project.get_summary:ok"
-    assert [step.tool_names for step in result.trace] == [("project.get_summary",), ()]
+    assert result.final_answer == "fake-workflow:summarize:project.get_summary"
+    assert result.tool_names == ("project.get_summary",)
     assert client.calls == [("run-1", "project.get_summary")]
     assert client.closed is True
 
@@ -162,9 +164,10 @@ def test_stream_run_uses_real_tcp_and_cancel_reports_not_found(tmp_path) -> None
         assert [event.type for event in stream_events] == [
             agent_runtime_pb2.AGENT_EVENT_TYPE_RUN_STARTED,
             agent_runtime_pb2.AGENT_EVENT_TYPE_MODEL_STEP_STARTED,
+            agent_runtime_pb2.AGENT_EVENT_TYPE_MODEL_STEP_STARTED,
             agent_runtime_pb2.AGENT_EVENT_TYPE_RUN_SUCCEEDED,
         ]
-        assert stream_events[-1].final_output == "fake:hello"
+        assert stream_events[-1].final_output == "fake-workflow:hello:"
 
         with pytest.raises(grpc.RpcError) as tool_error:
             tool_gateway.ExecuteTool(

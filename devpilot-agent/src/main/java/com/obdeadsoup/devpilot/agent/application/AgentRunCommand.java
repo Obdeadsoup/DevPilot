@@ -7,7 +7,12 @@ import java.util.Objects;
  *
  * <p>它不依赖 protobuf；requestId/runId 由 Java 边界生成，userInput 才会进入 Python Runtime。</p>
  */
-public record AgentRunCommand(String requestId, String runId, String userInput) {
+public record AgentRunCommand(String requestId, String runId, String userInput,
+                              AgentExecutionScope executionScope) {
+
+    public AgentRunCommand(String requestId, String runId, String userInput) {
+        this(requestId, runId, userInput, null);
+    }
 
     public AgentRunCommand {
         requireNonBlank(requestId, "requestId");

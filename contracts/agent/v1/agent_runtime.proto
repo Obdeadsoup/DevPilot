@@ -29,6 +29,14 @@ message StartRunRequest {
   string request_id = 1;
   string run_id = 2;
   string user_input = 3;
+  AgentExecutionScope execution_scope = 4;
+}
+
+// Supplied only by the authorized Java application boundary; not model output.
+message AgentExecutionScope {
+  int64 workspace_id = 1;
+  int64 project_id = 2;
+  int64 actor_user_id = 3;
 }
 
 message StartRunResponse {
@@ -47,6 +55,7 @@ message StreamRunRequest {
   string run_id = 1;
   string request_id = 2;
   string user_input = 3;
+  AgentExecutionScope execution_scope = 4;
 }
 
 message AgentEvent {

@@ -1,6 +1,7 @@
 package com.obdeadsoup.devpilot.agent.infrastructure.grpc;
 
 import com.obdeadsoup.devpilot.agent.application.AgentRunCommand;
+import com.obdeadsoup.devpilot.agent.application.AgentExecutionScope;
 import com.obdeadsoup.devpilot.agent.application.AgentRuntimeEventListener;
 import com.obdeadsoup.devpilot.agent.application.AgentRuntimeStreamFailureKind;
 import com.obdeadsoup.devpilot.agent.application.AgentStreamEventType;
@@ -44,7 +45,8 @@ class GrpcAgentRuntimeStreamingClientTest {
     @Test
     @SuppressWarnings("unchecked")
     void mapsRequestEventAndCompletionWithoutLeakingProtoToCore() {
-        client.stream(command(), listener);
+        client.stream(new AgentRunCommand("request-1", "run-1", "hello",
+                new AgentExecutionScope(11, 22, 33)), listener);
 
         ArgumentCaptor<StreamRunRequest> request = ArgumentCaptor.forClass(StreamRunRequest.class);
         ArgumentCaptor<StreamObserver<AgentEvent>> observer = ArgumentCaptor.forClass(StreamObserver.class);
@@ -52,6 +54,9 @@ class GrpcAgentRuntimeStreamingClientTest {
         assertThat(request.getValue().getRunId()).isEqualTo("run-1");
         assertThat(request.getValue().getRequestId()).isEqualTo("request-1");
         assertThat(request.getValue().getUserInput()).isEqualTo("hello");
+        assertThat(request.getValue().getExecutionScope().getWorkspaceId()).isEqualTo(11);
+        assertThat(request.getValue().getExecutionScope().getProjectId()).isEqualTo(22);
+        assertThat(request.getValue().getExecutionScope().getActorUserId()).isEqualTo(33);
 
         observer.getValue().onNext(event(1, AgentEventType.AGENT_EVENT_TYPE_RUN_STARTED));
         observer.getValue().onCompleted();

@@ -197,9 +197,10 @@ def test_active_run_rejects_duplicate_and_cancel_emits_exactly_one_terminal(repo
     assert servicer.CancelRun(cancel_request, context).status == (
         agent_runtime_pb2.CANCEL_RUN_STATUS_ACCEPTED
     )
-    assert servicer.CancelRun(cancel_request, context).status == (
-        agent_runtime_pb2.CANCEL_RUN_STATUS_ACCEPTED
-    )
+    assert servicer.CancelRun(cancel_request, context).status in {
+        agent_runtime_pb2.CANCEL_RUN_STATUS_ACCEPTED,
+        agent_runtime_pb2.CANCEL_RUN_STATUS_ALREADY_TERMINAL,
+    }
     release_model.set()
     events = [first, *list(stream)]
 

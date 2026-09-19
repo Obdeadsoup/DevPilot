@@ -5,7 +5,7 @@ from fakes.fake_model import FakeModel
 from langchain_core.messages import AIMessage, HumanMessage
 
 from devpilot_agent_service.context import ContextBudget
-from devpilot_agent_service.graph.workflow import WRITE_REQUIRES_LEGACY, route_registries
+from devpilot_agent_service.graph.workflow import WRITE_UNAVAILABLE, route_registries
 from devpilot_agent_service.harness.demo import DemoGatewayClient
 from devpilot_agent_service.harness.runtime import HarnessConfig
 from devpilot_agent_service.harness.workflow import WorkflowRuntime
@@ -200,12 +200,12 @@ def test_planner_fallback_really_executes_bounded_hybrid_not_just_classifies(res
 
 
 @pytest.mark.parametrize("route", ["DIRECT", "ONLY_TOOL", "ONLY_RAG", "HYBRID"])
-def test_write_request_requires_legacy_and_never_executes(route):
+def test_write_request_without_proposal_capability_never_executes(route):
     workflow, _, _, client = make_workflow(
         route, [ModelResponse.request_tools([ToolCall("write", "task.create", {"title": "new"})])]
     )
     result = workflow.invoke("create task", run_context=CONTEXT)
-    assert result.final_answer == WRITE_REQUIRES_LEGACY
+    assert result.final_answer == WRITE_UNAVAILABLE
     assert all(call[2] != "task.create" for call in client.calls)
 
 

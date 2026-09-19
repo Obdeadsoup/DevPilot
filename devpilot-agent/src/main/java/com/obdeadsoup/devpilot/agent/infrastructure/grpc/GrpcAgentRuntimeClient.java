@@ -36,11 +36,17 @@ public final class GrpcAgentRuntimeClient implements AgentRuntimePort {
     @Override
     public AgentRunResult run(AgentRunCommand command) {
         Objects.requireNonNull(command, "command must not be null");
-        StartRunRequest request = StartRunRequest.newBuilder()
+        StartRunRequest.Builder builder = StartRunRequest.newBuilder()
                 .setRequestId(command.requestId())
                 .setRunId(command.runId())
-                .setUserInput(command.userInput())
-                .build();
+                .setUserInput(command.userInput());
+        if (command.executionScope() != null) {
+            var scope = command.executionScope();
+            builder.setExecutionScope(com.obdeadsoup.devpilot.agent.contract.v1.AgentExecutionScope
+                    .newBuilder().setWorkspaceId(scope.workspaceId())
+                    .setProjectId(scope.projectId()).setActorUserId(scope.actorUserId()).build());
+        }
+        StartRunRequest request = builder.build();
         try {
             StartRunResponse response = stub
                     .withDeadlineAfter(deadline.toMillis(), TimeUnit.MILLISECONDS)

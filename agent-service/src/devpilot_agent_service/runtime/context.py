@@ -2,13 +2,16 @@
 
 from dataclasses import dataclass
 
+from devpilot_agent_service.memory.store import MemoryScope
+
 
 @dataclass(frozen=True, slots=True)
 class RunContext:
-    """只携带 run/request correlation；用户、scope、权限与密钥始终由 Java 掌握。"""
+    """Java-authoritative correlation and optional memory scope; never model policy."""
 
     run_id: str
     request_id: str
+    memory_scope: MemoryScope | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.run_id, str) or not self.run_id.strip():

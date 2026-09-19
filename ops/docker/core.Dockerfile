@@ -9,6 +9,7 @@ COPY pom.xml ./
 COPY devpilot-framework/pom.xml devpilot-framework/pom.xml
 COPY devpilot-identity/pom.xml devpilot-identity/pom.xml
 COPY devpilot-project/pom.xml devpilot-project/pom.xml
+COPY devpilot-knowledge/pom.xml devpilot-knowledge/pom.xml
 COPY devpilot-outbox/pom.xml devpilot-outbox/pom.xml
 COPY devpilot-task/pom.xml devpilot-task/pom.xml
 COPY devpilot-github/pom.xml devpilot-github/pom.xml
@@ -17,13 +18,11 @@ COPY devpilot-audit/pom.xml devpilot-audit/pom.xml
 COPY devpilot-agent/pom.xml devpilot-agent/pom.xml
 COPY devpilot-gateway/pom.xml devpilot-gateway/pom.xml
 COPY devpilot-boot/pom.xml devpilot-boot/pom.xml
-RUN --mount=type=cache,id=devpilot-maven-repository,target=/root/.m2,sharing=locked \
-    DEVPILOT_MAVEN_RETRY_COUNT=4 sh /usr/local/bin/devpilot-mvn -B -ntp -pl devpilot-boot -am dependency:go-offline
-
 COPY contracts contracts
 COPY devpilot-framework/src devpilot-framework/src
 COPY devpilot-identity/src devpilot-identity/src
 COPY devpilot-project/src devpilot-project/src
+COPY devpilot-knowledge/src devpilot-knowledge/src
 COPY devpilot-outbox/src devpilot-outbox/src
 COPY devpilot-task/src devpilot-task/src
 COPY devpilot-github/src devpilot-github/src
@@ -32,7 +31,7 @@ COPY devpilot-audit/src devpilot-audit/src
 COPY devpilot-agent/src devpilot-agent/src
 COPY devpilot-boot/src devpilot-boot/src
 RUN --mount=type=cache,id=devpilot-maven-repository,target=/root/.m2,sharing=locked \
-    sh /usr/local/bin/devpilot-mvn -B -ntp -pl devpilot-boot -am package -DskipTests
+    sh /usr/local/bin/devpilot-mvn -B -ntp -pl devpilot-boot -am package -Dmaven.test.skip=true
 
 FROM eclipse-temurin:21-jre-noble AS runtime
 RUN apt-get update \

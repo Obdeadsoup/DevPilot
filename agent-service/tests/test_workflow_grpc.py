@@ -64,8 +64,7 @@ def ingress(monkeypatch, tmp_path):
             host="127.0.0.1",
             port=runtime_port,
             model_mode="fake",
-            runtime_mode="langgraph",
-            runtime_db_path=str(tmp_path / "legacy.sqlite3"),
+            runtime_db_path=str(tmp_path / "runtime.sqlite3"),
         )
         application = create_application(config, tool_client_factory=lambda _: client)
         server = create_server(config, application)
@@ -128,7 +127,8 @@ def test_production_stream_ingress_routes_and_reuses_actual_gateway_client(
     assert query not in caplog.text
     assert service_key not in caplog.text + str(events)
     assert "system prompt" not in caplog.text
-    assert not (tmp_path / "legacy.sqlite3").exists()
+    assert (tmp_path / "runtime.sqlite3").exists()
+    assert (tmp_path / "runtime.sqlite3.langgraph").exists()
 
 
 def test_unary_ingress_and_duplicate_run_guard(ingress):
@@ -145,17 +145,8 @@ def test_unary_ingress_and_duplicate_run_guard(ingress):
     assert application.trace_for("unary")["planner_route"] == "ONLY_TOOL"
 
 
-@pytest.mark.parametrize(
-    "operation, code",
-    [
-        ("ResumeRun", "LANGGRAPH_RESUME_REQUIRES_LEGACY"),
-        ("ResumeApproval", "LANGGRAPH_APPROVAL_REQUIRES_LEGACY"),
-        ("CancelRun", "LANGGRAPH_CANCEL_REQUIRES_LEGACY"),
-    ],
-)
-def test_langgraph_ingress_explicitly_rejects_unmigrated_durable_operations(
-    ingress, operation, code
-):
+@pytest.mark.parametrize("operation", ["ResumeRun", "ResumeApproval"])
+def test_resume_unknown_run_is_rejected(ingress, operation):
     stub, _, calls, _, _ = ingress
     request_type = getattr(pb, operation + "Request")
     arguments = {"run_id": "run", "request_id": "request"}
@@ -165,9 +156,15 @@ def test_langgraph_ingress_explicitly_rejects_unmigrated_durable_operations(
         response = getattr(stub, operation)(request_type(**arguments), timeout=5)
         if operation != "CancelRun":
             list(response)
-    assert error.value.code() == grpc.StatusCode.FAILED_PRECONDITION
-    assert error.value.details() == code
+    assert error.value.code() == grpc.StatusCode.NOT_FOUND
+    assert error.value.details() == "RUN_NOT_FOUND"
     assert not calls
+
+
+def test_cancel_unknown_run_is_not_found(ingress):
+    stub, _, _, _, _ = ingress
+    response = stub.CancelRun(pb.CancelRunRequest(run_id="missing", request_id="request"))
+    assert response.status == pb.CANCEL_RUN_STATUS_NOT_FOUND
 
 
 def test_gateway_permission_denial_becomes_single_safe_failed_terminal(ingress):
@@ -198,8 +195,30 @@ def test_gateway_permission_denial_becomes_single_safe_failed_terminal(ingress):
     assert len(calls) == 1
 
 
-def test_runtime_mode_environment_selection_is_opt_in():
-    assert RpcServerConfig.from_env({}).runtime_mode == "legacy"
-    assert RpcServerConfig.from_env({"AGENT_RUNTIME_MODE": "LANGGRAPH"}).runtime_mode == "langgraph"
-    with pytest.raises(ValueError):
-        RpcServerConfig.from_env({"AGENT_RUNTIME_MODE": "unknown"})
+def test_runtime_has_no_mode_selector():
+    assert not hasattr(RpcServerConfig.from_env({}), "runtime_mode")
+
+
+def test_java_supplied_scope_is_persisted_and_isolated_across_runs(ingress):
+    stub, application, _, _, _ = ingress
+    scope = pb.AgentExecutionScope(workspace_id=1, project_id=2, actor_user_id=3)
+    first = list(stub.StreamRun(pb.StreamRunRequest(
+        run_id="memory-one", request_id="request-one",
+        user_input="以后请使用中文回答", execution_scope=scope,
+    ), timeout=5))
+    assert first[-1].type == pb.AGENT_EVENT_TYPE_RUN_SUCCEEDED
+    second = list(stub.StreamRun(pb.StreamRunRequest(
+        run_id="memory-two", request_id="request-two",
+        user_input="请回答我刚才的偏好", execution_scope=scope,
+    ), timeout=5))
+    assert second[-1].type == pb.AGENT_EVENT_TYPE_RUN_SUCCEEDED
+    assert application.trace_for("memory-two")["memory_recalled"] == 1
+    other = list(stub.StreamRun(pb.StreamRunRequest(
+        run_id="memory-other", request_id="request-other",
+        user_input="请回答我刚才的偏好",
+        execution_scope=pb.AgentExecutionScope(
+            workspace_id=1, project_id=2, actor_user_id=4,
+        ),
+    ), timeout=5))
+    assert other[-1].type == pb.AGENT_EVENT_TYPE_RUN_SUCCEEDED
+    assert application.trace_for("memory-other")["memory_recalled"] == 0

@@ -1,6 +1,7 @@
 """Bound model input while retaining policy, task and complete tool protocol groups."""
 
 import json
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -41,6 +42,45 @@ class ContextManager:
         )
         return len(content) + len(calls)
 
+    def _bounded_tool_content(self, tool: ToolMessage) -> tuple[str, bool]:
+        content = str(self.redactor.redact(tool.content))
+        limit = (
+            self.budget.max_rag_evidence_chars
+            if tool.name == "knowledge.search"
+            else self.budget.max_tool_result_chars
+        )
+        if len(content) <= limit:
+            return content, False
+        if tool.name == "knowledge.search":
+            try:
+                data = json.loads(content)
+                hits = data.get("hits") if isinstance(data, dict) else None
+                if isinstance(hits, list):
+                    bounded = []
+                    for hit in hits:
+                        if not isinstance(hit, dict):
+                            continue
+                        # Keep citation identity even when evidence text is shortened.
+                        item = {
+                            key: str(hit[key])[:200]
+                            for key in ("sourceFile", "chunkId")
+                            if key in hit
+                        }
+                        text_limit = max(0, limit // max(1, len(hits)) - 250)
+                        item["text"] = str(hit.get("text", ""))[:text_limit]
+                        bounded.append(item)
+                    result = json.dumps({"hits": bounded, "truncated": True}, ensure_ascii=False)
+                    while len(result) > limit and bounded:
+                        bounded.pop()
+                        result = json.dumps(
+                            {"hits": bounded, "truncated": True}, ensure_ascii=False
+                        )
+                    return result[:limit], True
+            except (TypeError, ValueError):
+                pass
+        marker = TRUNCATION_MARKER[:limit]
+        return content[: max(0, limit - len(marker))] + marker, True
+
     def select(self, messages: Sequence[BaseMessage]) -> ContextSelection:
         latest_user = next(
             (i for i in range(len(messages) - 1, -1, -1) if isinstance(messages[i], HumanMessage)),
@@ -72,11 +112,8 @@ class ContextManager:
                 while j < len(messages) and isinstance(messages[j], ToolMessage):
                     tool = messages[j]
                     if tool.tool_call_id in expected:
-                        content = str(self.redactor.redact(tool.content))
-                        if len(content) > self.budget.max_tool_result_chars:
-                            limit = self.budget.max_tool_result_chars
-                            marker = TRUNCATION_MARKER[:limit]
-                            content = content[: max(0, limit - len(marker))] + marker
+                        content, was_truncated = self._bounded_tool_content(tool)
+                        if was_truncated:
                             truncated += 1
                         results.append((j, tool.model_copy(update={"content": content})))
                     j += 1
@@ -108,3 +145,54 @@ class ContextManager:
             else None
         )
         return ContextSelection(result, summary)
+
+    def incremental_summary(
+        self,
+        messages: Sequence[BaseMessage],
+        previous: str | None,
+        seen: Sequence[str] = (),
+    ) -> tuple[str | None, list[str]]:
+        """Summarize omitted conversation once; never promote Tool/RAG data."""
+        try:
+            selected = self.select(messages)
+            kept = {id(message) for message in selected.messages}
+            known = set(seen)
+            updates = []
+            for index, message in enumerate(messages):
+                key = message.id or f"position:{index}"
+                if key in known or id(message) in kept:
+                    continue
+                if isinstance(message, HumanMessage) or (
+                    isinstance(message, AIMessage) and not message.tool_calls
+                ):
+                    updates.append(message)
+                    known.add(key)
+            if not updates:
+                return previous, list(seen)
+            data = (
+                json.loads(previous)
+                if previous and previous.startswith("{")
+                else {"goal": "", "constraints": [], "facts": [], "open_items": []}
+            )
+            for message in updates:
+                content = str(self.redactor.redact(message.content)).strip()
+                if not content:
+                    continue
+                short = content[: min(180, self.budget.max_summary_chars // 4)]
+                if isinstance(message, HumanMessage):
+                    data["goal"] = short
+                    if re.search(r"必须|不要|优先|must|never|prefer", short, re.I):
+                        data["constraints"] = [short]
+                    if re.search(r"待解决|尚未|还要|接下来|todo|next|\?$", short, re.I):
+                        data["open_items"] = [short]
+                else:
+                    data["facts"] = [short]
+            result = json.dumps(data, ensure_ascii=False, sort_keys=True)
+            if len(result) > self.budget.max_summary_chars:
+                data["goal"] = data["goal"][:100]
+                data["constraints"] = [value[:100] for value in data["constraints"][-1:]]
+                data["facts"] = [value[:100] for value in data["facts"][-1:]]
+                result = json.dumps(data, ensure_ascii=False, sort_keys=True)
+            return result, list(known)
+        except (ValueError, TypeError, KeyError):
+            return previous, list(seen)
