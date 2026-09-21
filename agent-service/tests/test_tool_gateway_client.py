@@ -103,6 +103,18 @@ def test_execute_propagates_context_call_id_struct_deadline_and_service_key(monk
     assert result == {"items": [], "external_untrusted_content": True}
 
 
+def test_knowledge_search_has_a_bounded_deadline_without_changing_ordinary_tools(monkeypatch) -> None:
+    client, stub, _ = client_with(monkeypatch, success_response())
+
+    client.execute(RunContext("run-1", "request-1"), "call-1", "knowledge.search", {})
+
+    assert stub.calls[0][1] == 30.0
+    assert JavaToolGatewayConfig.from_env({
+        "DEVPILOT_AGENT_TOOL_SERVICE_KEY": "0123456789abcdef",
+        "DEVPILOT_JAVA_TOOL_GRPC_KNOWLEDGE_DEADLINE_SECONDS": "15",
+    }).knowledge_deadline_seconds == 15.0
+
+
 @pytest.mark.parametrize(
     ("code", "kind"),
     [
@@ -110,6 +122,7 @@ def test_execute_propagates_context_call_id_struct_deadline_and_service_key(monk
         (grpc.StatusCode.PERMISSION_DENIED, JavaToolGatewayFailureKind.PERMISSION_DENIED),
         (grpc.StatusCode.INVALID_ARGUMENT, JavaToolGatewayFailureKind.INVALID_ARGUMENT),
         (grpc.StatusCode.DEADLINE_EXCEEDED, JavaToolGatewayFailureKind.DEADLINE),
+        (grpc.StatusCode.INTERNAL, JavaToolGatewayFailureKind.INTERNAL),
     ],
 )
 def test_rpc_status_is_mapped_without_description(monkeypatch, code, kind) -> None:
@@ -119,6 +132,20 @@ def test_rpc_status_is_mapped_without_description(monkeypatch, code, kind) -> No
         client.execute(RunContext("run-1", "request-1"), "call-1", "task.list_open", {})
 
     assert captured.value.kind is kind
+
+
+def test_failure_diagnostic_identifies_boundary_without_service_key_or_payload(monkeypatch, caplog) -> None:
+    client, _, _ = client_with(monkeypatch, FakeRpcError(grpc.StatusCode.DEADLINE_EXCEEDED))
+
+    with pytest.raises(JavaToolGatewayError), caplog.at_level("WARNING"):
+        client.execute(
+            RunContext("run-1", "request-1"), "call-1", "knowledge.search",
+            {"query": "private document text"},
+        )
+
+    assert "runId=run-1 toolName=knowledge.search failureKind=DEADLINE" in caplog.text
+    assert "0123456789abcdef" not in caplog.text
+    assert "private document text" not in caplog.text
 
 
 @pytest.mark.parametrize(

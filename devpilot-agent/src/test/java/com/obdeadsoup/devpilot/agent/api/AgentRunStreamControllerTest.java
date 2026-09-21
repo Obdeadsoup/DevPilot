@@ -1,6 +1,8 @@
 package com.obdeadsoup.devpilot.agent.api;
 
 import com.obdeadsoup.devpilot.agent.application.AgentRunApplicationService;
+import com.obdeadsoup.devpilot.agent.application.AgentRunStatus;
+import com.obdeadsoup.devpilot.agent.application.AgentRunView;
 import com.obdeadsoup.devpilot.agent.error.AgentRunErrorCode;
 import com.obdeadsoup.devpilot.agent.sse.AgentRunEventHub;
 import com.obdeadsoup.devpilot.framework.error.BusinessException;
@@ -23,17 +25,35 @@ class AgentRunStreamControllerTest {
     @Test
     void checksScopedReadBeforeRegisteringEmitterAndParsesLastEventId() {
         SseEmitter emitter = new SseEmitter();
-        when(eventHub.register("run-1", 5L)).thenReturn(emitter);
+        AgentRunView run = mock(AgentRunView.class);
+        when(run.status()).thenReturn(AgentRunStatus.RUNNING);
+        when(applicationService.get(1, 2, "run-1")).thenReturn(run);
+        when(eventHub.register("run-1", 5L, false)).thenReturn(emitter);
 
         assertThat(controller.stream(1, 2, "run-1", "run-1:5")).isSameAs(emitter);
 
         var order = inOrder(applicationService, eventHub);
         order.verify(applicationService).get(1, 2, "run-1");
-        order.verify(eventHub).register("run-1", 5L);
+        order.verify(eventHub).register("run-1", 5L, false);
+    }
+
+    @Test
+    void passesAuthoritativeTerminalStatusToEventHub() {
+        AgentRunView run = mock(AgentRunView.class);
+        when(run.status()).thenReturn(AgentRunStatus.SUCCEEDED);
+        when(applicationService.get(1, 2, "run-1")).thenReturn(run);
+        SseEmitter emitter = new SseEmitter();
+        when(eventHub.register("run-1", null, true)).thenReturn(emitter);
+
+        assertThat(controller.stream(1, 2, "run-1", null)).isSameAs(emitter);
+        verify(eventHub).register("run-1", null, true);
     }
 
     @Test
     void rejectsMalformedOrCrossRunLastEventIdAfterScopedRead() {
+        AgentRunView run = mock(AgentRunView.class);
+        when(run.status()).thenReturn(AgentRunStatus.RUNNING);
+        when(applicationService.get(1, 2, "run-1")).thenReturn(run);
         assertThatThrownBy(() -> controller.stream(1, 2, "run-1", "other:5"))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.errorCode()).isEqualTo(AgentRunErrorCode.INVALID_LAST_EVENT_ID));

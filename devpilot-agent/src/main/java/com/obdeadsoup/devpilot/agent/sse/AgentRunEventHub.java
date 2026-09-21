@@ -69,6 +69,11 @@ public class AgentRunEventHub implements AgentRunEventPublisher {
 
     /** 原子完成 replay 后再进入 live，避免注册窗口丢失或先 live 后 replay。 */
     public SseEmitter register(String runId, Long lastSequence) {
+        return register(runId, lastSequence, false);
+    }
+
+    /** 已终态的 Run 在 Core 重启或 replay TTL 过期后也必须结束 SSE。 */
+    public SseEmitter register(String runId, Long lastSequence, boolean terminalInDatabase) {
         SseEmitter emitter = emitterFactory.apply(properties.timeout().toMillis());
         Connection connection = new Connection(connectionSequence.incrementAndGet(), emitter);
         emitter.onCompletion(() -> remove(runId, emitter));
@@ -94,7 +99,8 @@ public class AgentRunEventHub implements AgentRunEventPublisher {
                         return state;
                     }
                 }
-                boolean terminalKnown = state.buffer.stream().anyMatch(event -> event.type().isRunTerminal());
+                boolean terminalKnown = terminalInDatabase
+                        || state.buffer.stream().anyMatch(event -> event.type().isRunTerminal());
                 if (terminalKnown) {
                     // Last-Event-ID 已经等于 terminal 时虽无需重放，也不能留下永远没有新事件的 live 连接。
                     emitter.complete();

@@ -1,6 +1,8 @@
 """Python → Java DevPilotToolGateway Unary Client。"""
 
 import os
+import logging
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -19,6 +21,7 @@ from devpilot_agent_service.runtime.context import RunContext
 from devpilot_agent_service.tools.base import JsonValue, ToolProposal, ToolProposalResolution
 
 SERVICE_KEY_HEADER = "x-devpilot-agent-service-key"
+logger = logging.getLogger(__name__)
 
 
 class JavaToolGatewayFailureKind(StrEnum):
@@ -58,6 +61,7 @@ class JavaToolGatewayConfig:
     target: str = "127.0.0.1:50052"
     service_key: str = field(default="", repr=False)
     deadline_seconds: float = 3.0
+    knowledge_deadline_seconds: float = 30.0
     max_message_bytes: int = 65_536
     max_result_bytes: int = 65_536
     circuit_failure_threshold: int = 3
@@ -68,8 +72,8 @@ class JavaToolGatewayConfig:
             raise ValueError("tool gateway target must not be blank")
         if not isinstance(self.service_key, str) or len(self.service_key) < 16:
             raise ValueError("tool gateway service key must contain at least 16 characters")
-        if self.deadline_seconds <= 0:
-            raise ValueError("tool gateway deadline must be positive")
+        if self.deadline_seconds <= 0 or self.knowledge_deadline_seconds <= 0:
+            raise ValueError("tool gateway deadlines must be positive")
         if self.max_message_bytes < 1 or self.max_result_bytes < 1:
             raise ValueError("tool gateway message limits must be positive")
         if self.circuit_failure_threshold < 1 or self.circuit_open_seconds <= 0:
@@ -80,6 +84,7 @@ class JavaToolGatewayConfig:
         source = os.environ if environ is None else environ
         try:
             deadline = float(source.get("DEVPILOT_JAVA_TOOL_GRPC_DEADLINE_SECONDS", "3"))
+            knowledge_deadline = float(source.get("DEVPILOT_JAVA_TOOL_GRPC_KNOWLEDGE_DEADLINE_SECONDS", "30"))
             max_message = int(source.get("DEVPILOT_JAVA_TOOL_GRPC_MAX_MESSAGE_BYTES", "65536"))
             max_result = int(source.get("DEVPILOT_JAVA_TOOL_GRPC_MAX_RESULT_BYTES", "65536"))
             circuit_threshold = int(
@@ -92,6 +97,7 @@ class JavaToolGatewayConfig:
             target=source.get("DEVPILOT_JAVA_TOOL_GRPC_TARGET", "127.0.0.1:50052").strip(),
             service_key=source.get("DEVPILOT_AGENT_TOOL_SERVICE_KEY", ""),
             deadline_seconds=deadline,
+            knowledge_deadline_seconds=knowledge_deadline,
             max_message_bytes=max_message,
             max_result_bytes=max_result,
             circuit_failure_threshold=circuit_threshold,
@@ -215,18 +221,36 @@ class JavaToolGatewayClient:
         )
 
     def _invoke(self, method, request):
+        started = time.monotonic()
+        run_id = request.run_id
+        tool_name = getattr(request, "tool_name", "proposal.get")
+        deadline_seconds = (
+            self._config.knowledge_deadline_seconds
+            if tool_name == "knowledge.search"
+            else self._config.deadline_seconds
+        )
         try:
             self._circuit_breaker.before_call()
         except CircuitOpenError as error:
+            logger.warning(
+                "Tool Gateway failed runId=%s toolName=%s failureKind=%s elapsedMs=%d",
+                run_id, tool_name, JavaToolGatewayFailureKind.CIRCUIT_OPEN.value,
+                round((time.monotonic() - started) * 1000),
+            )
             raise JavaToolGatewayError(JavaToolGatewayFailureKind.CIRCUIT_OPEN) from error
         try:
             response = method(
                 request,
-                timeout=self._config.deadline_seconds,
+                timeout=deadline_seconds,
                 metadata=((SERVICE_KEY_HEADER, self._config.service_key),),
             )
         except grpc.RpcError as error:
             kind = _map_rpc_code(error.code())
+            logger.warning(
+                "Tool Gateway failed runId=%s toolName=%s failureKind=%s elapsedMs=%d",
+                run_id, tool_name, kind.value,
+                round((time.monotonic() - started) * 1000),
+            )
             if kind in {
                 JavaToolGatewayFailureKind.DEADLINE,
                 JavaToolGatewayFailureKind.UNAVAILABLE,
@@ -236,11 +260,20 @@ class JavaToolGatewayClient:
                 self._circuit_breaker.record_success()
             raise JavaToolGatewayError(kind) from error
         except Exception as error:
+            logger.warning(
+                "Tool Gateway failed runId=%s toolName=%s failureKind=%s elapsedMs=%d",
+                run_id, tool_name, JavaToolGatewayFailureKind.INTERNAL.value,
+                round((time.monotonic() - started) * 1000),
+            )
             self._circuit_breaker.record_success()
             raise JavaToolGatewayError(JavaToolGatewayFailureKind.INTERNAL) from error
 
         # 收到合法 gRPC response 即证明依赖可达；业务/协议分类不能把依赖熔断。
         self._circuit_breaker.record_success()
+        logger.info(
+            "Tool Gateway completed runId=%s toolName=%s elapsedMs=%d",
+            run_id, tool_name, round((time.monotonic() - started) * 1000),
+        )
         return response
 
     def close(self) -> None:

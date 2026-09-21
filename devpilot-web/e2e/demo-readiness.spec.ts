@@ -375,13 +375,15 @@ test('Agent Run sends the selected repository binding and branch explicitly', as
     }
     return fulfillJson(route, envelope({ page: 0, size: 20, total: 0, items: [] }))
   })
-  await page.route('**/api/v1/workspaces/1/projects/10/agent-runs/run-e2e-1/stream', route => (
-    route.fulfill({
+  let streamAuthorization = ''
+  await page.route('**/api/v1/workspaces/1/projects/10/agent-runs/run-e2e-1/stream', route => {
+    streamAuthorization = route.request().headers().authorization || ''
+    return route.fulfill({
       status: 200,
       contentType: 'text/event-stream',
       body: 'event: run-succeeded\ndata: {"finalOutput":"done","step":1}\n\n',
     })
-  ))
+  })
   await page.route('**/api/v1/workspaces/1/projects/10/agent-runs/run-e2e-1', route => (
     fulfillJson(route, envelope({
       runId: 'run-e2e-1', requestId: 'request-e2e-1', workspaceId: 1, projectId: 10, createdBy: 7,
@@ -405,6 +407,66 @@ test('Agent Run sends the selected repository binding and branch explicitly', as
     branchName: 'trunk',
   })
   await expect(page.locator('.final-output')).toContainText('done')
+  await expect.poll(() => streamAuthorization).toBe('Bearer e2e-token')
+  await expect(page.getByText('实时进度暂时中断')).toHaveCount(0)
+  await page.getByText('运行标识、连接状态与失败诊断').click()
+  await expect(page.getByText('已完成', { exact: true }).last()).toBeVisible()
+})
+
+test('failed knowledge document exposes a safe reason and expandable failure code', async ({ page }) => {
+  await seedSession(page)
+  await mockApi(page)
+  await page.route('**/api/v1/workspaces/1/projects/10/knowledge/documents', route => fulfillJson(route, envelope([{
+    documentId: 'failed-document', filename: 'README.md', contentType: 'text/markdown', sizeBytes: 1024,
+    status: 'FAILED', failureCode: 'RESOURCEACCESSEXCEPTION', chunkCount: 0,
+    repositoryBindingId: null, version: 2, createdAt: '2026-09-12T08:00:00Z', updatedAt: '2026-09-12T09:00:00Z',
+  }])))
+  await page.goto('/workspaces/1/projects/10/knowledge')
+  const row = page.getByRole('row').filter({ hasText: 'README.md' })
+  await expect(row).toContainText('模型服务暂时不可用')
+  await row.getByText('技术详情').click()
+  await expect(row.getByText('RESOURCEACCESSEXCEPTION')).toBeVisible()
+})
+
+test('Agent SSE reconnects with Last-Event-ID and completes after terminal replay', async ({ page }) => {
+  await seedSession(page)
+  await mockApi(page)
+  let terminal = false
+  let connections = 0
+  let replayHeader = ''
+  const runProjection = () => ({
+    runId: 'run-e2e-replay', requestId: 'request-e2e-replay', workspaceId: 1, projectId: 10,
+    createdBy: 7, status: terminal ? 'SUCCEEDED' : 'RUNNING', userInput: 'Summarize modules',
+    repositoryFullName: 'acme/devpilot', branchName: 'main', commitSha: 'a'.repeat(40),
+    finalOutput: terminal ? 'done' : null, failureKind: null,
+    startedAt: '2026-09-12T09:00:00Z', finishedAt: terminal ? '2026-09-12T09:00:01Z' : null,
+    createdAt: '2026-09-12T09:00:00Z', updatedAt: '2026-09-12T09:00:01Z', version: terminal ? 2 : 1,
+  })
+  await page.route('**/api/v1/workspaces/1/projects/10/agent-runs', route => (
+    route.request().method() === 'POST'
+      ? fulfillJson(route, envelope(runProjection()))
+      : fulfillJson(route, envelope({ page: 0, size: 20, total: 0, items: [] }))
+  ))
+  await page.route('**/api/v1/workspaces/1/projects/10/agent-runs/run-e2e-replay', route => (
+    fulfillJson(route, envelope(runProjection()))
+  ))
+  await page.route('**/api/v1/workspaces/1/projects/10/agent-runs/run-e2e-replay/stream', route => {
+    connections += 1
+    if (connections === 2) {
+      replayHeader = route.request().headers()['last-event-id'] || ''
+      terminal = true
+    }
+    return route.fulfill({ status: 200, contentType: 'text/event-stream', body: connections === 1
+      ? 'id: run-e2e-replay:1\nevent: run-started\ndata: {"step":0}\n\n'
+      : 'id: run-e2e-replay:2\nevent: run-succeeded\ndata: {"step":1,"finalOutput":"done"}\n\n' })
+  })
+
+  await page.goto('/workspaces/1/projects/10/agent')
+  await page.getByLabel('请求内容').fill('Summarize modules')
+  await page.getByRole('button', { name: '启动运行' }).click()
+  await expect.poll(() => replayHeader).toBe('run-e2e-replay:1')
+  await expect(page.locator('.final-output')).toContainText('done')
+  await expect(page.getByText('实时进度暂时中断')).toHaveCount(0)
 })
 
 test('invalid, forbidden, and missing scope routes fail explicitly', async ({ page }) => {

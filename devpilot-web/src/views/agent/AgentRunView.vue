@@ -90,6 +90,7 @@
             <el-descriptions-item label="Run ID"><code>{{ run.runId }}</code></el-descriptions-item>
             <el-descriptions-item label="Request ID"><code>{{ run.requestId }}</code></el-descriptions-item>
             <el-descriptions-item label="Event stream">{{ streamState }}</el-descriptions-item>
+            <el-descriptions-item v-if="streamFailureDetail" label="Stream diagnostic">{{ streamFailureDetail }}</el-descriptions-item>
             <el-descriptions-item label="Failure kind">{{ run.failureKind || '-' }}</el-descriptions-item>
           </el-descriptions>
         </TechnicalDetails>
@@ -157,6 +158,7 @@ import TechnicalDetails from '@/components/TechnicalDetails.vue'
 import { productErrorMessage, unexpectedErrorMessage } from '@/utils/productError'
 
 type TimelineItem = { key: string; timestamp: string; title: string; detail: string; type: 'primary' | 'success' | 'warning' | 'danger' | 'info' }
+const streamInterruptedMessage = '实时进度暂时中断，可点击“刷新状态”查看最新结果。'
 
 const route = useRoute()
 const workspaceId = Number(route.params.workspaceId)
@@ -168,6 +170,7 @@ const run = ref<AgentRun | null>(null)
 const events = ref<TimelineItem[]>([])
 const errorMessage = ref('')
 const streamState = ref('未连接')
+const streamFailureDetail = ref('')
 const starting = ref(false)
 const cancelling = ref(false)
 const deciding = ref(false)
@@ -189,6 +192,10 @@ const selectedBranch = ref<string | undefined>()
 const lastEventId = ref<string | null>(null)
 let disconnectStream: (() => void) | null = null
 let reconnectAttempts = 0
+let prematureCloses = 0
+let reconnectTimer: number | undefined
+let streamGeneration = 0
+let terminalEventSeen = false
 
 const isRunActive = computed(() => ['PENDING', 'RUNNING', 'WAITING_APPROVAL'].includes(run.value?.status || ''))
 const startDisabled = computed(() => isRunActive.value || repositoryLoading.value || branchesLoading.value
@@ -201,6 +208,7 @@ async function startRun() {
   events.value = []
   proposal.value = null
   lastEventId.value = null
+  resetStream()
   try {
     const result = await startAgentRunApi(workspaceId, projectId, {
       input: form.input.trim(),
@@ -282,6 +290,8 @@ async function loadHistory(page = history.value.page) {
     const result = await listAgentRunsApi(workspaceId, projectId, page, history.value.size, historyStatus.value || undefined)
     if (result.success && result.data) history.value = result.data
     else historyError.value = productErrorMessage(result, '暂时无法加载 Agent 运行历史。')
+  } catch (error: unknown) {
+    historyError.value = unexpectedErrorMessage(error, '暂时无法加载 Agent 运行历史。')
   } finally {
     historyLoading.value = false
   }
@@ -301,10 +311,13 @@ async function openHistoryRun(runId: string) {
     errorMessage.value = productErrorMessage(result, '暂时无法加载这条运行记录。')
     return
   }
-  disconnectStream?.()
+  resetStream()
   run.value = result.data
+  errorMessage.value = ''
   events.value = []
   proposal.value = null
+  lastEventId.value = null
+  streamState.value = isRunActive.value ? '连接中' : '已完成'
   if (run.value.status === 'WAITING_APPROVAL') void loadPendingProposal()
   if (isRunActive.value) openStream()
 }
@@ -332,6 +345,10 @@ async function refreshRun() {
     const result = await getAgentRunApi(workspaceId, projectId, run.value.runId)
     if (result.success && result.data) {
       run.value = result.data
+      if (!isRunActive.value) {
+        streamState.value = '已完成'
+        if (errorMessage.value === streamInterruptedMessage) errorMessage.value = ''
+      }
       if (run.value.status === 'WAITING_APPROVAL') void loadPendingProposal()
     }
     else errorMessage.value = productErrorMessage(result, '暂时无法刷新 Agent 状态。')
@@ -342,21 +359,37 @@ async function refreshRun() {
 
 function openStream() {
   if (!run.value) return
+  if (reconnectTimer) window.clearTimeout(reconnectTimer)
+  reconnectTimer = undefined
   disconnectStream?.()
+  const generation = ++streamGeneration
+  const runId = run.value.runId
   streamState.value = '连接中'
   disconnectStream = connectAgentRunStream({
     workspaceId,
     projectId,
     runId: run.value.runId,
     lastEventId: lastEventId.value,
-    onEvent: handleStreamEvent,
-    onError: handleStreamError,
+    onOpen: () => {
+      if (generation !== streamGeneration || run.value?.runId !== runId) return
+      reconnectAttempts = 0
+      streamFailureDetail.value = ''
+      if (errorMessage.value === streamInterruptedMessage) errorMessage.value = ''
+      streamState.value = '已连接'
+    },
+    onEvent: message => {
+      if (generation !== streamGeneration || run.value?.runId !== runId) return
+      handleStreamEvent(message)
+    },
+    onClose: () => { void handleStreamDisconnect(generation, runId, 'SSE stream closed') },
+    onError: message => { void handleStreamDisconnect(generation, runId, message) },
   })
 }
 
 function handleStreamEvent(message: AgentRunStreamMessage) {
   if (message.id) lastEventId.value = message.id
   if (message.event === 'heartbeat') return
+  prematureCloses = 0
   if (message.event === 'replay-gap') {
     addEvent('replay-gap', '进度已重新同步', '已刷新最新运行状态。', 'warning')
     void refreshRun()
@@ -381,8 +414,11 @@ function handleStreamEvent(message: AgentRunStreamMessage) {
     streamState.value = '已恢复'
   }
   if (message.event === 'run-succeeded' || message.event === 'run-failed' || message.event === 'run-cancelled') {
+    terminalEventSeen = true
     void refreshRun()
     streamState.value = '已完成'
+    disconnectStream?.()
+    disconnectStream = null
   }
 }
 
@@ -420,14 +456,46 @@ async function decideProposal(decision: 'APPROVE' | 'REJECT') {
   }
 }
 
-function handleStreamError(_message: string) {
-  streamState.value = '连接失败'
-  if (!isRunActive.value || reconnectAttempts >= 2) {
-    errorMessage.value = '实时进度暂时中断，可点击“刷新状态”查看最新结果。'
+function resetStream() {
+  if (reconnectTimer) window.clearTimeout(reconnectTimer)
+  reconnectTimer = undefined
+  ++streamGeneration
+  disconnectStream?.()
+  disconnectStream = null
+  reconnectAttempts = 0
+  prematureCloses = 0
+  terminalEventSeen = false
+  streamFailureDetail.value = ''
+}
+
+async function handleStreamDisconnect(generation: number, runId: string, detail: string) {
+  if (generation !== streamGeneration || run.value?.runId !== runId || terminalEventSeen) return
+  streamFailureDetail.value = detail
+  try {
+    const result = await getAgentRunApi(workspaceId, projectId, runId)
+    if (generation !== streamGeneration || run.value?.runId !== runId || terminalEventSeen) return
+    if (result.success && result.data) {
+      run.value = result.data
+      if (!isRunActive.value) {
+        streamState.value = '已完成'
+        if (errorMessage.value === streamInterruptedMessage) errorMessage.value = ''
+        return
+      }
+    }
+  } catch {
+    // Keep the SSE failure visible; reconnect is still bounded below.
+  }
+  prematureCloses += 1
+  if (prematureCloses > 2) {
+    streamState.value = '连接失败'
+    errorMessage.value = streamInterruptedMessage
     return
   }
   reconnectAttempts += 1
-  window.setTimeout(openStream, reconnectAttempts * 1000)
+  streamState.value = '重新连接中'
+  reconnectTimer = window.setTimeout(() => {
+    if (generation === streamGeneration && run.value?.runId === runId && isRunActive.value) openStream()
+  }, reconnectAttempts * 1000)
 }
 
 function addEvent(key: string, title: string, detail: string, type: TimelineItem['type']) {
@@ -482,7 +550,7 @@ onMounted(() => {
   void loadHistory(0)
   void loadRepositoryContext()
 })
-onUnmounted(() => disconnectStream?.())
+onUnmounted(resetStream)
 </script>
 
 <style scoped>

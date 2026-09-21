@@ -11,7 +11,7 @@ import java.util.List;
 
 @Mapper
 public interface KnowledgeChunkMapper {
-    String COLUMNS = """
+    String COLUMNS = " " + """
             chunk.id, chunk.chunk_id AS chunkId, chunk.document_id AS documentId,
             chunk.workspace_id AS workspaceId, chunk.project_id AS projectId,
             chunk.repository_binding_id AS repositoryBindingId, chunk.source_file AS sourceFile,

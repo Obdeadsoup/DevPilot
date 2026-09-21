@@ -273,7 +273,11 @@ class WorkflowRuntime(HarnessRuntime):
                 data = json.loads(message.content)
             except (ValueError, TypeError):
                 continue
-            for hit in data.get("hits", []) if isinstance(data, dict) else []:
+            evidence = (
+                data.get("sources", data.get("hits", []))
+                if isinstance(data, dict) else []
+            )
+            for hit in evidence if isinstance(evidence, list) else []:
                 source = hit.get("sourceFile") if isinstance(hit, dict) else None
                 if isinstance(source, str) and source not in sources:
                     sources.append(str(self._redactor.redact(source))[:255])

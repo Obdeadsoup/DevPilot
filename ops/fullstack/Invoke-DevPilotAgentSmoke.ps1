@@ -4,6 +4,7 @@ param(
     [Parameter(Mandatory)] [long]$ProjectId,
     [long]$RepositoryBindingId,
     [string]$BranchName,
+    [string]$PromptText = "根据项目知识库说明 DevPilot 当前有哪些主要模块，并注明来源文件。",
     [string]$BaseUrl = "http://localhost:5173",
     [int]$TimeoutSeconds = 120,
     [switch]$AllowNoToolLifecycle
@@ -21,13 +22,15 @@ if ($BranchName -and $RepositoryBindingId -le 0) {
 $mode = if ($env:AGENT_MODEL_MODE) { $env:AGENT_MODEL_MODE } else { "deepseek" }
 Write-Host "MODE  $mode $(if ($mode -eq 'fake') { '(deterministic test/fallback; not real LLM evidence)' } else { '(real provider)' })"
 
-$client = [Net.Http.HttpClient]::new()
+$handler = [Net.Http.HttpClientHandler]::new()
+if (([Uri]$BaseUrl).IsLoopback) { $handler.UseProxy = $false }
+$client = [Net.Http.HttpClient]::new($handler)
 $client.DefaultRequestHeaders.Authorization = [Net.Http.Headers.AuthenticationHeaderValue]::new("Bearer", $token)
 $client.DefaultRequestHeaders.Accept.ParseAdd("application/json")
 $runBase = "$($BaseUrl.TrimEnd('/'))/api/v1/workspaces/$WorkspaceId/projects/$ProjectId/agent-runs"
 
 try {
-    $payload = @{ input = "Summarize this project's current delivery risks using the available read-only tools." }
+    $payload = @{ input = $PromptText }
     if ($RepositoryBindingId -gt 0) { $payload.repositoryBindingId = $RepositoryBindingId }
     if ($BranchName) { $payload.branchName = $BranchName }
     $content = [Net.Http.StringContent]::new(
@@ -86,10 +89,21 @@ try {
 
     $finalResponse = $client.GetAsync("$runBase/$runId").GetAwaiter().GetResult()
     $finalBody = $finalResponse.Content.ReadAsStringAsync().GetAwaiter().GetResult() | ConvertFrom-Json
-    if (-not $finalResponse.IsSuccessStatusCode -or $finalBody.data.status -ne "SUCCEEDED") {
+    if (-not $finalResponse.IsSuccessStatusCode -or $finalBody.code -ne "COMMON_0000" -or $finalBody.data.status -ne "SUCCEEDED" -or [string]::IsNullOrWhiteSpace([string]$finalBody.data.finalOutput)) {
         throw "Authoritative Agent Run did not finish as SUCCEEDED."
     }
-    Write-Host "PASS  Final output and Agent History source of truth are persisted"
+    Write-Host "PASS  Final output is persisted in authoritative Agent Run"
+
+    $historyResponse = $client.GetAsync("${runBase}?page=0&size=20").GetAwaiter().GetResult()
+    $historyBody = $historyResponse.Content.ReadAsStringAsync().GetAwaiter().GetResult() | ConvertFrom-Json
+    if (-not $historyResponse.IsSuccessStatusCode -or $historyBody.code -ne "COMMON_0000") {
+        throw "Agent History List failed: HTTP $([int]$historyResponse.StatusCode) $($historyBody.code)"
+    }
+    $historyMatch = @($historyBody.data.items | Where-Object { $_ -and $_.runId -eq $runId })
+    if ($historyMatch.Count -eq 0) {
+        throw "Agent History List does not include runId=$runId on its first page."
+    }
+    Write-Host "PASS  Agent History List includes runId=$runId"
     Write-Host "AGENT_GOLDEN_SMOKE_PASS runId=$runId mode=$mode"
 } finally {
     $client.Dispose()

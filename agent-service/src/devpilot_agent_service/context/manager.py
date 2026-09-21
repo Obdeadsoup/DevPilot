@@ -40,7 +40,11 @@ class ContextManager:
             if isinstance(message, AIMessage) and message.tool_calls
             else ""
         )
-        return len(content) + len(calls)
+        reasoning = (
+            message.additional_kwargs.get("reasoning_content")
+            if isinstance(message, AIMessage) else None
+        )
+        return len(content) + len(calls) + (len(reasoning) if isinstance(reasoning, str) else 0)
 
     def _bounded_tool_content(self, tool: ToolMessage) -> tuple[str, bool]:
         content = str(self.redactor.redact(tool.content))
@@ -54,7 +58,11 @@ class ContextManager:
         if tool.name == "knowledge.search":
             try:
                 data = json.loads(content)
-                hits = data.get("hits") if isinstance(data, dict) else None
+                evidence_key = (
+                    "sources" if isinstance(data, dict) and isinstance(data.get("sources"), list)
+                    else "hits"
+                )
+                hits = data.get(evidence_key) if isinstance(data, dict) else None
                 if isinstance(hits, list):
                     bounded = []
                     for hit in hits:
@@ -66,16 +74,21 @@ class ContextManager:
                             for key in ("sourceFile", "chunkId")
                             if key in hit
                         }
+                        text_key = "content" if evidence_key == "sources" else "text"
                         text_limit = max(0, limit // max(1, len(hits)) - 250)
-                        item["text"] = str(hit.get("text", ""))[:text_limit]
+                        item[text_key] = str(hit.get(text_key, ""))[:text_limit]
                         bounded.append(item)
-                    result = json.dumps({"hits": bounded, "truncated": True}, ensure_ascii=False)
+                    envelope = {
+                        evidence_key: bounded,
+                        "truncated": True,
+                        "external_untrusted_content": True,
+                    }
+                    result = json.dumps(envelope, ensure_ascii=False)
                     while len(result) > limit and bounded:
                         bounded.pop()
-                        result = json.dumps(
-                            {"hits": bounded, "truncated": True}, ensure_ascii=False
-                        )
-                    return result[:limit], True
+                        result = json.dumps(envelope, ensure_ascii=False)
+                    if len(result) <= limit:
+                        return result, True
             except (TypeError, ValueError):
                 pass
         marker = TRUNCATION_MARKER[:limit]

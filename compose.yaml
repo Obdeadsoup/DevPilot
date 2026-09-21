@@ -125,21 +125,36 @@ services:
     image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.9
     profiles: ["full"]
     restart: unless-stopped
-    command: --model-id ${DEVPILOT_KNOWLEDGE_EMBEDDING_MODEL:-intfloat/multilingual-e5-small} --port 80
+    command: --model-id ${DEVPILOT_KNOWLEDGE_EMBEDDING_MODEL:-intfloat/multilingual-e5-small} --port 80 --tokenization-workers 2 --max-batch-tokens 1024 --max-batch-requests 2
     volumes:
       - devpilot-embedding-model-data:/data
     expose:
       - "80"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:80/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20m
 
   knowledge-reranker:
     image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.9
     profiles: ["full"]
     restart: unless-stopped
-    command: --model-id ${DEVPILOT_KNOWLEDGE_RERANKER_MODEL:-BAAI/bge-reranker-base} --port 80
+    command: --model-id ${DEVPILOT_KNOWLEDGE_RERANKER_MODEL:-BAAI/bge-reranker-base} --port 80 --tokenization-workers 2 --max-batch-tokens 1024 --max-batch-requests 2
     volumes:
       - devpilot-reranker-model-data:/data
     expose:
       - "80"
+    depends_on:
+      knowledge-embedding:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:80/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30m
 
   agent-service:
     profiles: ["full"]
@@ -164,6 +179,7 @@ services:
       DEEPSEEK_OVERALL_TIMEOUT_SECONDS: ${DEEPSEEK_OVERALL_TIMEOUT_SECONDS:-30}
       DEVPILOT_JAVA_TOOL_GRPC_TARGET: devpilot-core:50052
       DEVPILOT_JAVA_TOOL_GRPC_DEADLINE_SECONDS: ${DEVPILOT_JAVA_TOOL_GRPC_DEADLINE_SECONDS:-3}
+      DEVPILOT_JAVA_TOOL_GRPC_KNOWLEDGE_DEADLINE_SECONDS: ${DEVPILOT_JAVA_TOOL_GRPC_KNOWLEDGE_DEADLINE_SECONDS:-30}
       DEVPILOT_JAVA_TOOL_GRPC_MAX_MESSAGE_BYTES: ${DEVPILOT_JAVA_TOOL_GRPC_MAX_MESSAGE_BYTES:-65536}
       DEVPILOT_JAVA_TOOL_GRPC_MAX_RESULT_BYTES: ${DEVPILOT_JAVA_TOOL_GRPC_MAX_RESULT_BYTES:-65536}
       DEVPILOT_JAVA_TOOL_CIRCUIT_FAILURE_THRESHOLD: ${DEVPILOT_JAVA_TOOL_CIRCUIT_FAILURE_THRESHOLD:-3}
@@ -247,9 +263,9 @@ services:
       minio:
         condition: service_healthy
       knowledge-embedding:
-        condition: service_started
+        condition: service_healthy
       knowledge-reranker:
-        condition: service_started
+        condition: service_healthy
       agent-service:
         condition: service_healthy
     healthcheck:

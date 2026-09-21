@@ -58,8 +58,16 @@
           <el-table :data="documents" stripe style="width: 100%">
             <el-table-column prop="filename" label="文件" min-width="220" />
             <el-table-column label="大小" width="110"><template #default="{ row }">{{ formatBytes(row.sizeBytes) }}</template></el-table-column>
-            <el-table-column label="状态" width="140">
-              <template #default="{ row }"><el-tag :type="statusType(row.status)" effect="plain">{{ row.status }}</el-tag></template>
+            <el-table-column label="状态" min-width="210">
+              <template #default="{ row }">
+                <el-tag :type="statusType(row.status)" effect="plain">{{ row.status }}</el-tag>
+                <template v-if="row.status === 'FAILED'">
+                  <div class="failure-reason">{{ failureReason(row.failureCode) }}</div>
+                  <TechnicalDetails summary="失败标识">
+                    <code>{{ row.failureCode || 'INGESTION_ERROR' }}</code>
+                  </TechnicalDetails>
+                </template>
+              </template>
             </el-table-column>
             <el-table-column prop="chunkCount" label="Chunks" width="100" />
             <el-table-column label="更新时间" min-width="180"><template #default="{ row }">{{ row.updatedAt }}</template></el-table-column>
@@ -128,6 +136,7 @@ import {
 } from '@/api/modules/knowledge'
 import PageHeader from '@/components/PageHeader.vue'
 import PageState from '@/components/PageState.vue'
+import TechnicalDetails from '@/components/TechnicalDetails.vue'
 import type { KnowledgeDocument, KnowledgeDocumentStatus, KnowledgeSearchResult } from '@/types/api'
 import { productErrorMessage, unexpectedErrorMessage } from '@/utils/productError'
 
@@ -249,6 +258,12 @@ function statusType(status: KnowledgeDocumentStatus) {
   return ({ READY: 'success', FAILED: 'danger', INGESTING: 'warning', UPLOADED: 'info', DELETED: 'info' } as const)[status]
 }
 
+function failureReason(code: string | null) {
+  if (code === 'RESOURCEACCESSEXCEPTION') return '模型服务暂时不可用，请稍后重试。'
+  if (code === 'ILLEGALARGUMENTEXCEPTION') return '文档没有可入库的内容，请检查文件。'
+  return '文档入库失败，请查看详情后重试。'
+}
+
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
@@ -274,4 +289,6 @@ onUnmounted(() => { if (pollTimer) window.clearTimeout(pollTimer) })
 .result-item p { white-space: pre-wrap; line-height: 1.65; }
 .result-header, .score-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
 .result-header span, .score-row { color: var(--color-text-muted); font-size: var(--font-size-xs); }
+.failure-reason { margin-top: var(--space-1); color: var(--color-text-muted); font-size: var(--font-size-xs); }
+.knowledge-page :deep(.technical-details) { margin-top: var(--space-1); }
 </style>

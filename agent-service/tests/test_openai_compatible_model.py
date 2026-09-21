@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import httpx2
 import pytest
+from langchain_core.messages import AIMessage, ToolMessage
 from fakes.fake_openai_client import FakeOpenAIClient
 from openai import (
     APIConnectionError,
@@ -29,13 +30,17 @@ from devpilot_agent_service.model.providers.openai_compatible import (
     to_provider_tool,
 )
 from devpilot_agent_service.model.types import ModelResponseKind, ToolCall
+from devpilot_agent_service.graph.nodes.agent import _to_ai_message, _to_runtime_messages
 from devpilot_agent_service.runtime.message import Message
 from devpilot_agent_service.tools.echo import EchoTool
+from devpilot_agent_service.tools.base import ToolDefinition
 from devpilot_agent_service.tools.registry import ToolRegistry
 
 
-def completion(*, content: object = None, tool_calls: object = None) -> object:
-    message = SimpleNamespace(content=content, tool_calls=tool_calls)
+def completion(*, content: object = None, tool_calls: object = None,
+               reasoning_content: object = None) -> object:
+    message = SimpleNamespace(content=content, tool_calls=tool_calls,
+                              reasoning_content=reasoning_content)
     return SimpleNamespace(choices=[SimpleNamespace(message=message)])
 
 
@@ -108,7 +113,7 @@ def test_assistant_tool_call_and_tool_result_mapping_preserve_call_id() -> None:
 
     assert assistant == {
         "role": "assistant",
-        "content": None,
+        "content": "",
         "tool_calls": [
             {
                 "id": "call-7",
@@ -127,12 +132,79 @@ def test_assistant_tool_call_and_tool_result_mapping_preserve_call_id() -> None:
     }
 
 
+def test_deepseek_thinking_content_survives_graph_and_tool_turn() -> None:
+    model, _ = model_with(completion(
+        content="", tool_calls=[provider_call("call-7")],
+        reasoning_content="private model reasoning",
+    ))
+    response = model.generate([Message.user("use tool")], echo_definitions())
+    graph_message = _to_ai_message(response)
+    runtime_message = _to_runtime_messages([graph_message])[0]
+    provider_message = to_provider_message(runtime_message)
+
+    assert response.reasoning_content == "private model reasoning"
+    assert graph_message.additional_kwargs["reasoning_content"] == "private model reasoning"
+    assert provider_message["content"] == ""
+    assert provider_message["reasoning_content"] == "private model reasoning"
+    assert provider_message["tool_calls"][0]["id"] == "call-7"
+
+
+def test_workflow_prefetch_is_evidence_not_a_model_authored_tool_call() -> None:
+    graph_messages = [
+        AIMessage(content="", tool_calls=[{
+            "name": "knowledge.search", "args": {"query": "modules"},
+            "id": "workflow-1", "type": "tool_call",
+        }], additional_kwargs={"workflow_generated": True}),
+        ToolMessage(content='{"hits":[{"sourceFile":"README.md"}]}',
+                    tool_call_id="workflow-1", name="knowledge.search"),
+    ]
+    converted = _to_runtime_messages(graph_messages)
+    assert len(converted) == 1
+    assert converted[0].role.value == "user"
+    assert "README.md" in converted[0].content
+    assert "untrusted evidence" in converted[0].content
+    assert "tool_calls" not in to_provider_message(converted[0])
+
+
 def test_tool_definition_mapping_uses_function_schema() -> None:
     mapped = to_provider_tool(echo_definitions()[0])
 
     assert mapped["type"] == "function"
     assert mapped["function"]["name"] == "echo"  # type: ignore[index]
     assert mapped["function"]["parameters"]["required"] == ["text"]  # type: ignore[index]
+
+
+def test_deepseek_tool_alias_round_trip_keeps_internal_gateway_name() -> None:
+    tool = ToolDefinition("task.list_open", "List open tasks", {"type": "object"})
+    model, client = model_with(completion(
+        content="", tool_calls=[provider_call(name="task_list_open", arguments="{}")],
+    ))
+    previous_call = ToolCall("previous", "task.list_open", {})
+
+    response = model.generate(
+        [Message.assistant_tool_calls([previous_call], content=""),
+         Message.tool_result(previous_call, "{}")],
+        [tool],
+    )
+
+    request = client.chat.completions.requests[0]
+    assert request["tools"][0]["function"]["name"] == "task_list_open"
+    assert request["messages"][0]["tool_calls"][0]["function"]["name"] == "task_list_open"
+    assert response.tool_calls[0].name == "task.list_open"
+
+
+def test_colliding_provider_aliases_are_rejected_before_call() -> None:
+    tools = [
+        ToolDefinition("task.list_open", "First tool", {"type": "object"}),
+        ToolDefinition("task_list_open", "Second tool", {"type": "object"}),
+    ]
+    model, client = model_with(completion(content="unused"))
+
+    with pytest.raises(ProviderError) as captured:
+        model.generate([Message.user("query")], tools)
+
+    assert captured.value.kind is ProviderErrorKind.PROTOCOL
+    assert not client.chat.completions.requests
 
 
 def test_generate_maps_request_and_normalizes_final_response() -> None:

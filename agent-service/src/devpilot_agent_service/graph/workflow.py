@@ -223,7 +223,11 @@ def build_workflow_graph(
                     "type": "tool_call",
                 }
             )
-            request = AIMessage(content="", tool_calls=calls)
+            # These calls are initiated by the workflow, not by the provider. Keep the
+            # Tool Gateway lifecycle in graph state, but do not replay them to DeepSeek
+            # as model-authored tool calls (which require genuine reasoning_content).
+            request = AIMessage(content="", tool_calls=calls,
+                                additional_kwargs={"workflow_generated": True})
             working = {**state, "messages": [*state["messages"], request]}
             update = execute(working)
             return {**update, "messages": [request, *update["messages"]]}

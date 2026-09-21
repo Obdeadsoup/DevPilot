@@ -41,6 +41,13 @@ public class BearerTokenAuthenticationFilter extends OncePerRequestFilter {
     }
 
     @Override
+    protected boolean shouldNotFilterAsyncDispatch() {
+        // Spring Security authorizes the async completion dispatch as well. Resolve the
+        // original Bearer token again so the terminal SSE response can close cleanly.
+        return false;
+    }
+
+    @Override
     protected void doFilterInternal(
             HttpServletRequest request,
             HttpServletResponse response,

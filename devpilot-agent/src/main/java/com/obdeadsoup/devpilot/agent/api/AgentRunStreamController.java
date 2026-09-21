@@ -1,6 +1,7 @@
 package com.obdeadsoup.devpilot.agent.api;
 
 import com.obdeadsoup.devpilot.agent.application.AgentRunApplicationService;
+import com.obdeadsoup.devpilot.agent.application.AgentRunStatus;
 import com.obdeadsoup.devpilot.agent.error.AgentRunErrorCode;
 import com.obdeadsoup.devpilot.agent.sse.AgentRunEventHub;
 import com.obdeadsoup.devpilot.framework.error.BusinessException;
@@ -36,8 +37,11 @@ public class AgentRunStreamController {
                              @RequestHeader(value = "Last-Event-ID", required = false)
                              String lastEventId) {
         // get() 先解析当前用户、AGENT_READ 和 workspace/project/run scope；runId 本身不授权。
-        applicationService.get(workspaceId, projectId, runId);
-        return eventHub.register(runId, parseLastSequence(runId, lastEventId));
+        var run = applicationService.get(workspaceId, projectId, runId);
+        boolean terminal = run.status() == AgentRunStatus.SUCCEEDED
+                || run.status() == AgentRunStatus.FAILED
+                || run.status() == AgentRunStatus.CANCELLED;
+        return eventHub.register(runId, parseLastSequence(runId, lastEventId), terminal);
     }
 
     private Long parseLastSequence(String runId, String lastEventId) {

@@ -11,6 +11,8 @@ import com.obdeadsoup.devpilot.knowledge.persistence.mapper.KnowledgeDocumentMap
 import com.obdeadsoup.devpilot.knowledge.persistence.mapper.KnowledgeQueryTraceMapper;
 import com.obdeadsoup.devpilot.project.application.ProjectAuthorizationService;
 import com.obdeadsoup.devpilot.project.domain.ProjectPermission;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,9 +24,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.ToDoubleFunction;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class KnowledgeRetrievalService {
+    private static final Logger log = LoggerFactory.getLogger(KnowledgeRetrievalService.class);
     private static final double RRF_K = 60.0;
     private final ProjectAuthorizationService authorizationService;
     private final KnowledgeChunkMapper chunkMapper;
@@ -59,6 +63,7 @@ public class KnowledgeRetrievalService {
     @Transactional
     public KnowledgeRetrievalResult searchForActor(long actorUserId, long workspaceId, long projectId,
                                                    String query, List<String> conversationHistory, Integer requestedTopK) {
+        long started = System.nanoTime();
         authorizationService.requirePermission(actorUserId, workspaceId, projectId, ProjectPermission.KNOWLEDGE_READ);
         String original = normalizeQuery(query);
         List<String> history = normalizeHistory(conversationHistory);
@@ -70,15 +75,27 @@ public class KnowledgeRetrievalService {
         List<KnowledgeChunkEntity> chunks = chunkMapper.findRetrievableByProject(
                 workspaceId, projectId, properties.maxSearchableChunks());
         long version = documentMapper.knowledgeVersion(workspaceId, projectId);
-        List<KnowledgeSearchHit> hits = rank(rewritten, chunks, topK);
+        List<KnowledgeSearchHit> hits = rank(rewritten, chunks, topK, workspaceId, projectId);
         traceMapper.insert(workspaceId, projectId, actorUserId, original, rewritten,
                 json(hits.stream().map(KnowledgeSearchHit::chunkId).toList()), version);
+        log.info("Knowledge retrieval completed workspaceId={} projectId={} candidates={} hits={} elapsedMs={}",
+                workspaceId, projectId, chunks.size(), hits.size(), elapsedMs(started));
         return new KnowledgeRetrievalResult(original, rewritten, version, hits);
     }
 
-    private List<KnowledgeSearchHit> rank(String query, List<KnowledgeChunkEntity> chunks, int topK) {
+    private List<KnowledgeSearchHit> rank(String query, List<KnowledgeChunkEntity> chunks, int topK,
+                                          long workspaceId, long projectId) {
         if (chunks.isEmpty()) return List.of();
-        double[] queryVector = embeddings.embed(query);
+        long embeddingStarted = System.nanoTime();
+        double[] queryVector;
+        try {
+            queryVector = embeddings.embed(query);
+        } catch (RuntimeException exception) {
+            log.warn("Knowledge retrieval failed workspaceId={} projectId={} stage=EMBED exceptionType={} elapsedMs={}",
+                    workspaceId, projectId, exception.getClass().getSimpleName(), elapsedMs(embeddingStarted));
+            throw exception;
+        }
+        long embeddingMs = elapsedMs(embeddingStarted);
         Map<Long, Double> dense = new HashMap<>();
         for (KnowledgeChunkEntity chunk : chunks) dense.put(chunk.id(), cosine(queryVector, vector(chunk.embeddingJson())));
         Map<Long, Double> sparse = bm25(query, chunks);
@@ -112,7 +129,21 @@ public class KnowledgeRetrievalService {
                 .sorted(Comparator.comparingDouble(KnowledgeSearchHit::rerankScore).reversed()
                         .thenComparing(KnowledgeSearchHit::chunkId))
                 .toList();
-        return reranker.rerank(query, fused, topK);
+        long rerankStarted = System.nanoTime();
+        try {
+            List<KnowledgeSearchHit> ranked = reranker.rerank(query, fused, topK);
+            log.info("Knowledge ranking completed workspaceId={} projectId={} embeddingMs={} rerankMs={} hits={}",
+                    workspaceId, projectId, embeddingMs, elapsedMs(rerankStarted), ranked.size());
+            return ranked;
+        } catch (RuntimeException exception) {
+            log.warn("Knowledge retrieval failed workspaceId={} projectId={} stage=RERANK exceptionType={} elapsedMs={}",
+                    workspaceId, projectId, exception.getClass().getSimpleName(), elapsedMs(rerankStarted));
+            throw exception;
+        }
+    }
+
+    private long elapsedMs(long started) {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
     }
 
     private Map<Long, Double> bm25(String query, List<KnowledgeChunkEntity> chunks) {

@@ -18,11 +18,15 @@ import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import java.util.concurrent.TimeUnit;
 
 /** protobuf 入站 Adapter：只做 wire 校验/映射，业务委托与 allowlist 位于 Application Service。 */
 @Component
 public final class DevPilotToolGatewayGrpcService
         extends DevPilotToolGatewayGrpc.DevPilotToolGatewayImplBase {
+    private static final Logger log = LoggerFactory.getLogger(DevPilotToolGatewayGrpcService.class);
     private final AgentToolApplicationService applicationService;
     private final AgentToolGrpcProperties properties;
     private final AgentToolGatewayMetrics metrics;
@@ -115,7 +119,10 @@ public final class DevPilotToolGatewayGrpcService
                     .build());
             responseObserver.onCompleted();
             metrics.record(toolName, true, null, started);
+            log.info("Tool Gateway completed runId={} toolName={} elapsedMs={}",
+                    request.getRunId(), toolName, elapsedMs(started));
         } catch (AgentToolException exception) {
+            logFailure(request.getRunId(), toolName, exception.kind(), exception, started);
             fail(responseObserver, toolName, exception.kind(), started);
         } catch (BusinessException exception) {
             AgentToolErrorKind kind = switch (exception.errorCode().status().value()) {
@@ -124,12 +131,25 @@ public final class DevPilotToolGatewayGrpcService
                 case 404 -> AgentToolErrorKind.NOT_FOUND;
                 default -> AgentToolErrorKind.INTERNAL;
             };
+            logFailure(request.getRunId(), toolName, kind, exception, started);
             fail(responseObserver, toolName, kind, started);
         } catch (IllegalArgumentException exception) {
+            logFailure(request.getRunId(), toolName, AgentToolErrorKind.INVALID_ARGUMENT, exception, started);
             fail(responseObserver, toolName, AgentToolErrorKind.INVALID_ARGUMENT, started);
         } catch (RuntimeException exception) {
+            logFailure(request.getRunId(), toolName, AgentToolErrorKind.INTERNAL, exception, started);
             fail(responseObserver, toolName, AgentToolErrorKind.INTERNAL, started);
         }
+    }
+
+    private void logFailure(String runId, String toolName, AgentToolErrorKind kind,
+                            RuntimeException exception, long started) {
+        log.warn("Tool Gateway failed runId={} toolName={} failureKind={} exceptionType={} elapsedMs={}",
+                runId, toolName, kind, exception.getClass().getSimpleName(), elapsedMs(started));
+    }
+
+    private long elapsedMs(long started) {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
     }
 
     private void fail(StreamObserver<ExecuteToolResponse> observer, String toolName,

@@ -114,16 +114,44 @@ def test_four_routes_execute_complete_workflows_with_authoritative_context(
     assert result.used_rag is ("knowledge.search" in expected)
     assert model.calls[-1].tools == ()  # Explicit final synthesis cannot escape the route.
     observations = [m for m in model.calls[-1].messages if m.role is MessageRole.TOOL]
-    assert {m.tool_name for m in observations} == set(expected)
-    assert {m.tool_call_id for m in observations} == {call[1] for call in client.calls}
+    evidence = [m for m in model.calls[-1].messages
+                if m.role is MessageRole.USER and m.content.startswith("Read-only ")]
+    if route == "ONLY_TOOL":
+        assert {m.tool_name for m in observations} == set(expected)
+        assert {m.tool_call_id for m in observations} == {call[1] for call in client.calls}
+        assert not evidence
+    else:
+        assert not observations
+        assert {name for name in expected
+                if any(f"Read-only {name} result" in m.content for m in evidence)} == set(expected)
     if "knowledge.search" in expected:
         assert client.calls[-1][3]["query"] == "standalone rewritten query"
-        assert "docs/architecture.md" in str(observations)
+        assert "docs/architecture.md" in str(evidence)
     if route == "ONLY_TOOL":
         assert client.calls[0][1] == "provider-call-1"
     assert planner.calls[0].tools == ()
     assert "standalone rewritten query" not in str(result.safe_trace())
     assert events
+
+
+def test_real_gateway_source_shape_is_reported_in_safe_trace():
+    class RealShapeGateway(DemoGatewayClient):
+        def execute(self, context, call_id, name, arguments):
+            result = super().execute(context, call_id, name, arguments)
+            if name == "knowledge.search":
+                return {"sources": [{
+                    "sourceFile": "README.md", "chunkId": "real-chunk-1",
+                    "content": "project overview",
+                }], "external_untrusted_content": True}
+            return result
+
+    workflow, _, _, _ = make_workflow(
+        "ONLY_RAG", [ModelResponse.final("document synthesis")],
+        client=RealShapeGateway(),
+    )
+    result = workflow.invoke("project overview", run_context=CONTEXT)
+    assert result.rag_sources == ("README.md",)
+    assert result.safe_trace()["rag_sources"] == ["README.md"]
 
 
 @pytest.mark.parametrize(
@@ -193,10 +221,10 @@ def test_planner_fallback_really_executes_bounded_hybrid_not_just_classifies(res
     assert [call[2] for call in client.calls] == ["task.list_open", "knowledge.search"]
     assert client.calls[-1][3]["query"] == "original query"
     assert "provider-secret-body" not in str(result)
-    assert {m.tool_name for m in model.calls[-1].messages if m.role is MessageRole.TOOL} == {
-        "task.list_open",
-        "knowledge.search",
-    }
+    evidence = [m.content for m in model.calls[-1].messages
+                if m.role is MessageRole.USER and m.content.startswith("Read-only ")]
+    assert any("Read-only task.list_open result" in content for content in evidence)
+    assert any("Read-only knowledge.search result" in content for content in evidence)
 
 
 @pytest.mark.parametrize("route", ["DIRECT", "ONLY_TOOL", "ONLY_RAG", "HYBRID"])
@@ -295,9 +323,10 @@ def test_context_budget_limits_large_hybrid_evidence_at_actual_synthesis_input()
         client=LargeGateway(),
     )
     result = workflow.invoke("current question", run_context=CONTEXT)
-    tool_messages = [m for m in model.calls[-1].messages if m.role is MessageRole.TOOL]
-    assert len(tool_messages) == 2
-    assert all(len(m.content) <= 2000 for m in tool_messages)
+    evidence = [m for m in model.calls[-1].messages
+                if m.role is MessageRole.USER and m.content.startswith("Read-only ")]
+    assert len(evidence) == 2
+    assert all(len(m.content) <= 4500 for m in evidence)
     assert result.context_summary is not None
     assert any(m.content == "current question" for m in model.calls[-1].messages)
 

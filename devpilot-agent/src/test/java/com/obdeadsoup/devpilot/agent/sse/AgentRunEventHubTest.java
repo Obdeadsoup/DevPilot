@@ -88,6 +88,17 @@ class AgentRunEventHubTest {
     }
 
     @Test
+    void completedRunWithoutJvmCacheSignalsGapAndCloses() {
+        AgentRunEventHub hub = hub(4, 2);
+
+        hub.register("run-after-restart", null, true);
+
+        assertThat(emitters.getLast().sendCount).isOne();
+        assertThat(emitters.getLast().completed).isTrue();
+        assertThat(hub.activeConnections("run-after-restart")).isZero();
+    }
+
+    @Test
     void waitingApprovalKeepsConnectionForResumedRun() {
         AgentRunEventHub hub = hub(8, 2);
         hub.initialize("run-1");

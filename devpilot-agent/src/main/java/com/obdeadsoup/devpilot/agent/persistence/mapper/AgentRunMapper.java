@@ -15,7 +15,7 @@ import java.util.Optional;
 /** AgentRun scoped SQL；终态更新必须同时命中 scope、RUNNING 和 version。 */
 @Mapper
 public interface AgentRunMapper {
-    String COLUMNS = """
+    String COLUMNS = " " + """
             id, run_id AS runId, request_id AS requestId, workspace_id AS workspaceId,
             project_id AS projectId, created_by AS createdBy, status, user_input AS userInput,
             repository_full_name AS repositoryFullName, branch_name AS branchName, commit_sha AS commitSha,

@@ -24,12 +24,16 @@ class Message:
     tool_calls: tuple[ToolCall, ...] = ()
     tool_call_id: str | None = None
     tool_name: str | None = None
+    reasoning_content: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.role, MessageRole):
             raise TypeError("role 必须是 MessageRole")
         if not isinstance(self.content, str):
             raise TypeError("content 必须是字符串")
+        if self.reasoning_content is not None:
+            if self.role is not MessageRole.ASSISTANT or not isinstance(self.reasoning_content, str):
+                raise TypeError("reasoning_content 仅能用于 assistant 字符串消息")
         calls = tuple(self.tool_calls)
         if any(not isinstance(tool_call, ToolCall) for tool_call in calls):
             raise TypeError("tool_calls 只能包含 ToolCall")
@@ -54,8 +58,9 @@ class Message:
         return cls(role=MessageRole.USER, content=content)
 
     @classmethod
-    def assistant(cls, content: str) -> Self:
-        return cls(role=MessageRole.ASSISTANT, content=content)
+    def assistant(cls, content: str, *, reasoning_content: str | None = None) -> Self:
+        return cls(role=MessageRole.ASSISTANT, content=content,
+                   reasoning_content=reasoning_content)
 
     @classmethod
     def assistant_tool_calls(
@@ -63,11 +68,13 @@ class Message:
         tool_calls: Sequence[ToolCall],
         *,
         content: str = "",
+        reasoning_content: str | None = None,
     ) -> Self:
         calls = tuple(tool_calls)
         if not calls:
             raise ValueError("assistant tool-call message 至少需要一个 tool call")
-        return cls(role=MessageRole.ASSISTANT, content=content, tool_calls=calls)
+        return cls(role=MessageRole.ASSISTANT, content=content, tool_calls=calls,
+                   reasoning_content=reasoning_content)
 
     @classmethod
     def tool_result(cls, call: ToolCall, content: str) -> Self:

@@ -79,6 +79,7 @@ def message_to_dict(message: Message) -> dict[str, object]:
         ],
         "tool_call_id": message.tool_call_id,
         "tool_name": message.tool_name,
+        "reasoning_content": message.reasoning_content,
     }
 
 
@@ -149,6 +150,7 @@ class RuntimeCheckpointState:
                 tool_calls=tuple(ToolCall(**call) for call in item["tool_calls"]),
                 tool_call_id=item["tool_call_id"],
                 tool_name=item["tool_name"],
+                reasoning_content=item.get("reasoning_content"),
             )
             for item in data.pop("messages")
         )

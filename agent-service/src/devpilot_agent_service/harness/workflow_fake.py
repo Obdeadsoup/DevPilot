@@ -58,6 +58,14 @@ class DeterministicWorkflowModel:
             )
         observed = {message.tool_name for message in messages if message.role is MessageRole.TOOL}
         available = {tool.name for tool in tools}
+        observed.update(
+            name for name in available
+            if any(
+                message.role is MessageRole.USER
+                and message.content.startswith(f"Read-only {name} result from the authorized Tool Gateway.")
+                for message in messages
+            )
+        )
         business_tools = available - {"plan.update", "knowledge.search", "delegate.project_analyst"}
         if business_tools and not observed.intersection(business_tools):
             name = self._tool_name or "task.list_open"

@@ -14,6 +14,8 @@ type AgentRunStreamOptions = {
   runId: string
   lastEventId?: string | null
   onEvent: (message: AgentRunStreamMessage) => void
+  onOpen?: () => void
+  onClose?: () => void
   onError: (message: string) => void
 }
 
@@ -45,12 +47,19 @@ export function connectAgentRunStream(options: AgentRunStreamOptions): () => voi
     if (!response.ok || !response.body) {
       throw new Error(`SSE HTTP ${response.status}`)
     }
+    if (!response.headers.get('content-type')?.toLowerCase().includes('text/event-stream')) {
+      throw new Error(`SSE unexpected Content-Type (HTTP ${response.status})`)
+    }
+    options.onOpen?.()
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
     while (!controller.signal.aborted) {
       const { done, value } = await reader.read()
-      if (done) break
+      if (done) {
+        if (!controller.signal.aborted) options.onClose?.()
+        break
+      }
       buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n')
       const frames = buffer.split('\n\n')
       buffer = frames.pop() ?? ''

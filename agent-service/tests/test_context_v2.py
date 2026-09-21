@@ -54,3 +54,27 @@ def test_rag_truncation_preserves_source_identity():
     assert payload["hits"][0]["sourceFile"] == "architecture.md"
     assert payload["hits"][0]["chunkId"] == "chunk-1"
     assert payload["truncated"] is True
+
+
+def test_real_gateway_rag_sources_remain_valid_json_when_bounded():
+    manager = ContextManager(ContextBudget(
+        max_context_chars=6000, reserved_output_chars=1000,
+        max_rag_evidence_chars=4000,
+    ))
+    raw = {"sources": [
+        {"sourceFile": f"document-{i}.md", "chunkId": f"chunk-{i}",
+         "content": "evidence " * 1000, "relevanceScore": 0.8}
+        for i in range(5)
+    ], "external_untrusted_content": True}
+    bounded, truncated = manager._bounded_tool_content(ToolMessage(
+        name="knowledge.search", tool_call_id="call-1",
+        content=json.dumps(raw),
+    ))
+    payload = json.loads(bounded)
+    assert truncated is True
+    assert len(bounded) <= 4000
+    assert payload["truncated"] is True
+    assert payload["external_untrusted_content"] is True
+    assert payload["sources"][0]["sourceFile"] == "document-0.md"
+    assert payload["sources"][0]["chunkId"] == "chunk-0"
+    assert payload["sources"][0]["content"]

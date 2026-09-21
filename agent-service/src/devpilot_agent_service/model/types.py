@@ -43,12 +43,15 @@ class ModelResponse:
     kind: ModelResponseKind
     content: str = ""
     tool_calls: tuple[ToolCall, ...] = ()
+    reasoning_content: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.kind, ModelResponseKind):
             raise TypeError("kind 必须是 ModelResponseKind")
         if not isinstance(self.content, str):
             raise TypeError("content 必须是字符串")
+        if self.reasoning_content is not None and not isinstance(self.reasoning_content, str):
+            raise TypeError("reasoning_content 必须是字符串或 None")
         calls = tuple(self.tool_calls)
         if any(not isinstance(tool_call, ToolCall) for tool_call in calls):
             raise TypeError("tool_calls 只能包含 ToolCall")
@@ -59,8 +62,9 @@ class ModelResponse:
         object.__setattr__(self, "tool_calls", calls)
 
     @classmethod
-    def final(cls, content: str) -> Self:
-        return cls(kind=ModelResponseKind.FINAL, content=content)
+    def final(cls, content: str, *, reasoning_content: str | None = None) -> Self:
+        return cls(kind=ModelResponseKind.FINAL, content=content,
+                   reasoning_content=reasoning_content)
 
     @classmethod
     def request_tools(
@@ -68,9 +72,11 @@ class ModelResponse:
         tool_calls: Sequence[ToolCall],
         *,
         content: str = "",
+        reasoning_content: str | None = None,
     ) -> Self:
         return cls(
             kind=ModelResponseKind.TOOL_CALLS,
             content=content,
             tool_calls=tuple(tool_calls),
+            reasoning_content=reasoning_content,
         )

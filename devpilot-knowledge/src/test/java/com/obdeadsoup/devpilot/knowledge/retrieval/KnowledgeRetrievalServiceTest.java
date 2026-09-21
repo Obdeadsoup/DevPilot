@@ -78,4 +78,20 @@ class KnowledgeRetrievalServiceTest {
                 .isInstanceOf(BusinessException.class);
         verifyNoInteractions(chunks, documents, traces, embeddings);
     }
+
+    @Test
+    void emptyAuthorizedSearchSucceedsWithoutCallingTei() {
+        when(chunks.findRetrievableByProject(100, 200, 2_000)).thenReturn(List.of());
+        when(documents.knowledgeVersion(100, 200)).thenReturn(0L);
+
+        KnowledgeRetrievalResult result = service.searchForActor(7, 100, 200, "missing topic", List.of(), 5);
+
+        assertThat(result.hits()).isEmpty();
+        verify(authorization).requirePermission(7, 100, 200, ProjectPermission.KNOWLEDGE_READ);
+        verifyNoInteractions(embeddings);
+        verify(traces).insert(org.mockito.ArgumentMatchers.eq(100L), org.mockito.ArgumentMatchers.eq(200L),
+                org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq("[]"),
+                org.mockito.ArgumentMatchers.eq(0L));
+    }
 }
