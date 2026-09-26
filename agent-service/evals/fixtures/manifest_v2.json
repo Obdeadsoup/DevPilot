@@ -1,0 +1,404 @@
+{
+  "fixture_version": "devpilot-eval-v2",
+  "target_project_expectations": {
+    "explicit_ids_required": true,
+    "prefer_dedicated_project": true,
+    "open_task_tool_limit": 20
+  },
+  "tasks": [
+    {
+      "fixture_id": "T01",
+      "title": "[EVAL-V2][T01] Gateway SSE 长连接 response timeout 调整",
+      "description": "Core 的 AgentRun 事件经 Gateway 到浏览器。SSE 路由需避免继承普通 REST 短响应超时；本任务核对连接维持、终态关闭与断线重放，逾期仍开放会影响运行结果可见性。",
+      "status": "IN_PROGRESS",
+      "priority": "URGENT",
+      "due": "OVERDUE",
+      "assigned": true
+    },
+    {
+      "fixture_id": "T02",
+      "title": "[EVAL-V2][T02] AgentRun gRPC streaming backpressure 检查",
+      "description": "Java 通过 gRPC Server Streaming 接收 Python 运行事件，Python 侧有有界队列。检查慢消费、取消传播和终态一致性，避免队列拥塞掩盖已完成 Run。",
+      "status": "IN_PROGRESS",
+      "priority": "HIGH",
+      "due": "SOON",
+      "assigned": true,
+      "activity_sequence": [
+        "plan",
+        "start",
+        "submit-for-review",
+        "request-changes"
+      ]
+    },
+    {
+      "fixture_id": "T03",
+      "title": "[EVAL-V2][T03] Planner 低置信度 fallback 策略观察",
+      "description": "Query Planner 输出路线与置信度；低置信度时需观察 fallback、错误率和 P95。先保留现行阈值作真实基线，再用 Dev 集做单变量实验。",
+      "status": "TODO",
+      "priority": "HIGH",
+      "due": "SOON",
+      "assigned": false
+    },
+    {
+      "fixture_id": "T04",
+      "title": "[EVAL-V2][T04] RAG structure-aware chunking 实验",
+      "description": "当前 KnowledgeChunker 按长度并优先段落、换行边界切片，未显式保存 section ID。拟比较结构感知切片与当前策略的 Recall@K、MRR 和入库成本。Status: PROPOSED。",
+      "status": "BACKLOG",
+      "priority": "MEDIUM",
+      "due": "FUTURE",
+      "assigned": false
+    },
+    {
+      "fixture_id": "T05",
+      "title": "[EVAL-V2][T05] Memory workspace project user scope 隔离回归",
+      "description": "长期 Memory 按 workspace、project、user 作用域检索。回归需要验证同 scope 可召回，跨项目或跨 workspace 不召回，且敏感文本不会进入安全追踪。",
+      "status": "IN_REVIEW",
+      "priority": "URGENT",
+      "due": "OVERDUE",
+      "assigned": true
+    },
+    {
+      "fixture_id": "T06",
+      "title": "[EVAL-V2][T06] task.create Proposal 过期状态处理",
+      "description": "写工具先生成 Proposal 并等待批准。核对过期后不可执行、拒绝后没有 Task 副作用，以及批准恢复时仅执行一次。测试需经过真实应用服务。",
+      "status": "IN_PROGRESS",
+      "priority": "HIGH",
+      "due": "OVERDUE",
+      "assigned": true
+    },
+    {
+      "fixture_id": "T07",
+      "title": "[EVAL-V2][T07] LangGraph Checkpoint Resume 故障恢复测试",
+      "description": "生产 Python Runtime 以 LangGraph checkpoint 管理 continuation；Resume 需要原 runId 与 requestId，并验证可恢复状态。关注失败后的重复 Tool 副作用。",
+      "status": "IN_REVIEW",
+      "priority": "HIGH",
+      "due": "SOON",
+      "assigned": true
+    },
+    {
+      "fixture_id": "T08",
+      "title": "[EVAL-V2][T08] TEI embedding 容器内存占用诊断",
+      "description": "Knowledge ingestion 会调用 TEI embedding。历史诊断发现模型下载与容器内存可能使文档停在 FAILED；需观察真实 READY 率、failureCode 与容器健康。",
+      "status": "TODO",
+      "priority": "URGENT",
+      "due": "OVERDUE",
+      "assigned": false
+    },
+    {
+      "fixture_id": "T09",
+      "title": "[EVAL-V2][T09] MyBatis AgentRun 查询 SQL 拼接回归",
+      "description": "AgentRun 列表查询曾受 SQL 拼接问题影响。已完成回归，后续只需保持针对真实 MySQL 的定向测试，避免把已完成紧急项计入开放风险。",
+      "status": "DONE",
+      "priority": "URGENT",
+      "due": "NONE",
+      "assigned": true,
+      "activity_sequence": [
+        "plan",
+        "start",
+        "submit-for-review",
+        "complete",
+        "reopen",
+        "start",
+        "submit-for-review",
+        "complete"
+      ]
+    },
+    {
+      "fixture_id": "T10",
+      "title": "[EVAL-V2][T10] Eval V2 holdout dataset 构造",
+      "description": "固定 Fixture 上的 Dev 数据用于调整，Holdout 用于最终评估。维护去重与 contrast pair 标注，避免重复针对失败题修改 Planner Prompt。",
+      "status": "TODO",
+      "priority": "MEDIUM",
+      "due": "FUTURE",
+      "assigned": false
+    },
+    {
+      "fixture_id": "T11",
+      "title": "[EVAL-V2][T11] RBAC Tool Gateway actor scope 复核",
+      "description": "Python Tool Gateway 调用 Java 时通过 runId 还原 actor 和 workspace/project scope，Java 重新鉴权。需核对跨 scope 拒绝与任务读取权限。",
+      "status": "IN_PROGRESS",
+      "priority": "URGENT",
+      "due": "SOON",
+      "assigned": true,
+      "activity_sequence": [
+        "unassign"
+      ]
+    },
+    {
+      "fixture_id": "T12",
+      "title": "[EVAL-V2][T12] Transactional Outbox stale PROCESSING 恢复",
+      "description": "Task 事件与状态同事务持久化，Outbox Worker 条件 claim 并恢复 stale PROCESSING。审查失败重试、DEAD 与人工 Replay，不假定 exactly-once 交付。",
+      "status": "IN_REVIEW",
+      "priority": "HIGH",
+      "due": "OVERDUE",
+      "assigned": true
+    },
+    {
+      "fixture_id": "T13",
+      "title": "[EVAL-V2][T13] Audit Replay reason 与 expectedVersion 校验",
+      "description": "DEAD Replay 需要管理员授权、原因和 expectedVersion。Audit 保留追加式记录；检查拒绝路径和版本冲突不会产生新的有效 Replay。",
+      "status": "TODO",
+      "priority": "HIGH",
+      "due": "FUTURE",
+      "assigned": true
+    },
+    {
+      "fixture_id": "T14",
+      "title": "[EVAL-V2][T14] SMTP verification Redis 限流核查",
+      "description": "注册邮箱验证码经 VerificationCodeService 发放，Redis 基础防刷参与限制。检查 SMTP 配置失败时的用户反馈与运维信息，不在 Fixture 中存放邮箱凭据。",
+      "status": "BACKLOG",
+      "priority": "LOW",
+      "due": "NONE",
+      "assigned": false
+    },
+    {
+      "fixture_id": "T15",
+      "title": "[EVAL-V2][T15] Docker TEI reranker 冷启动观测",
+      "description": "Knowledge reranker 的 TEI 冷启动和分批调用影响检索延迟。记录健康检查、内存峰值及 30 秒知识工具 deadline 的剩余空间。",
+      "status": "IN_PROGRESS",
+      "priority": "MEDIUM",
+      "due": "FUTURE",
+      "assigned": true
+    },
+    {
+      "fixture_id": "T16",
+      "title": "[EVAL-V2][T16] GitHub integration webhook 去重验证",
+      "description": "Webhook Delivery 先落库再异步处理，重复或乱序事件可能到达。检查稳定来源键与唯一约束是否阻止重复 Project Activity。",
+      "status": "TODO",
+      "priority": "MEDIUM",
+      "due": "NONE",
+      "assigned": false
+    },
+    {
+      "fixture_id": "T17",
+      "title": "[EVAL-V2][T17] Context budget 工具结果截断回归",
+      "description": "Context Manager 有消息预算和摘要；Tool result 截断必须仍保留有效 JSON 与来源元数据。检查多轮查询后是否丢失关键知识证据。",
+      "status": "IN_REVIEW",
+      "priority": "MEDIUM",
+      "due": "SOON",
+      "assigned": true
+    },
+    {
+      "fixture_id": "T18",
+      "title": "[EVAL-V2][T18] RAG query rewrite conversation history 测试",
+      "description": "Knowledge Search 支持有限 conversationHistory 和 rewrittenQuery。检验代词指向、项目语境和语义检索的关系，避免文档标题词匹配掩盖改写缺陷。",
+      "status": "BACKLOG",
+      "priority": "MEDIUM",
+      "due": "FUTURE",
+      "assigned": false
+    },
+    {
+      "fixture_id": "T19",
+      "title": "[EVAL-V2][T19] AgentRun Cancel 终态与 SSE 断流区分",
+      "description": "浏览器断开 SSE 不能自动视作 CancelRun；只有显式取消意图经持久状态机传播。核对取消终态、重连和旧终态 replay-gap。",
+      "status": "IN_PROGRESS",
+      "priority": "HIGH",
+      "due": "OVERDUE",
+      "assigned": true
+    },
+    {
+      "fixture_id": "T20",
+      "title": "[EVAL-V2][T20] Project Recent Activity Task 事件完整性",
+      "description": "Task 创建、状态流转与分配会在业务事务内生成 Project Activity。检查近期列表排序、来源和重复事件去重，不直接伪造 Activity 表。",
+      "status": "TODO",
+      "priority": "LOW",
+      "due": "FUTURE",
+      "assigned": false
+    },
+    {
+      "fixture_id": "T21",
+      "title": "[EVAL-V2][T21] Gateway REST 短超时默认值复核",
+      "description": "普通 REST 使用短响应超时，与 AgentRun SSE 专用长连接路由分开配置。核对配置文档和 Gateway 路由优先级，防止互相覆盖。",
+      "status": "BACKLOG",
+      "priority": "LOW",
+      "due": "NONE",
+      "assigned": false
+    },
+    {
+      "fixture_id": "T22",
+      "title": "[EVAL-V2][T22] Knowledge ingestion FAILED retry API 记录",
+      "description": "知识文档 FAILED 可通过带 expectedVersion 的 retry API 重试，完成时需重新观察 READY 和 chunkCount；上传成功本身不代表入库成功。",
+      "status": "DONE",
+      "priority": "HIGH",
+      "due": "NONE",
+      "assigned": true
+    },
+    {
+      "fixture_id": "T23",
+      "title": "[EVAL-V2][T23] Java Python RPC service key 边界测试",
+      "description": "Python 到 Java 的 Tool Gateway 使用内部 service key，Java 仍以 Run 的 actor 执行 RBAC。已完成边界测试，凭据不进入日志或 Eval 报告。",
+      "status": "DONE",
+      "priority": "MEDIUM",
+      "due": "NONE",
+      "assigned": false
+    },
+    {
+      "fixture_id": "T24",
+      "title": "[EVAL-V2][T24] Notification 任务提醒去重回归",
+      "description": "Task 即时事件经 Outbox 触发通知，数据库通知记录是可靠来源，SSE 只是低延迟提示。已完成去重回归，不再占开放任务额度。",
+      "status": "DONE",
+      "priority": "LOW",
+      "due": "NONE",
+      "assigned": false
+    },
+    {
+      "fixture_id": "T25",
+      "title": "[EVAL-V2][T25] Planner route contrast set 初版复核",
+      "description": "已整理一般知识、实时项目事实和架构文档三类相似问法的对照。后续应观察真实混淆矩阵，避免仅用显式 README 关键词评测。",
+      "status": "DONE",
+      "priority": "MEDIUM",
+      "due": "NONE",
+      "assigned": true
+    },
+    {
+      "fixture_id": "T26",
+      "title": "[EVAL-V2][T26] 旧版无权限 Tool 直连方案废弃",
+      "description": "历史设想曾允许 Python 直接读取业务表。该方案与 Java 权威状态及 RBAC 边界冲突，已取消，不应作为现行架构依据。",
+      "status": "CANCELED",
+      "priority": "LOW",
+      "due": "NONE",
+      "assigned": false
+    },
+    {
+      "fixture_id": "T27",
+      "title": "[EVAL-V2][T27] 旧版无确认 task.create 路径废弃",
+      "description": "曾讨论让 Agent 直接创建 Task；当前产品通过 Proposal、人工批准和 Java 应用服务写入。旧方案取消，评测应标记未批准写入为硬失败。",
+      "status": "CANCELED",
+      "priority": "HIGH",
+      "due": "NONE",
+      "assigned": false
+    },
+    {
+      "fixture_id": "T28",
+      "title": "[EVAL-V2][T28] 旧版断线即 CancelRun 方案废弃",
+      "description": "将 SSE 客户端断开当作取消会误伤仍在运行的 AgentRun。现行链路使用显式 CancelRun；旧方案已取消，仅作为负面对照。",
+      "status": "CANCELED",
+      "priority": "MEDIUM",
+      "due": "NONE",
+      "assigned": false
+    }
+  ],
+  "documents": [
+    {
+      "source": "01-system-architecture.md",
+      "sections": [
+        "System Ownership Boundary",
+        "Project State Sources"
+      ]
+    },
+    {
+      "source": "02-agent-runtime.md",
+      "sections": [
+        "Runtime Ownership Boundary",
+        "Checkpoint Resume Safety"
+      ]
+    },
+    {
+      "source": "03-gateway-sse.md",
+      "sections": [
+        "SSE Timeout Policy",
+        "Replay Gap"
+      ]
+    },
+    {
+      "source": "04-rag-retrieval.md",
+      "sections": [
+        "Retrieval Pipeline",
+        "Query Rewrite"
+      ]
+    },
+    {
+      "source": "05-context-memory.md",
+      "sections": [
+        "Memory Scope Isolation",
+        "Context Budget"
+      ]
+    },
+    {
+      "source": "06-reliability-hitl.md",
+      "sections": [
+        "Approval Safety Rules",
+        "Resume and Cancel"
+      ]
+    },
+    {
+      "source": "07-auth-rbac.md",
+      "sections": [
+        "Tool Gateway Authorization",
+        "Knowledge Access"
+      ]
+    },
+    {
+      "source": "08-deployment-runbook.md",
+      "sections": [
+        "TEI Health and Ingestion",
+        "Full Stack Startup"
+      ]
+    },
+    {
+      "source": "09-incident-postmortem.md",
+      "sections": [
+        "Embedding Failure Boundary",
+        "SSE Disconnect Diagnosis"
+      ]
+    },
+    {
+      "source": "10-evaluation-strategy.md",
+      "sections": [
+        "Deterministic Evidence",
+        "Holdout Discipline"
+      ]
+    },
+    {
+      "source": "11-roadmap.md",
+      "sections": [
+        "Status: PROPOSED",
+        "Evaluation Priorities"
+      ]
+    },
+    {
+      "source": "12-deprecated-design.md",
+      "sections": [
+        "Status: DEPRECATED",
+        "Current Replacement"
+      ]
+    }
+  ],
+  "expected_business_facts": {
+    "open_task_count": 20,
+    "overdue_open_fixture_ids": [
+      "T01",
+      "T05",
+      "T06",
+      "T08",
+      "T12",
+      "T19"
+    ],
+    "completed_urgent_fixture_ids": [
+      "T09"
+    ]
+  },
+  "smoke_queries": [
+    {
+      "query": "为什么客户端断开不能直接视为 CancelRun？",
+      "expected_sources": [
+        "02-agent-runtime.md",
+        "06-reliability-hitl.md",
+        "03-gateway-sse.md"
+      ]
+    },
+    {
+      "query": "不同 Workspace 的长期偏好为什么需要隔离？",
+      "expected_sources": [
+        "05-context-memory.md"
+      ]
+    },
+    {
+      "query": "知识文档上传后为什么还要等待 READY？",
+      "expected_sources": [
+        "04-rag-retrieval.md",
+        "08-deployment-runbook.md"
+      ]
+    }
+  ]
+}

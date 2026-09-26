@@ -40,9 +40,11 @@ __pycache__/
 Thumbs.db
 
 docs/*
+!docs/agent-eval-v2.md
 !docs/full-compose-startup-report.md
 !docs/rag-agent-runtime-diagnostic-report.md
 agent-service/tests/_pycache_/*
+agent-service/evals/results/
 # Local performance results
 performance/jmeter/results/
 

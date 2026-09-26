@@ -1,11 +1,12 @@
 """Query Planner workflow API with durable LangGraph continuation."""
 
 import json
+import math
 import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.types import Command
 
 from devpilot_agent_service.context import ContextManager
@@ -52,6 +53,8 @@ class WorkflowResult:
     memory_recalled: int = 0
     context_omitted_messages: int = 0
     truncated_tool_result_count: int = 0
+    tool_arguments: tuple[dict, ...] = ()
+    rag_hits: tuple[dict, ...] = ()
 
     def safe_trace(self) -> dict:
         """Public control-flow only: no rewritten query, model reasoning or credentials."""
@@ -77,6 +80,8 @@ class WorkflowResult:
             "write_path_required": self.write_path_required,
             "tool_names": list(self.tool_names),
             "rag_sources": list(self.rag_sources),
+            "tool_arguments": list(self.tool_arguments),
+            "rag_hits": list(self.rag_hits),
             "context_summary_used": bool(self.context_summary),
             "memory_recalled": self.memory_recalled,
             "context_omitted_messages": self.context_omitted_messages,
@@ -99,8 +104,12 @@ class WorkflowRuntime(HarnessRuntime):
         memory_store: MemoryStore | None = None,
     ) -> None:
         super().__init__(
-            model, registry, analyst_model_factory,
-            config=config, redactor=redactor, build_main_graph=False,
+            model,
+            registry,
+            analyst_model_factory,
+            config=config,
+            redactor=redactor,
+            build_main_graph=False,
         )
         try:
             self.registry.register(registry.get("task.create"))
@@ -173,7 +182,8 @@ class WorkflowRuntime(HarnessRuntime):
         if not snapshot.values or not snapshot.next:
             raise ResumeRejected("CHECKPOINT_NOT_RESUMABLE")
         if (snapshot.values.get("run_id"), snapshot.values.get("request_id")) != (
-            run_context.run_id, run_context.request_id
+            run_context.run_id,
+            run_context.request_id,
         ):
             raise ResumeRejected("CHECKPOINT_IDENTITY_MISMATCH")
         return self._result(graph.invoke(None, self._config(run_context)))
@@ -261,11 +271,26 @@ class WorkflowRuntime(HarnessRuntime):
         ]
         selection = self._context.select(state["messages"])
         omitted = len(state["messages"]) - len(selection.messages)
-        truncated_match = re.search(
-            r"truncated=(\d+)", selection.summary or ""
-        )
+        truncated_match = re.search(r"truncated=(\d+)", selection.summary or "")
         truncated = int(truncated_match.group(1)) if truncated_match else 0
         sources = []
+        hits = []
+        arguments = []
+        for message in state["messages"]:
+            if not isinstance(message, AIMessage):
+                continue
+            for call in message.tool_calls:
+                name = call.get("name")
+                raw = call.get("args")
+                if not isinstance(name, str) or not isinstance(raw, dict):
+                    continue
+                # Numeric allowlist only. Query, task text, credentials and arbitrary args stay out.
+                safe = {
+                    key: raw[key]
+                    for key in ("limit", "topK")
+                    if type(raw.get(key)) is int and 1 <= raw[key] <= 20
+                }
+                arguments.append({"name": name[:80], "args": safe})
         for message in tool_messages:
             if message.name != "knowledge.search":
                 continue
@@ -273,14 +298,24 @@ class WorkflowRuntime(HarnessRuntime):
                 data = json.loads(message.content)
             except (ValueError, TypeError):
                 continue
-            evidence = (
-                data.get("sources", data.get("hits", []))
-                if isinstance(data, dict) else []
-            )
+            evidence = data.get("sources", data.get("hits", [])) if isinstance(data, dict) else []
             for hit in evidence if isinstance(evidence, list) else []:
                 source = hit.get("sourceFile") if isinstance(hit, dict) else None
-                if isinstance(source, str) and source not in sources:
-                    sources.append(str(self._redactor.redact(source))[:255])
+                if isinstance(source, str):
+                    safe_source = str(self._redactor.redact(source))[:255]
+                    if safe_source not in sources:
+                        sources.append(safe_source)
+                    chunk_id = hit.get("chunkId")
+                    score = hit.get("relevanceScore")
+                    hits.append({
+                        "source": safe_source,
+                        "chunk_id": str(self._redactor.redact(chunk_id))[:128]
+                        if isinstance(chunk_id, str) else None,
+                        "chunk_index": hit.get("chunkIndex")
+                        if type(hit.get("chunkIndex")) is int else None,
+                        "score": round(float(score), 6)
+                        if type(score) in {int, float} and math.isfinite(score) else None,
+                    })
         # Match Java StreamRun's existing final-output envelope, without protocol changes.
         # Java validates String.length (UTF-16 units), which differs from Python for emoji.
         safe_final = str(self._redactor.redact(state["final_answer"]))
@@ -307,4 +342,6 @@ class WorkflowRuntime(HarnessRuntime):
             len(state.get("memory_recall_ids", [])),
             omitted,
             truncated,
+            tuple(arguments),
+            tuple(hits),
         )

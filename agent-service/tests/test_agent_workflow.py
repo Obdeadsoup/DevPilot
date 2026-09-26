@@ -141,6 +141,7 @@ def test_real_gateway_source_shape_is_reported_in_safe_trace():
             if name == "knowledge.search":
                 return {"sources": [{
                     "sourceFile": "README.md", "chunkId": "real-chunk-1",
+                    "chunkIndex": 0, "relevanceScore": 0.87,
                     "content": "project overview",
                 }], "external_untrusted_content": True}
             return result
@@ -152,6 +153,13 @@ def test_real_gateway_source_shape_is_reported_in_safe_trace():
     result = workflow.invoke("project overview", run_context=CONTEXT)
     assert result.rag_sources == ("README.md",)
     assert result.safe_trace()["rag_sources"] == ["README.md"]
+    assert result.safe_trace()["rag_hits"] == [{
+        "source": "README.md", "chunk_id": "real-chunk-1",
+        "chunk_index": 0, "score": 0.87,
+    }]
+    assert {"name": "knowledge.search", "args": {"topK": 5}} in result.safe_trace()[
+        "tool_arguments"]
+    assert "project overview" not in str(result.safe_trace())
 
 
 @pytest.mark.parametrize(
