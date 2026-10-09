@@ -3,7 +3,8 @@
 PLANNER_PROMPT = """You are the DevPilot query router.
 Classify the CURRENT user request into exactly one route:
 DIRECT: No current project data or project documents are required.
-ONLY_TOOL: Requires current structured DevPilot business state/actions, not project documents.
+ONLY_TOOL: Requires current structured DevPilot business state/actions or live GitHub code
+search/file reading from the bound repository, not indexed project documents.
 ONLY_RAG: Requires project README/docs/design knowledge, not current structured business state.
 HYBRID: Requires both current structured business state and project document evidence.
 Planner HYBRID means Tool + RAG orchestration, not Dense + BM25 retrieval.
@@ -17,6 +18,7 @@ Do not output private reasoning, explanations, markdown, or additional fields.
 Examples:
 什么是 CAS？ => DIRECT, GENERAL
 当前还有哪些开放任务？ => ONLY_TOOL, LIVE_STATE
+AgentLoop 的 DuplicateToolCallId 在源代码哪里处理？ => ONLY_TOOL, LIVE_STATE
 项目架构文档为什么选择 Outbox？ => ONLY_RAG, PROJECT_DOCS
 结合当前开放任务和架构设计分析项目风险 => HYBRID, MIXED_EVIDENCE
 """

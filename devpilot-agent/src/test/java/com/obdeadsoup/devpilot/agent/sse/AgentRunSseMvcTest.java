@@ -2,6 +2,8 @@ package com.obdeadsoup.devpilot.agent.sse;
 
 import com.obdeadsoup.devpilot.agent.api.AgentRunStreamController;
 import com.obdeadsoup.devpilot.agent.application.AgentRunApplicationService;
+import com.obdeadsoup.devpilot.agent.application.AgentRunStatus;
+import com.obdeadsoup.devpilot.agent.application.AgentRunView;
 import com.obdeadsoup.devpilot.agent.application.AgentStreamEvent;
 import com.obdeadsoup.devpilot.agent.application.AgentStreamEventType;
 import com.obdeadsoup.devpilot.agent.config.AgentRunSseProperties;
@@ -17,6 +19,7 @@ import java.time.Duration;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
@@ -32,6 +35,9 @@ class AgentRunSseMvcTest {
                 meters,
                 new AgentRunStreamMetrics(meters));
         AgentRunApplicationService application = mock(AgentRunApplicationService.class);
+        AgentRunView run = mock(AgentRunView.class);
+        when(run.status()).thenReturn(AgentRunStatus.RUNNING);
+        when(application.get(1, 2, "run-1")).thenReturn(run);
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                 new AgentRunStreamController(application, hub)).build();
         hub.initialize("run-1");

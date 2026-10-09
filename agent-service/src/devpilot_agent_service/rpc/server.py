@@ -14,6 +14,10 @@ from devpilot_agent_service.graph.checkpoint import GraphCheckpointStore
 from devpilot_agent_service.harness.demo import DemoGatewayClient
 from devpilot_agent_service.harness.workflow import WorkflowRuntime
 from devpilot_agent_service.harness.workflow_fake import DeterministicWorkflowModel
+from devpilot_agent_service.mcp.adapters.github import register_github_tools
+from devpilot_agent_service.mcp.client import McpClientManager
+from devpilot_agent_service.mcp.config import GitHubMcpConfig
+from devpilot_agent_service.mcp.github_scope import JavaGitHubScopeResolver
 from devpilot_agent_service.memory.store import MemoryStore
 from devpilot_agent_service.model.providers.config import OpenAICompatibleConfig
 from devpilot_agent_service.model.providers.openai_compatible import OpenAICompatibleModel
@@ -123,13 +127,12 @@ def create_application(
     close_client = getattr(client, "close", lambda: None)
     checkpoint = None
     memory = None
+    mcp_manager = None
     try:
         if config.model_mode == "fake":
             model = DeterministicWorkflowModel(config.fake_delay_seconds, config.fake_tool_name)
             planner_model = model
-            redactor = RuntimeRedactor(
-                (gateway_config.service_key,) if gateway_config is not None else ()
-            )
+            secrets = (gateway_config.service_key,) if gateway_config is not None else ()
         else:
             provider_config = OpenAICompatibleConfig.from_deepseek_env()
             model = OpenAICompatibleModel(provider_config)
@@ -141,12 +144,26 @@ def create_application(
                     overall_timeout_seconds=min(provider_config.overall_timeout_seconds, 5.0),
                 )
             )
-            redactor = RuntimeRedactor((gateway_config.service_key, provider_config.api_key))
+            secrets = (gateway_config.service_key, provider_config.api_key)
+        redactor = RuntimeRedactor((*secrets, os.environ.get("DEVPILOT_GITHUB_MCP_PAT", "")))
+        registry = _remote_tool_registry(client)
+        try:
+            mcp_config = GitHubMcpConfig.from_env()
+            if mcp_config.enabled and not local_fake:
+                mcp_manager = McpClientManager(mcp_config)
+                if mcp_manager.start():
+                    register_github_tools(registry, mcp_manager, JavaGitHubScopeResolver(client))
+            elif mcp_config.enabled:
+                LOGGER.warning("mcp.server=github startup=degraded failure=java_scope_unavailable")
+        except Exception:
+            LOGGER.warning("mcp.server=github startup=degraded failure=configuration")
+            if mcp_manager is not None:
+                mcp_manager.close()
         checkpoint = GraphCheckpointStore(config.runtime_db_path + ".langgraph")
         memory = MemoryStore(config.runtime_db_path + ".memory", redactor)
         workflow = WorkflowRuntime(
             model,
-            registry := _remote_tool_registry(client),
+            registry,
             lambda: model,
             planner_model=planner_model,
             redactor=redactor,
@@ -158,9 +175,14 @@ def create_application(
             create_runtime_repository(config.runtime_db_path),
             registry,
             memory,
-            close_callback=lambda: (close_client(), checkpoint.close(), memory.close()),
+            close_callback=lambda: (
+                mcp_manager.close() if mcp_manager is not None else None,
+                close_client(), checkpoint.close(), memory.close(),
+            ),
         )
     except Exception:
+        if mcp_manager is not None:
+            mcp_manager.close()
         close_client()
         if checkpoint is not None:
             checkpoint.close()

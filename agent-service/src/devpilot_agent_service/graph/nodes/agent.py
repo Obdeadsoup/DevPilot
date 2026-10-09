@@ -1,7 +1,6 @@
 """Model node adapter for the experimental graph."""
 
 import logging
-
 from collections.abc import Callable, Sequence
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage

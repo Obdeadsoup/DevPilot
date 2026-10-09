@@ -32,7 +32,8 @@ class Message:
         if not isinstance(self.content, str):
             raise TypeError("content 必须是字符串")
         if self.reasoning_content is not None:
-            if self.role is not MessageRole.ASSISTANT or not isinstance(self.reasoning_content, str):
+            if (self.role is not MessageRole.ASSISTANT
+                    or not isinstance(self.reasoning_content, str)):
                 raise TypeError("reasoning_content 仅能用于 assistant 字符串消息")
         calls = tuple(self.tool_calls)
         if any(not isinstance(tool_call, ToolCall) for tool_call in calls):

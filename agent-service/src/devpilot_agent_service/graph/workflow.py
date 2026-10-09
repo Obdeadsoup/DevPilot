@@ -14,6 +14,7 @@ from devpilot_agent_service.graph.nodes.finalize import finalize_node
 from devpilot_agent_service.graph.nodes.tools import create_tool_node
 from devpilot_agent_service.graph.routing import route_after_agent
 from devpilot_agent_service.graph.state import DevPilotAgentState
+from devpilot_agent_service.mcp.catalog import MODEL_NAMES
 from devpilot_agent_service.model.base import Model
 from devpilot_agent_service.planner import PlannerRoute, QueryPlanner
 from devpilot_agent_service.runtime.context import RunContext
@@ -38,6 +39,8 @@ def route_after_planner(state: DevPilotAgentState) -> str:
 
 def route_registries(registry: ToolRegistry) -> dict[PlannerRoute, ToolRegistry]:
     # The existing analyst can search documents, so it is deliberately absent from ONLY_TOOL.
+    available = {definition.name for definition in registry.definitions()}
+    github = tuple(name for name in MODEL_NAMES if name in available)
     try:
         registry.get("task.create")
         write = ("task.create",)
@@ -46,12 +49,13 @@ def route_registries(registry: ToolRegistry) -> dict[PlannerRoute, ToolRegistry]
     return {
         PlannerRoute.DIRECT: ToolRegistry(),
         PlannerRoute.ONLY_TOOL: registry.subset(
-            (*BUSINESS_TOOLS, "plan.update", *write), read_only=False
+            (*BUSINESS_TOOLS, *github, "plan.update", *write), read_only=False
         ),
         PlannerRoute.ONLY_RAG: registry.subset(("knowledge.search",)),
         PlannerRoute.HYBRID: registry.subset(
             (
                 *BUSINESS_TOOLS,
+                *github,
                 "knowledge.search",
                 "plan.update",
                 "delegate.project_analyst",
@@ -325,7 +329,9 @@ def build_workflow_graph(
         "tool_agent",
         agent(
             registries[PlannerRoute.ONLY_TOOL],
-            "Read current structured business facts. Documents and delegation are unavailable. "
+            "Read current structured business facts or bound-repository GitHub source code. "
+            "Indexed documents and delegation are unavailable. "
+            "Use github.search_code to locate code and github.get_file_contents for the bound ref. "
             "plan.update is only a todo tool, not the query router. Never infer authorization.",
         ),
     )
