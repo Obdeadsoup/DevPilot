@@ -13,6 +13,7 @@ from devpilot_agent_service.context import ContextManager
 from devpilot_agent_service.graph.workflow import BUSINESS_TOOLS, build_workflow_graph
 from devpilot_agent_service.harness.prompts import UNTRUSTED_DATA_GUARD
 from devpilot_agent_service.harness.runtime import HarnessConfig, HarnessRuntime
+from devpilot_agent_service.mcp.catalog import MODEL_NAMES
 from devpilot_agent_service.memory.store import MemoryStore
 from devpilot_agent_service.model.base import Model
 from devpilot_agent_service.planner import QueryPlanner
@@ -115,6 +116,12 @@ class WorkflowRuntime(HarnessRuntime):
             self.registry.register(registry.get("task.create"))
         except UnknownToolError:
             pass
+        # Preserve the curated optional MCP capabilities in the main workflow only.
+        for name in MODEL_NAMES:
+            try:
+                self.registry.register(registry.get(name))
+            except UnknownToolError:
+                pass
         self._model = model
         self._context = ContextManager(self.config.context_budget, redactor=self._redactor)
         self._planner = QueryPlanner(

@@ -166,10 +166,9 @@ class OpenAICompatibleModel:
                     "reasoning_content", "tool_call_id", "tool_calls", "content",
                     "messages", "token", "schema", "model", "parameter",
                 ) if isinstance(message, str) and term in message.lower()]
-                safe_field = lambda value: (
-                    re.sub(r"[^A-Za-z0-9_-]", "", str(value))[:64]
-                    if value is not None else ""
-                )
+                def safe_field(value):
+                    return (re.sub(r"[^A-Za-z0-9_-]", "", str(value))[:64]
+                            if value is not None else "")
                 LOGGER.warning(
                     "Provider rejected request status=%s errorType=%s errorCode=%s "
                     "parameter=%s messageFlags=%s assistantToolTurns=%s reasoningTurns=%s",

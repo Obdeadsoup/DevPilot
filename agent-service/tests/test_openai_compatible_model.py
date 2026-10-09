@@ -3,8 +3,8 @@ from types import SimpleNamespace
 
 import httpx2
 import pytest
-from langchain_core.messages import AIMessage, ToolMessage
 from fakes.fake_openai_client import FakeOpenAIClient
+from langchain_core.messages import AIMessage, ToolMessage
 from openai import (
     APIConnectionError,
     APITimeoutError,
@@ -13,6 +13,7 @@ from openai import (
     RateLimitError,
 )
 
+from devpilot_agent_service.graph.nodes.agent import _to_ai_message, _to_runtime_messages
 from devpilot_agent_service.model.errors import (
     ProviderConfigurationError,
     ProviderError,
@@ -30,10 +31,9 @@ from devpilot_agent_service.model.providers.openai_compatible import (
     to_provider_tool,
 )
 from devpilot_agent_service.model.types import ModelResponseKind, ToolCall
-from devpilot_agent_service.graph.nodes.agent import _to_ai_message, _to_runtime_messages
 from devpilot_agent_service.runtime.message import Message
-from devpilot_agent_service.tools.echo import EchoTool
 from devpilot_agent_service.tools.base import ToolDefinition
+from devpilot_agent_service.tools.echo import EchoTool
 from devpilot_agent_service.tools.registry import ToolRegistry
 
 

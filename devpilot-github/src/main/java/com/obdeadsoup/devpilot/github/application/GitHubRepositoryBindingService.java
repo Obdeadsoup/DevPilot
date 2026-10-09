@@ -102,6 +102,31 @@ public class GitHubRepositoryBindingService {
         ));
     }
 
+    /** Resolve current active binding with the Run's explicit actor; never return credentials. */
+    @Transactional(readOnly = true)
+    public GitHubRepositoryBranchSnapshot resolveReadScopeForAgent(
+            long actorId, long workspaceId, long projectId, String repositoryFullName, String branchName
+    ) {
+        // Runtime has no browser SecurityContext. Recheck the explicit authoritative actor each time.
+        projectAuthorizationService.requirePermission(
+                actorId, workspaceId, projectId, ProjectPermission.REPOSITORY_READ);
+        if (repositoryFullName == null || repositoryFullName.isBlank()
+                || branchName == null || branchName.isBlank()) {
+            throw new BusinessException(GitHubRepositoryErrorCode.REPOSITORY_BINDING_NOT_FOUND);
+        }
+        GitHubRepositoryEntity binding = repositoryMapper
+                .findActiveByWorkspaceAndFullName(workspaceId, repositoryFullName)
+                .filter(item -> item.projectId() == projectId)
+                .orElseThrow(() -> new BusinessException(
+                        GitHubRepositoryErrorCode.REPOSITORY_BINDING_NOT_FOUND));
+        requireKnownStatus(binding);
+        if (!GitHubRepositoryStatus.ACTIVE.name().equals(binding.bindingStatus())) {
+            throw new BusinessException(GitHubRepositoryErrorCode.REPOSITORY_BINDING_DISABLED);
+        }
+        // Keep the Run's Java-validated ref; no credential or new branch HEAD lookup is returned.
+        return new GitHubRepositoryBranchSnapshot(binding.fullName(), branchName, null);
+    }
+
     /**
      * 为当前 Project 创建 ACTIVE Binding，只写入 GitHub API 返回的权威身份和元数据。
      *

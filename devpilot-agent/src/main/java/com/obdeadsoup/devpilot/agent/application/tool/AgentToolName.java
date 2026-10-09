@@ -6,6 +6,8 @@ import java.util.Optional;
 /** Tool wire name 的显式 allowlist；它不是 Spring Bean、Java 类名或可反射的方法名。 */
 public enum AgentToolName {
     PROJECT_GET_SUMMARY("project.get_summary", AgentToolRisk.READ_ONLY),
+    // Internal scope resolution only; never advertised in the Python model catalog.
+    PROJECT_GET_GITHUB_BINDING("project.get_github_binding", AgentToolRisk.READ_ONLY),
     TASK_LIST_OPEN("task.list_open", AgentToolRisk.READ_ONLY),
     PROJECT_LIST_RECENT_ACTIVITY("project.list_recent_activity", AgentToolRisk.READ_ONLY),
     KNOWLEDGE_SEARCH("knowledge.search", AgentToolRisk.READ_ONLY),

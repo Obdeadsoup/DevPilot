@@ -373,6 +373,49 @@ class GitHubRepositoryBindingServiceTest {
         );
     }
 
+    @Test
+    void agentReadScopeUsesLiveExplicitActorPermissionAndNeverResolvesCredentials() {
+        when(repositoryMapper.findActiveByWorkspaceAndFullName(WORKSPACE_ID, "octo/demo"))
+                .thenReturn(Optional.of(binding("ACTIVE", 0, 123456L, "octo", "demo")));
+        var scope = service.resolveReadScopeForAgent(
+                USER_ID, WORKSPACE_ID, PROJECT_ID, "octo/demo", "agent");
+        assertThat(scope.repositoryFullName()).isEqualTo("octo/demo");
+        assertThat(scope.branchName()).isEqualTo("agent");
+        assertThat(scope.commitSha()).isNull();
+        verify(authorizationService).requirePermission(
+                USER_ID, WORKSPACE_ID, PROJECT_ID, ProjectPermission.REPOSITORY_READ);
+        verifyNoInteractions(currentUserProvider, webhookSecretResolver, branchClient, metadataClient);
+    }
+
+    @Test
+    void agentReadScopeRejectsDisabledMissingAndCrossProjectBindings() {
+        when(repositoryMapper.findActiveByWorkspaceAndFullName(WORKSPACE_ID, "octo/demo"))
+                .thenReturn(Optional.of(binding("DISABLED", 0, 123456L, "octo", "demo")));
+        assertThatThrownBy(() -> service.resolveReadScopeForAgent(
+                USER_ID, WORKSPACE_ID, PROJECT_ID, "octo/demo", "agent"))
+                .isInstanceOf(BusinessException.class);
+        when(repositoryMapper.findActiveByWorkspaceAndFullName(WORKSPACE_ID, "octo/demo"))
+                .thenReturn(Optional.of(binding("ACTIVE", 0, 123456L, "octo", "demo")));
+        assertThatThrownBy(() -> service.resolveReadScopeForAgent(
+                USER_ID, WORKSPACE_ID, PROJECT_ID + 1, "octo/demo", "agent"))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> service.resolveReadScopeForAgent(
+                USER_ID, WORKSPACE_ID, PROJECT_ID, null, null))
+                .isInstanceOf(BusinessException.class);
+        verifyNoInteractions(branchClient, webhookSecretResolver);
+    }
+
+    @Test
+    void revokedAgentReadPermissionStopsBeforeBindingLookup() {
+        org.mockito.Mockito.doThrow(new SecurityException("revoked"))
+                .when(authorizationService).requirePermission(
+                        USER_ID, WORKSPACE_ID, PROJECT_ID, ProjectPermission.REPOSITORY_READ);
+        assertThatThrownBy(() -> service.resolveReadScopeForAgent(
+                USER_ID, WORKSPACE_ID, PROJECT_ID, "octo/demo", "agent"))
+                .isInstanceOf(SecurityException.class);
+        verifyNoInteractions(repositoryMapper, branchClient, webhookSecretResolver);
+    }
+
     private VerifiedGitHubRepository verified(long id, String owner, String repositoryName) {
         return new VerifiedGitHubRepository(
                 id,

@@ -103,7 +103,9 @@ def test_execute_propagates_context_call_id_struct_deadline_and_service_key(monk
     assert result == {"items": [], "external_untrusted_content": True}
 
 
-def test_knowledge_search_has_a_bounded_deadline_without_changing_ordinary_tools(monkeypatch) -> None:
+def test_knowledge_search_has_a_bounded_deadline_without_changing_ordinary_tools(
+    monkeypatch,
+) -> None:
     client, stub, _ = client_with(monkeypatch, success_response())
 
     client.execute(RunContext("run-1", "request-1"), "call-1", "knowledge.search", {})
@@ -134,7 +136,9 @@ def test_rpc_status_is_mapped_without_description(monkeypatch, code, kind) -> No
     assert captured.value.kind is kind
 
 
-def test_failure_diagnostic_identifies_boundary_without_service_key_or_payload(monkeypatch, caplog) -> None:
+def test_failure_diagnostic_identifies_boundary_without_service_key_or_payload(
+    monkeypatch, caplog,
+) -> None:
     client, _, _ = client_with(monkeypatch, FakeRpcError(grpc.StatusCode.DEADLINE_EXCEEDED))
 
     with pytest.raises(JavaToolGatewayError), caplog.at_level("WARNING"):

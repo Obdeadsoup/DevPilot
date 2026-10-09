@@ -1,7 +1,7 @@
 """Python → Java DevPilotToolGateway Unary Client。"""
 
-import os
 import logging
+import os
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -84,7 +84,9 @@ class JavaToolGatewayConfig:
         source = os.environ if environ is None else environ
         try:
             deadline = float(source.get("DEVPILOT_JAVA_TOOL_GRPC_DEADLINE_SECONDS", "3"))
-            knowledge_deadline = float(source.get("DEVPILOT_JAVA_TOOL_GRPC_KNOWLEDGE_DEADLINE_SECONDS", "30"))
+            knowledge_deadline = float(
+                source.get("DEVPILOT_JAVA_TOOL_GRPC_KNOWLEDGE_DEADLINE_SECONDS", "30")
+            )
             max_message = int(source.get("DEVPILOT_JAVA_TOOL_GRPC_MAX_MESSAGE_BYTES", "65536"))
             max_result = int(source.get("DEVPILOT_JAVA_TOOL_GRPC_MAX_RESULT_BYTES", "65536"))
             circuit_threshold = int(

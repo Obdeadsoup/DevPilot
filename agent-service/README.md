@@ -7,15 +7,36 @@ EchoTool，以及带 `max_steps`、`max_tool_calls` 和重复 `tool_call_id` 防
 Adapter 使用 OpenAI-compatible Chat Completions 协议，默认连接 DeepSeek；自动化测试使用 FakeModel/Fake Client，
 不访问网络、不需要 API Key，也不消耗 Token。
 
-## LangGraph migration status
+## Runtime and GitHub MCP
 
-Legacy `AgentLoop` remains the production/default runtime. LangGraph is currently introduced as an
-isolated parity skeleton for direct final responses and read-only tool calls. The graph reuses the
-existing `Model` abstraction and `ToolRegistry`; no gRPC entry point selects it yet.
+Production gRPC calls use the unified LangGraph runtime with durable checkpoints, operational
+SQLite lifecycle records, cooperative cancel/resume and Java Proposal/HITL. The historical
+`AgentLoop` remains for compatibility tests and examples.
 
-Persistence/resume, cancel, Proposal/HITL, and RPC streaming still run only through `AgentLoop` and
-the Runtime Repository. The skeleton does not use a LangGraph checkpointer and does not replace the
-existing SQLite runtime store.
+Native Java Tool Gateway + optional GitHub MCP read-only tools share the existing ToolRegistry.
+Only `github.search_code` and `github.get_file_contents` are exposed from MCP. The official Python
+SDK uses Streamable HTTP and discovers tools at startup; a server filter and client allowlist
+exclude all GitHub writes. Java business Tool != MCP Tool: Java retains actor/scope recovery,
+live RBAC, authoritative business data, transactions and Proposal/HITL.
+
+MCP is disabled by default. Set `DEVPILOT_GITHUB_MCP_ENABLED=true` and inject
+`DEVPILOT_GITHUB_MCP_PAT` into the Agent Service environment; `.env.example` lists URL, timeout and
+result-size settings. The environment PAT is a controlled-deployment credential, not full
+multi-tenant credential delegation. Missing configuration or discovery failure degrades to native
+tools. Each call resolves the current Run's authorized GitHub binding through the internal-only
+Java operation `project.get_github_binding`; models cannot supply owner/repo/ref. Runs must be
+created with a repository binding. File reads use the Java Run's validated branch/ref. Code search
+follows GitHub REST code-search semantics and may search only the default branch.
+
+MCP code result = untrusted external data. Results are redacted, bounded and explicitly marked
+untrusted; code comments and README text never become system instructions. Automatic tests use
+fakes and the official SDK's in-process server, without GitHub access.
+
+Manual smoke: `python agent-service/examples/github_mcp_smoke.py` (with the package installed).
+Supply `DEVPILOT_GITHUB_MCP_SMOKE_RUN_ID` and `DEVPILOT_GITHUB_MCP_SMOKE_REQUEST_ID` for an authorized
+RUNNING Java Run. Missing enable/PAT/context prints `NOT RUN`; failures are sanitized. Detailed
+implementation, schema examples and learning material are generated locally in
+`agent-service/docs/github-mcp.md` and are intentionally excluded from Git.
 
 Implementation map, graph call chain, reducer notes and migration interview guide:
 [P2-00 / P2-01 learning material](docs/langgraph-migration-prep.md).
@@ -38,8 +59,8 @@ P1-02 在已有协作式 Cancel 上增加持久取消意图、CAS、Checkpoint v
 
 跨进程通信只能基于 `../contracts/agent/v1` 中的 `.proto` 契约：Java 可通过 BlockingStub 调用 Unary
 `StartRun`，正式 Browser 链路通过 async Stub 调用 `StreamRun`。Python→Java 开放三个只读业务 Tool，以及
-只创建 Proposal 的 `task.create`；`EchoTool` 留在教学和测试路径。当前没有 LangGraph、RAG、Memory 或 MCP，Python 也没有
-任何 `dp_*` 数据库连接。
+只创建 Proposal 的 `task.create`；`EchoTool` 留在教学和测试路径。当前 LangGraph 主运行链路已集成
+知识检索、上下文和作用域 Memory，GitHub 代码工具按配置通过 MCP 接入；Python 没有任何 `dp_*` 数据库连接。
 
 核心代码：
 

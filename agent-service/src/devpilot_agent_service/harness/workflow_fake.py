@@ -62,7 +62,9 @@ class DeterministicWorkflowModel:
             name for name in available
             if any(
                 message.role is MessageRole.USER
-                and message.content.startswith(f"Read-only {name} result from the authorized Tool Gateway.")
+                and message.content.startswith(
+                    f"Read-only {name} result from the authorized Tool Gateway."
+                )
                 for message in messages
             )
         )
